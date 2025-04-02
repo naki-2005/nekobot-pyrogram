@@ -23,6 +23,28 @@ start_sleep_time = 0  # Inicializada con 0 para evitar problemas
 def is_bot_public():
     return BOT_IS_PUBLIC
 
+# Función para convertir segundos a un formato legible
+def format_time(seconds):
+    years = seconds // (365 * 24 * 3600)
+    days = (seconds % (365 * 24 * 3600)) // (24 * 3600)
+    hours = (seconds % (24 * 3600)) // 3600
+    minutes = (seconds % 3600) // 60
+    seconds = seconds % 60
+
+    formatted_time_parts = []
+    if years > 0:
+        formatted_time_parts.append(f"{years} años")
+    if days > 0:
+        formatted_time_parts.append(f"{days} días")
+    if hours > 0:
+        formatted_time_parts.append(f"{hours} horas")
+    if minutes > 0:
+        formatted_time_parts.append(f"{minutes} minutos")
+    if seconds > 0:
+        formatted_time_parts.append(f"{seconds} segundos")
+
+    return ", ".join(formatted_time_parts)
+
 # Función para mantener activa la sesión con animación dinámica
 def mantener_sesion_activa():
     estados = ["Manteniendo la sesión activa.", 
@@ -91,7 +113,9 @@ async def handle_message(client, message):
             sticker="CAACAgIAAxkBAAIKZWfr9RGuAW3W0j9az_LcQTeV8sXvAAIWSwAC4KOCB9L-syYc0ZfXHgQ"
         )
         time.sleep(3)
-        await message.reply(f"Actualmente estoy descansando, no recibo comandos.\n\nRegresa en {remaining_time} segundos para reactivarse.")
+        await message.reply(
+            f"Actualmente estoy descansando, no recibo comandos.\n\nRegresa en {format_time(remaining_time)} para reactivarse."
+        )
         return
 
     if message.text and message.text.startswith("/sleep") and (str(user_id) == MAIN_ADMIN or username.lower() == MAIN_ADMIN.lower()):
@@ -100,27 +124,8 @@ async def handle_message(client, message):
             bot_is_sleeping = True
             start_sleep_time = time.time()
 
-            # Convertir segundos a años, días, horas, minutos y segundos
-            years = sleep_duration // (365 * 24 * 3600)
-            days = (sleep_duration % (365 * 24 * 3600)) // (24 * 3600)
-            hours = (sleep_duration % (24 * 3600)) // 3600
-            minutes = (sleep_duration % 3600) // 60
-            seconds = sleep_duration % 60
-
             # Crear formato dinámico
-            formatted_time_parts = []
-            if years > 0:
-                formatted_time_parts.append(f"{years} años")
-            if days > 0:
-                formatted_time_parts.append(f"{days} días")
-            if hours > 0:
-                formatted_time_parts.append(f"{hours} horas")
-            if minutes > 0:
-                formatted_time_parts.append(f"{minutes} minutos")
-            if seconds > 0:
-                formatted_time_parts.append(f"{seconds} segundos")
-
-            formatted_time = ", ".join(formatted_time_parts)
+            formatted_time = format_time(sleep_duration)
 
             # Enviar sticker y mensaje
             await client.send_sticker(
