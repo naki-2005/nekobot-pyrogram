@@ -22,8 +22,8 @@ start_sleep_time = 0  # Inicializada con 0 para evitar problemas
 # Función para verificar si el bot es público
 def is_bot_public():
     return BOT_IS_PUBLIC
-
-# Función para convertir segundos a un formato legible
+    
+# Función para convertir segundos a un formato legible con singular/plural
 def format_time(seconds):
     years = seconds // (365 * 24 * 3600)
     days = (seconds % (365 * 24 * 3600)) // (24 * 3600)
@@ -33,17 +33,18 @@ def format_time(seconds):
 
     formatted_time_parts = []
     if years > 0:
-        formatted_time_parts.append(f"{years} años")
+        formatted_time_parts.append(f"{years} año" if years == 1 else f"{years} años")
     if days > 0:
-        formatted_time_parts.append(f"{days} días")
+        formatted_time_parts.append(f"{days} día" if days == 1 else f"{days} días")
     if hours > 0:
-        formatted_time_parts.append(f"{hours} horas")
+        formatted_time_parts.append(f"{hours} hora" if hours == 1 else f"{hours} horas")
     if minutes > 0:
-        formatted_time_parts.append(f"{minutes} minutos")
+        formatted_time_parts.append(f"{minutes} minuto" if minutes == 1 else f"{minutes} minutos")
     if seconds > 0:
-        formatted_time_parts.append(f"{seconds} segundos")
+        formatted_time_parts.append(f"{seconds} segundo" if seconds == 1 else f"{seconds} segundos")
 
     return ", ".join(formatted_time_parts)
+
 
 # Función para mantener activa la sesión con animación dinámica
 def mantener_sesion_activa():
