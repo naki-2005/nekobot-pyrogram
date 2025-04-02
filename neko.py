@@ -14,10 +14,10 @@ nest_asyncio.apply()
 
 app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
 
-# Variables para manejar el estado de descanso
+# Inicializar variables globales
 bot_is_sleeping = False
 sleep_duration = 0
-start_sleep_time = None
+start_sleep_time = 0  # Inicializada con 0 para evitar problemas
 
 # Función para verificar si el bot es público
 def is_bot_public():
@@ -55,7 +55,7 @@ async def process_access_command(message):
 # Manejador de mensajes
 @app.on_message()
 async def handle_message(client, message):
-    global bot_is_sleeping, start_sleep_time
+    global bot_is_sleeping, start_sleep_time, sleep_duration
     user_id = message.from_user.id
     username = message.from_user.username
     chat_id = message.chat.id
@@ -85,7 +85,7 @@ async def handle_message(client, message):
 
     # Manejo del estado del bot cuando está en descanso
     if bot_is_sleeping:
-        remaining_time = sleep_duration - int(time.time() - start_sleep_time)
+        remaining_time = max(0, sleep_duration - int(time.time() - start_sleep_time))
         await client.send_sticker(
             chat_id=message.chat.id,
             sticker="CAACAgIAAxkBAAIKZWfr9RGuAW3W0j9az_LcQTeV8sXvAAIWSwAC4KOCB9L-syYc0ZfXHgQ"
@@ -96,7 +96,6 @@ async def handle_message(client, message):
 
     if message.text and message.text.startswith("/sleep") and (str(user_id) == MAIN_ADMIN or username.lower() == MAIN_ADMIN.lower()):
         try:
-            global sleep_duration, start_sleep_time
             sleep_duration = int(message.text.split(" ")[1])
             bot_is_sleeping = True
             start_sleep_time = time.time()
