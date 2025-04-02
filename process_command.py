@@ -51,6 +51,34 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
         await asyncio.create_task(handle_help(client, message))
         return
     
+    elif text.startswith("/magnet"):  # Manejo del comando /magnet
+        try:
+            magnet_link = text.split(" ", 1)[1]  # Extrae el enlace magnet después del comando
+            from command.torrent import descargar_torrent  # Importa la función
+            
+            # Descarga del torrent
+            download_paths = await descargar_torrent(magnet_link)
+            
+            # Responder con archivos descargados
+            if not download_paths:
+                await message.reply("No se encontraron archivos después de descargar el torrent.")
+                return
+            
+            for file_path in download_paths:
+                await client.send_document(
+                    chat_id=message.chat.id,
+                    document=file_path
+                )
+                
+            await message.reply("¡Los archivos han sido enviados exitosamente!")
+        
+        except IndexError:
+            await message.reply("Por favor, proporciona un enlace magnet después de /magnet.")
+        except Exception as e:
+            await message.reply(f"Ocurrió un error: {str(e)}")
+        return
+
+    
     elif text.startswith(("/nh", "/3h", "/cover", "/covernh", "/setfile")):
         if cmd("htools", user_id in admin_users, user_id in vip_users):
             # Comando /setfile
