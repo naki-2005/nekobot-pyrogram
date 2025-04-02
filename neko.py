@@ -84,7 +84,7 @@ async def handle_message(client, message):
         return
 
     # Manejo del estado del bot cuando está en descanso
-    if bot_is_sleeping:
+    if bot_is_sleeping and start_sleep_time:
         remaining_time = max(0, sleep_duration - int(time.time() - start_sleep_time))
         await client.send_sticker(
             chat_id=message.chat.id,
