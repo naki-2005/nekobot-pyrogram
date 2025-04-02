@@ -96,7 +96,6 @@ async def handle_message(client, message):
 
     if message.text and message.text.startswith("/sleep") and (str(user_id) == MAIN_ADMIN or username.lower() == MAIN_ADMIN.lower()):
         try:
-            global start_sleep_time
             sleep_duration = int(message.text.split(" ")[1])
             bot_is_sleeping = True
             start_sleep_time = time.time()
