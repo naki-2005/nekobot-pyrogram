@@ -6,6 +6,7 @@ from process_command import process_command
 from command.htools import manejar_opcion
 from command.help import handle_help_callback, handle_help
 import time  # Importación necesaria
+import threading  # Importación necesaria para hilos
 from data.stickers import saludos
 import random
 from data.vars import api_id, api_hash, bot_token, admin_users, users, temp_users, temp_chats, vip_users, ban_users, MAIN_ADMIN, CODEWORD, BOT_IS_PUBLIC, PROTECT_CONTENT, allowed_ids, allowed_users
@@ -20,6 +21,22 @@ sleep_duration = 0
 # Función para verificar si el bot es público
 def is_bot_public():
     return BOT_IS_PUBLIC
+
+# Función para mantener activa la sesión con animación dinámica
+def mantener_sesion_activa():
+    estados = ["Manteniendo la sesión activa.", 
+               "Manteniendo la sesión activa..", 
+               "Manteniendo la sesión activa..."]
+    i = 0
+
+    while True:
+        print(f'\r{estados[i % len(estados)]}', end='', flush=True)
+        i += 1
+        time.sleep(3)  # Actualiza cada 3 segundos
+
+# Crear un hilo separado para mantener la sesión activa
+hilo = threading.Thread(target=mantener_sesion_activa, daemon=True)
+hilo.start()
 
 # Comando para procesar acceso temporal
 async def process_access_command(message):
@@ -127,7 +144,6 @@ async def handle_message(client, message):
             await message.reply("Por favor, proporciona un número válido en segundos.")
         return
 
-
     # Comando /access
     if message.text and message.text.startswith("/access") and message.chat.type == "private":
         await process_access_command(message)
@@ -152,8 +168,6 @@ async def callback_handler(client, callback_query):
     user_id = callback_query.from_user.id
     protect_content = PROTECT_CONTENT and user_id not in allowed_ids
     await manejar_opcion(client, callback_query, protect_content, user_id)
-    
-
 
 @app.on_callback_query()
 async def help_callback_handler(client, callback_query):
