@@ -1,192 +1,160 @@
 import os
-import asyncio
-import nest_asyncio
-from pyrogram import Client, filters
-from process_command import process_command
-from command.htools import manejar_opcion
-from command.help import handle_help_callback, handle_help
-import time  # Importación necesaria
-import threading  # Importación necesaria para hilos
-from data.stickers import saludos
+import shutil
 import random
-from data.vars import api_id, api_hash, bot_token, admin_users, users, temp_users, temp_chats, vip_users, ban_users, MAIN_ADMIN, CODEWORD, BOT_IS_PUBLIC, PROTECT_CONTENT, allowed_ids, allowed_users
-nest_asyncio.apply()
+import string
+import py7zr
+import time
+from pyrogram import Client, filters
 
-app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
+user_comp = {} 
+compression_size = 10  
 
-# Variables para manejar el estado de descanso
-bot_is_sleeping = False
-sleep_duration = 0
-start_sleep_time = None
+def compressfile(file_path, part_size):
+    parts = []
+    part_size *= 1024 * 1024  # Convertir el tamaño de parte a bytes
+    archive_path = f"{file_path}.7z"
 
-# Función para verificar si el bot es público
-def is_bot_public():
-    return BOT_IS_PUBLIC
+    # Crear el archivo comprimido
+    with py7zr.SevenZipFile(archive_path, 'w') as archive:
+        archive.write(file_path, os.path.basename(file_path))
+        os.remove(file_path)  # Eliminar el archivo original
 
-# Función para mantener activa la sesión con animación dinámica
-def mantener_sesion_activa():
-    estados = ["Manteniendo la sesión activa.", 
-               "Manteniendo la sesión activa..", 
-               "Manteniendo la sesión activa..."]
-    i = 0
+    # Comprobar el tamaño del archivo comprimido
+    archive_size = os.path.getsize(archive_path)
+    if archive_size < part_size:
+        return [archive_path]  # Retornar el archivo comprimido
 
-    while True:
-        print(f'\r{estados[i % len(estados)]}', end='', flush=True)
-        i += 1
-        time.sleep(3)  # Actualiza cada 3 segundos
+    # Dividir el archivo comprimido en partes si excede el tamaño de parte
+    with open(archive_path, 'rb') as archive:
+        part_num = 1
+        while True:
+            part_data = archive.read(part_size)
+            if not part_data:
+                break
+            part_file = f"{archive_path}.{part_num:03d}"
+            with open(part_file, 'wb') as part:
+                part.write(part_data)
+            parts.append(part_file)
+            part_num += 1
 
-# Crear un hilo separado para mantener la sesión activa
-hilo = threading.Thread(target=mantener_sesion_activa, daemon=True)
-hilo.start()
+    os.remove(archive_path)  # Eliminar el archivo comprimido original
+    return parts
 
-# Comando para procesar acceso temporal
-async def process_access_command(message):
-    user_id = message.from_user.id
-    if len(message.command) > 1 and message.command[1] == CODEWORD:
-        if user_id not in temp_users:
-            temp_users.append(user_id)
-            allowed_users.append(user_id)
-            await message.reply("Acceso concedido.")
-        else:
-            await message.reply("Ya estás en la lista de acceso temporal.")
-    else:
-        await message.reply("Palabra secreta incorrecta.")
 
-# Manejador de mensajes
-@app.on_message()
-async def handle_message(client, message):
-    global bot_is_sleeping, start_sleep_time
-    user_id = message.from_user.id
-    username = message.from_user.username
-    chat_id = message.chat.id
-    auto = True
 
-    # Validar si el usuario está baneado
-    if user_id in ban_users:
+
+async def handle_compress(client, message, username):
+    reply_message = message.reply_to_message
+
+    # Crear la carpeta 'server' si no existe
+    if not os.path.exists('server'):
+        os.mkdir('server')
+
+    if reply_message and reply_message.caption and reply_message.caption.startswith("Look Here") and reply_message.from_user.is_self:
+        await message.reply("No puedes comprimir este contenido debido a restricciones.", protect_content=True)
         return
 
-    # Validar si el bot no es público y el usuario no tiene acceso
-    if not is_bot_public() and user_id not in allowed_users and chat_id not in allowed_users:
-        return
-
-    # Comando /reactive
-    if message.text and message.text.startswith("/reactive") and (str(user_id) == MAIN_ADMIN or username.lower() == MAIN_ADMIN.lower()):
-        if bot_is_sleeping:
-            bot_is_sleeping = False
-
-            # Notificar que el bot está activo nuevamente
-            await client.send_sticker(
-                chat_id=message.chat.id,
-                sticker="CAACAgIAAxkBAAIKa2fr9k_RUYKn3a2ESnotX5OZix-DAAJlOgAC4KOCB0AuzmaDZs-sHgQ"
-            )
-            time.sleep(3)
-            await message.reply("Ok, estoy de vuelta.")
-        return
-
-    # Manejo del estado del bot cuando está en descanso
-    if bot_is_sleeping:
-        remaining_time = sleep_duration - int(time.time() - start_sleep_time)
-        await client.send_sticker(
-            chat_id=message.chat.id,
-            sticker="CAACAgIAAxkBAAIKZWfr9RGuAW3W0j9az_LcQTeV8sXvAAIWSwAC4KOCB9L-syYc0ZfXHgQ"
-        )
-        time.sleep(3)
-        await message.reply(f"Actualmente estoy descansando, no recibo comandos.\n\nRegresa en {remaining_time} segundos para reactivarse.")
-        return
-
-    if message.text and message.text.startswith("/sleep") and (str(user_id) == MAIN_ADMIN or username.lower() == MAIN_ADMIN.lower()):
-        try:
-            global sleep_duration, start_sleep_time
-            sleep_duration = int(message.text.split(" ")[1])
-            bot_is_sleeping = True
-            start_sleep_time = time.time()
-
-            # Convertir segundos a años, días, horas, minutos y segundos
-            years = sleep_duration // (365 * 24 * 3600)
-            days = (sleep_duration % (365 * 24 * 3600)) // (24 * 3600)
-            hours = (sleep_duration % (24 * 3600)) // 3600
-            minutes = (sleep_duration % 3600) // 60
-            seconds = sleep_duration % 60
-
-            # Crear formato dinámico
-            formatted_time_parts = []
-            if years > 0:
-                formatted_time_parts.append(f"{years} años")
-            if days > 0:
-                formatted_time_parts.append(f"{days} días")
-            if hours > 0:
-                formatted_time_parts.append(f"{hours} horas")
-            if minutes > 0:
-                formatted_time_parts.append(f"{minutes} minutos")
-            if seconds > 0:
-                formatted_time_parts.append(f"{seconds} segundos")
-
-            formatted_time = ", ".join(formatted_time_parts)
-
-            # Enviar sticker y mensaje
-            await client.send_sticker(
-                chat_id=message.chat.id,
-                sticker="CAACAgIAAxkBAAIKaGfr9YQxXzDbZD24aFoOoLvFUC9DAAIVSwAC4KOCB43TpRr21-13HgQ"
-            )
-            time.sleep(3)
-            await message.reply(f"Ok, voy a descansar {formatted_time}.")
-
-            # Temporizador para finalizar descanso
-            await asyncio.sleep(sleep_duration)
-            bot_is_sleeping = False
-
-            # Notificar al MAIN_ADMIN que terminó el descanso
-            await message.send_sticker(
-                chat_id=message.chat.id,
-                sticker="CAACAgIAAxkBAAIKa2fr9k_RUYKn3a2ESnotX5OZix-DAAJlOgAC4KOCB0AuzmaDZs-sHgQ"
-            )
-            time.sleep(3)
-            await message.reply("Ok, estoy de vuelta.")
-
-        except ValueError:
-            await message.reply("Por favor, proporciona un número válido en segundos.")
-        return
-
-    # Comando /access
-    if message.text and message.text.startswith("/access") and message.chat.type == "private":
-        await process_access_command(message)
-        return
-
-    # Procesar comandos activos
-    active_cmd = os.getenv('ACTIVE_CMD', '').lower()
-    admin_cmd = os.getenv('ADMIN_CMD', '').lower()
-    await process_command(client, message, active_cmd, admin_cmd, user_id, username, chat_id)
-
-async def notify_main_admin():
-    if MAIN_ADMIN:
-        try:
-            chat_id = int(MAIN_ADMIN) if MAIN_ADMIN.isdigit() else MAIN_ADMIN
-            await app.send_sticker(chat_id ,sticker=random.choice(saludos))
-            await app.send_message(chat_id=chat_id, text=f"Bot @{app.me.username} iniciado")
-        except Exception as e:
-            print(f"Error al enviar el mensaje al MAIN_ADMIN: {e}")
-
-@app.on_callback_query(filters.regex("^(cbz|pdf|fotos)"))
-async def callback_handler(client, callback_query):
-    user_id = callback_query.from_user.id
-    protect_content = PROTECT_CONTENT and user_id not in allowed_ids
-    await manejar_opcion(client, callback_query, protect_content, user_id)
-
-@app.on_callback_query()
-async def help_callback_handler(client, callback_query):
-    await handle_help_callback(client, callback_query)
-    
-async def main():
-    await app.start()
-    if MAIN_ADMIN:
-        await notify_main_admin()
-    print("Bot iniciado y operativo.")
-
-    # Mantén el bot corriendo hasta que se detenga manualmente
-    await asyncio.Event().wait()
-
-if __name__ == "__main__":
     try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Detención forzada realizada")
+        os.system("rm -rf ./server/*")
+        progress_msg = await message.reply("Descargando el archivo para comprimirlo...")
+
+        def get_file_name(message):
+            if message.reply_to_message.document:
+                return os.path.basename(message.reply_to_message.document.file_name)[:50]
+            elif message.reply_to_message.photo:
+                return ''.join(random.choices(string.ascii_letters + string.digits, k=20)) + ".jpg"
+            elif message.reply_to_message.audio:
+                return ''.join(random.choices(string.ascii_letters + string.digits, k=20)) + ".mp3"
+            elif message.reply_to_message.video:
+                return ''.join(random.choices(string.ascii_letters + string.digits, k=20)) + ".mp4"
+            elif message.reply_to_message.sticker:
+                return ''.join(random.choices(string.ascii_letters + string.digits, k=20)) + ".webp"
+            else:
+                return ''.join(random.choices(string.ascii_letters + string.digits, k=20))
+        
+        file_name = get_file_name(message)
+        file_path = await client.download_media(
+            message.reply_to_message,
+            file_name=file_name
+        )
+        await client.edit_message_text(chat_id=message.chat.id, message_id=progress_msg.id, text="Comprimiendo el archivo...")
+        
+        sizd = user_comp.get(username, 10)
+        parts = compressfile(file_path, sizd)
+        
+        # Añadir la cantidad de partes al mensaje
+        num_parts = len(parts)
+        await client.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=progress_msg.id,
+            text=f"Se ha comprimido el archivo en {num_parts} partes, ahora se enviarán las partes"
+        )
+
+        for part in parts:
+            try:
+                await client.send_document(message.chat.id, part)
+                os.remove(part)
+            except Exception as e:
+                print(f"Error al enviar la parte {part}: {e}")
+                await message.reply(f"Error al enviar la parte {part}: {e}")
+                os.remove(part)
+        
+        # Eliminar el mensaje de progreso
+        await client.delete_messages(chat_id=message.chat.id, message_ids=[progress_msg.id])
+
+        # Enviar el mensaje final de "Esas son todas las partes"
+        await message.reply("Esas son todas las partes")
+        
+
+        # Eliminar la carpeta 'server' y recrearla
+        shutil.rmtree('server')
+        os.mkdir('server')
+    
+    except Exception as e:
+        await message.reply(f'Error: {str(e)}')
+    
+        
+async def rename(client, message):
+    reply_message = message.reply_to_message
+
+    # Verificar si el caption empieza con "Look Here" y el remitente es el bot
+    if reply_message and reply_message.caption and reply_message.caption.startswith("Look Here") and reply_message.from_user.is_self:
+        await message.reply("No puedes renombrar este contenido debido a restricciones.", protect_content=True)
+        return
+
+    if reply_message and reply_message.media:
+        try:
+            await message.reply("Descargando el archivo para renombrarlo...")
+            new_name = message.text.split(' ', 1)[1]
+            file_path = await client.download_media(reply_message)
+            new_file_path = os.path.join(os.path.dirname(file_path), new_name)
+            os.rename(file_path, new_file_path)
+            await message.reply("Subiendo el archivo con nuevo nombre...")
+            await client.send_document(message.chat.id, new_file_path)
+            os.remove(new_file_path)
+        except Exception as e:
+            await message.reply(f'Error: {str(e)}')
+    else:
+        await message.reply('Ejecute el comando respondiendo a un archivo')
+
+async def set_size(client, message):
+    try:
+        valor = int(message.text.split(" ")[1])  # Intentar convertir el valor a entero
+        if valor < 1:  # Validar que el tamaño sea mayor a 0 MB
+            await client.send_sticker(
+                chat_id=message.chat.id,
+                sticker="CAACAgIAAxkBAAIF02fm3-XonvGhnnaVYCwO-y71UhThAAJuOgAC4KOCB77pR2Nyg3apHgQ"
+            )
+            time.sleep(5)
+            await message.reply("¿Qué haces pendejo? ¿Como piensas comprimir en negativo?.")
+            return
+        username = message.from_user.username
+        user_comp[username] = valor  # Registrar el tamaño para el usuario
+        await message.reply(f"Tamaño de archivos {valor}MB registrado para el usuario @{username}.")
+    except IndexError:
+        await message.reply("Por favor, proporciona el tamaño del archivo después del comando.")
+    except ValueError:
+        await message.reply("El tamaño proporcionado no es un número válido. Intenta nuevamente.")
+    except Exception as e:  # Capturar cualquier otro error inesperado
+        await message.reply(f"Ha ocurrido un error inesperado: {str(e)}")
+        logging.error(f"Error inesperado en set_size: {str(e)}")
