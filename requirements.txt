@@ -12,3 +12,7 @@ curl_cffi
 Pillow
 nest_asyncio
 fpdf
+lbry-libtorrent
+wget
+torf
+python-libtorrent
