@@ -1,11 +1,10 @@
-from torf import Torrent
+from torf import Magnet
 import asyncio
 import os
-import aiohttp
 
 async def descargar_torrent(magnet_link, download_folder="./downloads"):
     """
-    Descarga un torrent desde un enlace magnet y guarda los archivos en un directorio especificado.
+    Descarga un archivo desde un enlace magnet y guarda los archivos en un directorio especificado.
 
     Args:
         magnet_link (str): El enlace magnet del torrent.
@@ -17,23 +16,18 @@ async def descargar_torrent(magnet_link, download_folder="./downloads"):
     if not os.path.exists(download_folder):
         os.makedirs(download_folder)
 
-    # Crear un cliente para manejar el enlace magnet
-    async with aiohttp.ClientSession() as session:
-        torrent = Torrent.from_magnet(magnet_link)
-        torrent.download_to(download_folder, session=session)
+    # Crear un objeto Magnet desde el enlace magnet
+    magnet = Magnet(magnet_link)
 
-        print(f"Descargando torrent desde: {magnet_link}")
+    # Descargar los archivos
+    print(f"Descargando torrent desde: {magnet_link}")
+    magnet.download(download_folder)
 
-        # Mantener el estado de descarga
-        while not torrent.complete:
-            await asyncio.sleep(1)
-            print(f"Progreso: {torrent.progress:.2f}%")
+    print("Descarga completada.")
 
-        print("Descarga completada.")
-
-        # Obtener los paths de los archivos descargados
-        downloaded_files = [os.path.join(download_folder, file.name) for file in torrent.files]
-        return downloaded_files
+    # Obtener los paths de los archivos descargados
+    downloaded_files = [os.path.join(download_folder, file) for file in os.listdir(download_folder)]
+    return downloaded_files
 
 # Ejemplo de uso
 async def main():
