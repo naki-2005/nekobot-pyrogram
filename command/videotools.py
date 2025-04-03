@@ -5,19 +5,10 @@ import re
 import subprocess
 import random
 from command.video_processor import procesar_video
-from data.vars import admin_users, vip_users, video_limit
+from data.vars import admin_users, vip_users, video_limit, video_settings
 from data.stickers import sobre_mb
 import time
 
-# Configuración inicial
-video_settings = {
-    'resolution': '640x400',
-    'crf': '28',
-    'audio_bitrate': '80k',
-    'fps': '18',
-    'preset': 'veryfast',
-    'codec': 'libx265'
-}
 max_tareas = int(os.getenv('MAX_TASKS', '1'))
 
 tareas_en_ejecucion = {}
