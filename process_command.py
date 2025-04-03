@@ -211,9 +211,10 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                         text="⚠️ Debes proporcionar un ID válido para cancelar la tarea. Ejemplo: `/cancel <ID>`",
                         protect_content=True
                     )
-
             elif text.startswith("/list"):
-                await listar_tareas(client, chat_id, allowed_ids, message)
+                is_admin = user_id in admin_users
+                await listar_tareas(client, chat_id, user_id, is_admin, message)
+
 
     elif text.startswith("/imgchest"):
         if cmd("imgtools", user_id in admin_users, user_id in vip_users):
