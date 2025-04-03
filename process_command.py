@@ -213,16 +213,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                     )
 
             elif text.startswith("/list"):
-                if user_id in admin_users or user_id in vip_users:
-                    await listar_tareas(client, chat_id, allowed_ids, message)
-                else:
-                    await client.send_message(chat_id=chat_id, text="⚠️ No tienes permiso para usar este comando.")
-        
-            elif auto and (message.video or (message.document and message.document.mime_type.startswith("video/"))):
-                await asyncio.create_task(compress_video(admin_users, client, message))
-                                              
-            elif text.startswith("/list"):
-                await listar_tareas(client, message.chat.id, allowed_ids, message)
+                await listar_tareas(client, chat_id, allowed_ids, message)
 
     elif text.startswith("/imgchest"):
         if cmd("imgtools", user_id in admin_users, user_id in vip_users):
