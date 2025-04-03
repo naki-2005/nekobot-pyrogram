@@ -25,7 +25,7 @@ def comprimir_video(original_video_path, compressed_video_path, user_specific_se
         'ffmpeg', '-y', '-i', original_video_path,
         '-s', user_specific_settings['resolution'],
         '-crf', user_specific_settings['crf'],
-        '-b:a', a user_specific_settings['audio_bitrate'],
+        '-b:a', user_specific_settings['audio_bitrate'],
         '-r', user_specific_settings['fps'],
         '-preset', user_specific_settings['preset'],
         '-c:v', user_specific_settings['codec'],
