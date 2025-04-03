@@ -14,7 +14,7 @@ max_tareas = int(os.getenv('MAX_TASKS', '1'))
 tareas_en_ejecucion = {}
 cola_de_tareas = []
 
-async def update_video_settings(client, message, allowed_ids):
+async def update_video_settings(client, message):
     user_id = str(message.from_user.id)  # Convertimos el User ID a string para usarlo como clave
     protect_content = user_id not in allowed_ids
 
