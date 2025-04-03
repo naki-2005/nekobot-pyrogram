@@ -9,14 +9,7 @@ from data.vars import admin_users, vip_users, video_limit
 from data.stickers import sobre_mb
 import time
 
-
-max_tareas = int(os.getenv('MAX_TASKS', '1'))
-
-tareas_en_ejecucion = {}
-cola_de_tareas = []
-
-
-# Configuración global para referencia predeterminada
+# Configuración inicial
 video_settings = {
     'resolution': '640x400',
     'crf': '28',
@@ -25,28 +18,23 @@ video_settings = {
     'preset': 'veryfast',
     'codec': 'libx265'
 }
+max_tareas = int(os.getenv('MAX_TASKS', '1'))
 
-# Diccionario global para almacenar configuraciones personalizadas por usuario
-user_specific_settings = {}
+tareas_en_ejecucion = {}
+cola_de_tareas = []
 
 async def update_video_settings(client, message, allowed_ids):
     user_id = message.from_user.id
     protect_content = user_id not in allowed_ids
 
+    global video_settings
     try:
         # Obtener los parámetros del comando
         command_params = message.text.split()[1:]
-
-        # Inicializar configuración específica para el usuario si no existe
-        if user_id not in user_specific_settings:
-            user_specific_settings[user_id] = video_settings.copy()
-
-        # Referencia a la configuración personalizada del usuario
-        user_settings = user_specific_settings[user_id]
-
+        
         # Si no hay parámetros, devolver las configuraciones actuales en formato de comando
         if not command_params:
-            configuracion_actual = "/calidad " + " ".join(f"{k}={v}" for k, v in user_settings.items())
+            configuracion_actual = "/calidad " + " ".join(f"{k}={v}" for k, v in video_settings.items())
             await message.reply_text(f"⚙️ Configuración actual:\n`{configuracion_actual}`", protect_content=protect_content)
             return
         
@@ -60,7 +48,7 @@ async def update_video_settings(client, message, allowed_ids):
 
         # Validar y actualizar configuraciones solo para los parámetros proporcionados
         for key, value in params.items():
-            if key in user_settings:
+            if key in video_settings:
                 if key == 'resolution' and not re.match(r'^\d+x\d+$', value):
                     raise ValueError("Resolución inválida. Usa el formato WIDTHxHEIGHT.")
                 elif key == 'crf' and not value.isdigit():
@@ -74,17 +62,16 @@ async def update_video_settings(client, message, allowed_ids):
                 elif key == 'codec' and value not in ['libx264', 'libx265', 'libvpx']:
                     raise ValueError("Codec inválido. Usa 'libx264', 'libx265' o 'libvpx'.")
                 
-                user_settings[key] = value
+                video_settings[key] = value
 
         # Convertir el diccionario actualizado a texto para mostrar como respuesta
-        configuracion_texto = "/calidad " + " ".join(f"{k}={v}" for k, v in user_settings.items())
-        await message.reply_text(f"⚙️ Configuraciones de video actualizadas para tu usuario:\n`{configuracion_texto}`", protect_content=protect_content)
+        configuracion_texto = "/calidad " + " ".join(f"{k}={v}" for k, v in video_settings.items())
+        await message.reply_text(f"⚙️ Configuraciones de video actualizadas:\n`{configuracion_texto}`", protect_content=protect_content)
     
     except ValueError as ve:
         await message.reply_text(f"❌ Error de validación:\n{ve}", protect_content=protect_content)
     except Exception as e:
         await message.reply_text(f"❌ Error al procesar el comando:\n{e}", protect_content=protect_content)
-        
 
 # Cancelar tareas
 async def cancelar_tarea(admin_users, client, task_id, chat_id, message, allowed_ids):
@@ -228,9 +215,7 @@ def get_video_duration(video_path):
 async def compress_video(admin_users, client, message, allowed_ids):
     user_id = message.from_user.id
     protect_content = user_id not in allowed_ids
-    if user_id not in user_specific_settings:
-        user_specific_settings[user_id] = video_settings.copy()
-            
+
     global cola_de_tareas
     task_id = str(uuid.uuid4())
     chat_id = message.chat.id
@@ -315,7 +300,7 @@ async def compress_video(admin_users, client, message, allowed_ids):
             await client.send_message(chat_id=chat_id, text="⚠️ No se pudo obtener la duración del video.", protect_content=protect_content)
 
         # Procesar el video
-        file_name, description, chat_id, file_path, original_video_path = await procesar_video(client, message, video_path, task_id, tareas_en_ejecucion, user_specific_settings)
+        file_name, description, chat_id, file_path, original_video_path = await procesar_video(client, message, video_path, task_id, tareas_en_ejecucion)
 
         # Enviar el video comprimido con la miniatura generada
         await client.send_video(
