@@ -20,15 +20,15 @@ def obtener_duracion_video(original_video_path):
         raise RuntimeError(f"Error al obtener la duración del video: {e}")
 import subprocess
 
-def comprimir_video(original_video_path, compressed_video_path, settings):
+def comprimir_video(original_video_path, compressed_video_path, user_specific_settings):
     ffmpeg_command = [
         'ffmpeg', '-y', '-i', original_video_path,
-        '-s', settings['resolution'],
-        '-crf', settings['crf'],
-        '-b:a', settings['audio_bitrate'],
-        '-r', settings['fps'],
-        '-preset', settings['preset'],
-        '-c:v', settings['codec'],
+        '-s', user_specific_settings['resolution'],
+        '-crf', user_specific_settings['crf'],
+        '-b:a', a user_specific_settings['audio_bitrate'],
+        '-r', user_specific_settings['fps'],
+        '-preset', user_specific_settings['preset'],
+        '-c:v', user_specific_settings['codec'],
         compressed_video_path
     ]
     return subprocess.Popen(ffmpeg_command, stderr=subprocess.PIPE, text=True)
