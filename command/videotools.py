@@ -15,8 +15,9 @@ tareas_en_ejecucion = {}
 cola_de_tareas = []
 
 async def update_video_settings(client, message):
-    user_id = str(message.from_user.id)  # Convertimos el User ID a string para usarlo como clave
+    user_id = message.from_user.id
     protect_content = user_id not in allowed_ids
+    user_id = str(message.from_user.id)
 
     global video_settings
     try:
