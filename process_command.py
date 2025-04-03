@@ -179,7 +179,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
         if cmd("videotools", user_id in admin_users, user_id in vip_users):
             if text.startswith("/convert"):
                 if message.reply_to_message and (message.reply_to_message.video or (message.reply_to_message.document and message.reply_to_message.document.mime_type.startswith("video/"))):
-                    await asyncio.create_task(compress_video(admin_users, client, message, allowed_ids))
+                    await asyncio.create_task(compress_video(admin_users, client, message))
 
             elif text.startswith("/autoconvert"):
                 # Activar/desactivar "auto" para este usuario
@@ -219,7 +219,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                     await client.send_message(chat_id=chat_id, text="⚠️ No tienes permiso para usar este comando.")
         
             elif auto and (message.video or (message.document and message.document.mime_type.startswith("video/"))):
-                await asyncio.create_task(compress_video(admin_users, client, message, allowed_ids))
+                await asyncio.create_task(compress_video(admin_users, client, message))
                                               
             elif text.startswith("/list"):
                 await listar_tareas(client, message.chat.id, allowed_ids, message)
