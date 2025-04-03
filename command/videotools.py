@@ -210,7 +210,7 @@ def get_video_duration(video_path):
         
 
 # Ajuste en compress_video
-async def compress_video(admin_users, client, message, allowed_ids):
+async def compress_video(admin_users, client, message):
     user_id = message.from_user.id
     protect_content = user_id not in allowed_ids
 
