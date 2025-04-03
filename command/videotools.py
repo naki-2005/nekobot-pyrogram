@@ -5,7 +5,7 @@ import re
 import subprocess
 import random
 from command.video_processor import procesar_video
-from data.vars import admin_users, vip_users, video_limit, video_settings
+from data.vars import admin_users, vip_users, video_limit, video_settings, allowed_ids
 from data.stickers import sobre_mb
 import time
 
