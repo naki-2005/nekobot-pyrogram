@@ -15,7 +15,7 @@ tareas_en_ejecucion = {}
 cola_de_tareas = []
 
 async def update_video_settings(client, message, allowed_ids):
-    user_id = message.from_user.id
+    user_id = str(message.from_user.id)  # Convertimos el User ID a string para usarlo como clave
     protect_content = user_id not in allowed_ids
 
     global video_settings
@@ -23,9 +23,13 @@ async def update_video_settings(client, message, allowed_ids):
         # Obtener los parámetros del comando
         command_params = message.text.split()[1:]
         
-        # Si no hay parámetros, devolver las configuraciones actuales en formato de comando
+        # Si no hay parámetros, mostrar las configuraciones actuales del usuario
         if not command_params:
-            configuracion_actual = "/calidad " + " ".join(f"{k}={v}" for k, v in video_settings.items())
+            if user_id in video_settings:
+                user_config = video_settings[user_id]
+            else:
+                user_config = video_settings['default']  # Usamos configuración por defecto si no hay personalización
+            configuracion_actual = "/calidad " + " ".join(f"{k}={v}" for k, v in user_config.items())
             await message.reply_text(f"⚙️ Configuración actual:\n`{configuracion_actual}`", protect_content=protect_content)
             return
         
@@ -37,9 +41,12 @@ async def update_video_settings(client, message, allowed_ids):
             key, value = item.split("=")
             params[key] = value
 
-        # Validar y actualizar configuraciones solo para los parámetros proporcionados
+        # Validar parámetros y crear o actualizar configuraciones del usuario
+        if user_id not in video_settings:
+            video_settings[user_id] = video_settings['default'].copy()  # Copiar configuración por defecto
+
         for key, value in params.items():
-            if key in video_settings:
+            if key in video_settings['default']:  # Validamos contra las claves por defecto
                 if key == 'resolution' and not re.match(r'^\d+x\d+$', value):
                     raise ValueError("Resolución inválida. Usa el formato WIDTHxHEIGHT.")
                 elif key == 'crf' and not value.isdigit():
@@ -53,11 +60,11 @@ async def update_video_settings(client, message, allowed_ids):
                 elif key == 'codec' and value not in ['libx264', 'libx265', 'libvpx']:
                     raise ValueError("Codec inválido. Usa 'libx264', 'libx265' o 'libvpx'.")
                 
-                video_settings[key] = value
+                video_settings[user_id][key] = value  # Actualizamos la configuración del usuario
 
-        # Convertir el diccionario actualizado a texto para mostrar como respuesta
-        configuracion_texto = "/calidad " + " ".join(f"{k}={v}" for k, v in video_settings.items())
-        await message.reply_text(f"⚙️ Configuraciones de video actualizadas:\n`{configuracion_texto}`", protect_content=protect_content)
+        # Mostrar las configuraciones actualizadas del usuario
+        configuracion_texto = "/calidad " + " ".join(f"{k}={v}" for k, v in video_settings[user_id].items())
+        await message.reply_text(f"⚙️ Configuraciones de video actualizadas para User ID {user_id}:\n`{configuracion_texto}`", protect_content=protect_content)
     
     except ValueError as ve:
         await message.reply_text(f"❌ Error de validación:\n{ve}", protect_content=protect_content)
