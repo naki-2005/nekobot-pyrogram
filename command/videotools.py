@@ -327,5 +327,5 @@ async def compress_video(admin_users, client, message):
 
         if cola_de_tareas:
             siguiente_tarea = cola_de_tareas.pop(0)
-            await compress_video(admin_users, siguiente_tarea["client"], siguiente_tarea["message"], allowed_ids)
+            await compress_video(admin_users, siguiente_tarea["client"], siguiente_tarea["message"])
             
