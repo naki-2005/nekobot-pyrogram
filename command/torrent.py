@@ -1,10 +1,11 @@
-import libtorrent as lt
+from torf import Torrent
 import asyncio
 import os
+import aiohttp
 
 async def descargar_torrent(magnet_link, download_folder="./downloads"):
     """
-    Descarga un archivo desde un enlace magnet y devuelve el path del archivo descargado.
+    Descarga un torrent desde un enlace magnet y guarda los archivos en un directorio especificado.
 
     Args:
         magnet_link (str): El enlace magnet del torrent.
@@ -16,27 +17,29 @@ async def descargar_torrent(magnet_link, download_folder="./downloads"):
     if not os.path.exists(download_folder):
         os.makedirs(download_folder)
 
-    # Inicializar sesión de libtorrent
-    sesion = lt.session()
-    sesion.listen_on(6881, 6891)
+    # Crear un cliente para manejar el enlace magnet
+    async with aiohttp.ClientSession() as session:
+        torrent = Torrent.from_magnet(magnet_link)
+        torrent.download_to(download_folder, session=session)
 
-    # Agregar el enlace magnet
-    params = {
-        "save_path": download_folder,
-        "storage_mode": lt.storage_mode_t.storage_mode_sparse,
-    }
-    handler = lt.add_magnet_uri(sesion, magnet_link, params)
+        print(f"Descargando torrent desde: {magnet_link}")
 
-    print("Descargando...")
-    while not handler.is_seed():
-        await asyncio.sleep(1)
-        print(f"Progreso: {handler.status().progress * 100:.2f}%")
+        # Mantener el estado de descarga
+        while not torrent.complete:
+            await asyncio.sleep(1)
+            print(f"Progreso: {torrent.progress:.2f}%")
 
-    print("Descarga completada.")
+        print("Descarga completada.")
 
-    # Obtener el path de los archivos descargados
-    archivos = handler.get_torrent_info().files()
-    paths = [os.path.join(download_folder, archivo.path) for archivo in archivos]
-    
-    return paths
-  
+        # Obtener los paths de los archivos descargados
+        downloaded_files = [os.path.join(download_folder, file.name) for file in torrent.files]
+        return downloaded_files
+
+# Ejemplo de uso
+async def main():
+    magnet_link = "MAGNET_LINK_AQUI"
+    archivos = await descargar_torrent(magnet_link)
+    print(f"Archivos descargados: {archivos}")
+
+# Para ejecutar el script
+# asyncio.run(main())
