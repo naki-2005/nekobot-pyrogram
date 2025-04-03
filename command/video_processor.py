@@ -3,7 +3,7 @@ import os
 import re
 import datetime
 
-async def procesar_video(client, message, original_video_path, task_id, tareas_en_ejecucion, user_specific_settings):
+async def procesar_video(client, message, original_video_path, task_id, tareas_en_ejecucion):
     chat_id = message.chat.id
     compressed_video_path = f"{os.path.splitext(original_video_path)[0]}_compressed.mkv"
 
@@ -12,7 +12,7 @@ async def procesar_video(client, message, original_video_path, task_id, tareas_e
     try:
         total_duration = obtener_duracion_video(original_video_path)
         start_time = datetime.datetime.now()
-        process = comprimir_video(original_video_path, compressed_video_path, user_specific_settings)
+        process = comprimir_video(original_video_path, compressed_video_path)
 
         last_update_time = datetime.datetime.now()
 
