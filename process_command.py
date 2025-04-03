@@ -199,7 +199,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                     )
 
             elif text.startswith("/calidad"):
-                await asyncio.create_task(update_video_settings(client, message, allowed_ids))
+                await asyncio.create_task(update_video_settings(client, message))
 
             elif text.startswith("/cancel"):
                 try:
