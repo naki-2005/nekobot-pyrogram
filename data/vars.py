@@ -18,4 +18,14 @@ PROTECT_CONTENT = os.getenv('PROTECT_CONTENT', '').strip().lower() == "true"
 allowed_users = admin_users + users + temp_users + temp_chats
 allowed_ids = set(admin_users).union(set(vip_users))
 
-video_settings = {'resolution': '640x400', 'crf': '28', 'audio_bitrate': '80k', 'fps': '18', 'preset': 'veryfast', 'codec': 'libx265'}
+# Inicializamos video_settings con un ID base como 'default'
+video_settings = {
+    'default': {
+        'resolution': '640x400',
+        'crf': '28',
+        'audio_bitrate': '80k',
+        'fps': '18',
+        'preset': 'veryfast',
+        'codec': 'libx265'
+    }
+}
