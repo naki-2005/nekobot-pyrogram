@@ -5,32 +5,36 @@ import re
 import subprocess
 import random
 from command.video_processor import procesar_video
-from data.vars import admin_users, vip_users, video_limit, video_settings, allowed_ids
+from data.vars import admin_users, vip_users, video_limit
 from data.stickers import sobre_mb
 import time
 
+# Configuración inicial
+video_settings = {
+    'resolution': '640x400',
+    'crf': '28',
+    'audio_bitrate': '80k',
+    'fps': '18',
+    'preset': 'veryfast',
+    'codec': 'libx265'
+}
 max_tareas = int(os.getenv('MAX_TASKS', '1'))
 
 tareas_en_ejecucion = {}
 cola_de_tareas = []
 
-async def update_video_settings(client, message):
+async def update_video_settings(client, message, allowed_ids):
     user_id = message.from_user.id
     protect_content = user_id not in allowed_ids
-    user_id = str(message.from_user.id)
 
     global video_settings
     try:
         # Obtener los parámetros del comando
         command_params = message.text.split()[1:]
         
-        # Si no hay parámetros, mostrar las configuraciones actuales del usuario
+        # Si no hay parámetros, devolver las configuraciones actuales en formato de comando
         if not command_params:
-            if user_id in video_settings:
-                user_config = video_settings[user_id]
-            else:
-                user_config = video_settings['default']  # Usamos configuración por defecto si no hay personalización
-            configuracion_actual = "/calidad " + " ".join(f"{k}={v}" for k, v in user_config.items())
+            configuracion_actual = "/calidad " + " ".join(f"{k}={v}" for k, v in video_settings.items())
             await message.reply_text(f"⚙️ Configuración actual:\n`{configuracion_actual}`", protect_content=protect_content)
             return
         
@@ -42,12 +46,9 @@ async def update_video_settings(client, message):
             key, value = item.split("=")
             params[key] = value
 
-        # Validar parámetros y crear o actualizar configuraciones del usuario
-        if user_id not in video_settings:
-            video_settings[user_id] = video_settings['default'].copy()  # Copiar configuración por defecto
-
+        # Validar y actualizar configuraciones solo para los parámetros proporcionados
         for key, value in params.items():
-            if key in video_settings['default']:  # Validamos contra las claves por defecto
+            if key in video_settings:
                 if key == 'resolution' and not re.match(r'^\d+x\d+$', value):
                     raise ValueError("Resolución inválida. Usa el formato WIDTHxHEIGHT.")
                 elif key == 'crf' and not value.isdigit():
@@ -61,11 +62,11 @@ async def update_video_settings(client, message):
                 elif key == 'codec' and value not in ['libx264', 'libx265', 'libvpx']:
                     raise ValueError("Codec inválido. Usa 'libx264', 'libx265' o 'libvpx'.")
                 
-                video_settings[user_id][key] = value  # Actualizamos la configuración del usuario
+                video_settings[key] = value
 
-        # Mostrar las configuraciones actualizadas del usuario
-        configuracion_texto = "/calidad " + " ".join(f"{k}={v}" for k, v in video_settings[user_id].items())
-        await message.reply_text(f"⚙️ Configuraciones de video actualizadas para User ID {user_id}:\n`{configuracion_texto}`", protect_content=protect_content)
+        # Convertir el diccionario actualizado a texto para mostrar como respuesta
+        configuracion_texto = "/calidad " + " ".join(f"{k}={v}" for k, v in video_settings.items())
+        await message.reply_text(f"⚙️ Configuraciones de video actualizadas:\n`{configuracion_texto}`", protect_content=protect_content)
     
     except ValueError as ve:
         await message.reply_text(f"❌ Error de validación:\n{ve}", protect_content=protect_content)
@@ -94,53 +95,36 @@ async def cancelar_tarea(admin_users, client, task_id, chat_id, message, allowed
             await client.send_message(chat_id=chat_id, text="⚠️ No tienes permiso para eliminar esta tarea de la cola.", protect_content=protect_content)
     else:
         await client.send_message(chat_id=chat_id, text=f"⚠️ No se encontró la tarea con ID `{task_id}`.", protect_content=protect_content)
-import os
 
-# Configuración de los usuarios administradores
-admin_users = list(map(int, os.getenv('ADMINS').split(','))) if os.getenv('ADMINS') else []
+# Listar tareas
+async def listar_tareas(client, chat_id, allowed_ids, message):
+    user_id_requesting = message.from_user.id
+    protect_content = user_id_requesting not in allowed_ids
 
-async def listar_tareas(client, chat_id, user_id, is_admin, message):
     global cola_de_tareas, tareas_en_ejecucion
 
-    # Inicializa la lista de tareas
+    # Inicia el mensaje con la tarea actual
     lista_tareas = "📝 Lista de tareas:\n\n"
-    total_tareas = len(tareas_en_ejecucion) + len(cola_de_tareas)
+    if tareas_en_ejecucion:
+        for task_id, tarea in tareas_en_ejecucion.items():
+            user_info = await client.get_users(tarea["user_id"])
+            username = f"@{user_info.username}" if user_info.username else "Usuario Anónimo"
+            lista_tareas += f"Tarea actual: ID {task_id} {username} (`{tarea['user_id']}`)\n\n"
 
-    if is_admin:
-        lista_tareas += f"🔢 Número total de tareas: {total_tareas}\n\n"
-
-        # Agrega tareas en ejecución
-        if tareas_en_ejecucion:
-            for task_id, tarea in tareas_en_ejecucion.items():
-                user_info = await client.get_users(tarea["user_id"])
-                username = f"@{user_info.username}" if user_info.username else "Usuario Anónimo"
-                lista_tareas += f"Tarea actual: ID {task_id} {username} (`{tarea['user_id']}`)\n\n"
-
-        # Agrega tareas en cola
-        if cola_de_tareas:
-            for index, tarea in enumerate(cola_de_tareas, start=1):
-                user_info = await client.get_users(tarea["user_id"])
-                username = f"@{user_info.username}" if user_info.username else "Usuario Anónimo"
-                lista_tareas += f"{index}. ID: `{tarea['id']}`\n   Usuario: {username} (`{tarea['user_id']}`)\n\n"
-        else:
-            lista_tareas += "📝 No hay tareas en ejecución ni en cola.\n"
+    # Añade las tareas en cola
+    if cola_de_tareas:
+        for index, tarea in enumerate(cola_de_tareas, start=1):
+            user_info = await client.get_users(tarea["user_id"])
+            username = f"@{user_info.username}" if user_info.username else "Usuario Anónimo"
+            lista_tareas += f"{index}. ID: `{tarea['id']}`\n   Usuario: {username} (`{tarea['user_id']}`)\n\n"
     else:
-        lista_tareas += f"🔢 Número total de tareas: {total_tareas}\n\n"
-        lista_tareas += f"Tareas de usuario ID {user_id}:\n\n"
+        if not tareas_en_ejecucion:
+            lista_tareas += "📝 No hay tareas en ejecución ni en cola.\n"
 
-        user_specific_tasks = [
-            tarea for tarea in cola_de_tareas + list(tareas_en_ejecucion.values())
-            if tarea["user_id"] == user_id
-        ]
+    await client.send_message(chat_id=chat_id, text=lista_tareas, protect_content=protect_content)
 
-        if user_specific_tasks:
-            for tarea in user_specific_tasks:
-                lista_tareas += f"- ID: `{tarea['id']}`\n\n"
-        else:
-            lista_tareas += "📝 No tienes tareas asignadas.\n"
 
-    # Envía el mensaje
-    await client.send_message(chat_id=chat_id, text=lista_tareas, protect_content=not is_admin)
+
 
 import random
 import subprocess
@@ -228,7 +212,7 @@ def get_video_duration(video_path):
         
 
 # Ajuste en compress_video
-async def compress_video(admin_users, client, message):
+async def compress_video(admin_users, client, message, allowed_ids):
     user_id = message.from_user.id
     protect_content = user_id not in allowed_ids
 
@@ -316,7 +300,7 @@ async def compress_video(admin_users, client, message):
             await client.send_message(chat_id=chat_id, text="⚠️ No se pudo obtener la duración del video.", protect_content=protect_content)
 
         # Procesar el video
-        file_name, description, chat_id, file_path, original_video_path = await procesar_video(client, message, video_path, task_id, tareas_en_ejecucion)
+        file_name, description, chat_id, file_path, original_video_path = await procesar_video(client, message, video_path, task_id, tareas_en_ejecucion, video_settings)
 
         # Enviar el video comprimido con la miniatura generada
         await client.send_video(
@@ -344,6 +328,5 @@ async def compress_video(admin_users, client, message):
 
         if cola_de_tareas:
             siguiente_tarea = cola_de_tareas.pop(0)
-            user_id = siguiente_tarea["user_id"]  # Obtener el ID del usuario desde la tarea
-            await compress_video(siguiente_tarea["client"], siguiente_tarea["message"], user_id)
-    
+            await compress_video(admin_users, siguiente_tarea["client"], siguiente_tarea["message"], allowed_ids)
+            
