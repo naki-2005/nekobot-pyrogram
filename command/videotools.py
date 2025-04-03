@@ -94,6 +94,10 @@ async def cancelar_tarea(admin_users, client, task_id, chat_id, message, allowed
             await client.send_message(chat_id=chat_id, text="⚠️ No tienes permiso para eliminar esta tarea de la cola.", protect_content=protect_content)
     else:
         await client.send_message(chat_id=chat_id, text=f"⚠️ No se encontró la tarea con ID `{task_id}`.", protect_content=protect_content)
+import os
+
+# Configuración de los usuarios administradores
+admin_users = list(map(int, os.getenv('ADMINS').split(','))) if os.getenv('ADMINS') else []
 
 async def listar_tareas(client, chat_id, user_id, message):
     user_id_requesting = user_id
@@ -105,6 +109,7 @@ async def listar_tareas(client, chat_id, user_id, message):
     lista_tareas = "📝 Lista de tareas:\n\n"
     total_tareas = len(tareas_en_ejecucion) + len(cola_de_tareas)
 
+    # Si el usuario es administrador
     if user_id_requesting in admin_users:
         lista_tareas += f"🔢 Número total de tareas: {total_tareas}\n\n"
 
@@ -113,7 +118,7 @@ async def listar_tareas(client, chat_id, user_id, message):
             for task_id, tarea in tareas_en_ejecucion.items():
                 user_info = await client.get_users(tarea["user_id"])
                 username = f"@{user_info.username}" if user_info.username else "Usuario Anónimo"
-                lista_tareas += f"Tarea actual: ID `{task_id}` {username} (`{tarea['user_id']}`)\n\n"
+                lista_tareas += f"Tarea actual: ID {task_id} {username} (`{tarea['user_id']}`)\n\n"
 
         # Agrega tareas en cola
         if cola_de_tareas:
@@ -123,15 +128,15 @@ async def listar_tareas(client, chat_id, user_id, message):
                 lista_tareas += f"{index}. ID: `{tarea['id']}`\n   Usuario: {username} (`{tarea['user_id']}`)\n\n"
         else:
             lista_tareas += "📝 No hay tareas en ejecución ni en cola.\n"
+    # Si el usuario NO es administrador
     else:
+        lista_tareas += f"🔢 Número total de tareas: {total_tareas}\n\n"
+        lista_tareas += f"Tareas de usuario ID {user_id_requesting}:\n\n"
+
         user_specific_tasks = [
             tarea for tarea in cola_de_tareas + list(tareas_en_ejecucion.values())
             if tarea["user_id"] == user_id_requesting
         ]
-        lista_tareas += f"🔢 Número total de tareas: {total_tareas}\n\n"
-
-        # Agrega la línea al bloque no admin
-        lista_tareas += f"Tareas de usuario ID {user_id_requesting}:\n\n"
 
         if user_specific_tasks:
             for tarea in user_specific_tasks:
@@ -141,8 +146,6 @@ async def listar_tareas(client, chat_id, user_id, message):
 
     # Envía el mensaje
     await client.send_message(chat_id=chat_id, text=lista_tareas, protect_content=protect_content)
-
-
 
 
 import random
