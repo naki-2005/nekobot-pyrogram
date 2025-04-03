@@ -99,18 +99,14 @@ import os
 # Configuración de los usuarios administradores
 admin_users = list(map(int, os.getenv('ADMINS').split(','))) if os.getenv('ADMINS') else []
 
-async def listar_tareas(client, chat_id, user_id, message):
-    user_id_requesting = user_id
-    protect_content = user_id_requesting not in admin_users
-
+async def listar_tareas(client, chat_id, user_id, is_admin, message):
     global cola_de_tareas, tareas_en_ejecucion
 
     # Inicializa la lista de tareas
     lista_tareas = "📝 Lista de tareas:\n\n"
     total_tareas = len(tareas_en_ejecucion) + len(cola_de_tareas)
 
-    # Si el usuario es administrador
-    if user_id_requesting in admin_users:
+    if is_admin:
         lista_tareas += f"🔢 Número total de tareas: {total_tareas}\n\n"
 
         # Agrega tareas en ejecución
@@ -128,14 +124,13 @@ async def listar_tareas(client, chat_id, user_id, message):
                 lista_tareas += f"{index}. ID: `{tarea['id']}`\n   Usuario: {username} (`{tarea['user_id']}`)\n\n"
         else:
             lista_tareas += "📝 No hay tareas en ejecución ni en cola.\n"
-    # Si el usuario NO es administrador
     else:
         lista_tareas += f"🔢 Número total de tareas: {total_tareas}\n\n"
-        lista_tareas += f"Tareas de usuario ID {user_id_requesting}:\n\n"
+        lista_tareas += f"Tareas de usuario ID {user_id}:\n\n"
 
         user_specific_tasks = [
             tarea for tarea in cola_de_tareas + list(tareas_en_ejecucion.values())
-            if tarea["user_id"] == user_id_requesting
+            if tarea["user_id"] == user_id
         ]
 
         if user_specific_tasks:
@@ -145,8 +140,7 @@ async def listar_tareas(client, chat_id, user_id, message):
             lista_tareas += "📝 No tienes tareas asignadas.\n"
 
     # Envía el mensaje
-    await client.send_message(chat_id=chat_id, text=lista_tareas, protect_content=protect_content)
-
+    await client.send_message(chat_id=chat_id, text=lista_tareas, protect_content=not is_admin)
 
 import random
 import subprocess
