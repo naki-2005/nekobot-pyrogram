@@ -95,7 +95,6 @@ async def cancelar_tarea(admin_users, client, task_id, chat_id, message, allowed
     else:
         await client.send_message(chat_id=chat_id, text=f"⚠️ No se encontró la tarea con ID `{task_id}`.", protect_content=protect_content)
 
-# Listar tareas
 async def listar_tareas(client, chat_id, user_id, message):
     user_id_requesting = user_id
     protect_content = user_id_requesting not in admin_users
@@ -114,7 +113,7 @@ async def listar_tareas(client, chat_id, user_id, message):
             for task_id, tarea in tareas_en_ejecucion.items():
                 user_info = await client.get_users(tarea["user_id"])
                 username = f"@{user_info.username}" if user_info.username else "Usuario Anónimo"
-                lista_tareas += f"Tarea actual: ID {task_id} {username} (`{tarea['user_id']}`)\n\n"
+                lista_tareas += f"Tarea actual: ID `{task_id}` {username} (`{tarea['user_id']}`)\n\n"
 
         # Agrega tareas en cola
         if cola_de_tareas:
@@ -130,8 +129,10 @@ async def listar_tareas(client, chat_id, user_id, message):
             if tarea["user_id"] == user_id_requesting
         ]
         lista_tareas += f"🔢 Número total de tareas: {total_tareas}\n\n"
+
+        # Agrega la línea al bloque no admin
         lista_tareas += f"Tareas de usuario ID {user_id_requesting}:\n\n"
-        
+
         if user_specific_tasks:
             for tarea in user_specific_tasks:
                 lista_tareas += f"- ID: `{tarea['id']}`\n\n"
