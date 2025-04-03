@@ -5,6 +5,7 @@ import datetime
 
 async def procesar_video(client, message, original_video_path, task_id, tareas_en_ejecucion):
     chat_id = message.chat.id
+    user_id = message.from_user.id
     compressed_video_path = f"{os.path.splitext(original_video_path)[0]}_compressed.mkv"
 
     progress_message = await client.send_message(chat_id=chat_id, text="🚀 **Iniciando proceso de compresión...**")
@@ -12,7 +13,7 @@ async def procesar_video(client, message, original_video_path, task_id, tareas_e
     try:
         total_duration = obtener_duracion_video(original_video_path)
         start_time = datetime.datetime.now()
-        process = comprimir_video(original_video_path, compressed_video_path)
+        process = comprimir_video(user_id, original_video_path, compressed_video_path)
 
         last_update_time = datetime.datetime.now()
 
@@ -41,7 +42,8 @@ async def procesar_video(client, message, original_video_path, task_id, tareas_e
                         f"📊 Tamaño procesado: `{readable_size}`\n"
                         f"📈 Porcentaje completado: `{percentage:.2f}%`\n"
                         f"⏳ Tiempo total transcurrido: `{str(elapsed_time).split('.')[0]}`\n"
-                        f"⌛ Tiempo estimado restante: `{remaining_time}`\n"
+                        f"⌛ Tiempo estimado restante: `{remaining_time}`\n\n"
+                        f"🚫 Escriba `/cancel {task_id}` para cancelar`"
                     )
                 )
                 last_update_time = datetime.datetime.now()
