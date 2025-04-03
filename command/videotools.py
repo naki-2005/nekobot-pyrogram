@@ -96,8 +96,8 @@ async def cancelar_tarea(admin_users, client, task_id, chat_id, message, allowed
         await client.send_message(chat_id=chat_id, text=f"⚠️ No se encontró la tarea con ID `{task_id}`.", protect_content=protect_content)
 
 # Listar tareas
-async def listar_tareas(client, chat_id, message, admin_users):
-    user_id_requesting = message.from_user.id
+async def listar_tareas(client, chat_id, user_id, message, admin_users):
+    user_id_requesting = user_id
     protect_content = user_id_requesting not in admin_users
 
     global cola_de_tareas, tareas_en_ejecucion
