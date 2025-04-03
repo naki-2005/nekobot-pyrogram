@@ -2,6 +2,9 @@ import os
 import subprocess
 import datetime
 import re
+from data.vars import video_settings
+
+settings = video_settings
 
 def human_readable_size(size, decimal_places=2):
     for unit in ['KB', 'MB', 'GB', 'TB']:
@@ -20,15 +23,15 @@ def obtener_duracion_video(original_video_path):
         raise RuntimeError(f"Error al obtener la duración del video: {e}")
 import subprocess
 
-def comprimir_video(original_video_path, compressed_video_path, user_specific_settings):
+def comprimir_video(original_video_path, compressed_video_path):
     ffmpeg_command = [
         'ffmpeg', '-y', '-i', original_video_path,
-        '-s', user_specific_settings['resolution'],
-        '-crf', user_specific_settings['crf'],
-        '-b:a', user_specific_settings['audio_bitrate'],
-        '-r', user_specific_settings['fps'],
-        '-preset', user_specific_settings['preset'],
-        '-c:v', user_specific_settings['codec'],
+        '-s', settings['resolution'],
+        '-crf', settings['crf'],
+        '-b:a', settings['audio_bitrate'],
+        '-r', settings['fps'],
+        '-preset', settings['preset'],
+        '-c:v', settings['codec'],
         compressed_video_path
     ]
     return subprocess.Popen(ffmpeg_command, stderr=subprocess.PIPE, text=True)
