@@ -5,6 +5,7 @@ import py7zr
 import smtplib
 from email.message import EmailMessage
 import random
+from data.vars import admin_users, vip_users, video_limit
 
 # Diccionarios para almacenar información de los usuarios
 user_emails = {}
@@ -137,13 +138,18 @@ async def send_mail(client, message):
         return
     email = user_emails[user_id]
     if not message.reply_to_message:
-        await message.reply("Por favor, responde a un mensaje.", protect_content=True)
+        await message.reply("Por favor, responde a un mensaje.", protect_content=protect_content)
         return
     reply_message = message.reply_to_message
+    if user_id in admin_users:
+        protect_content= False
+
+    else:
+        protect_content= True
 
     # Restricciones antes de procesar cualquier contenido
     if reply_message.caption and reply_message.caption.startswith("Look Here") and reply_message.from_user.is_self:
-        await message.reply("No puedes enviar este contenido debido a restricciones.", protect_content=True)
+        await message.reply("No puedes enviar este contenido debido a restricciones.", protect_content=protect_content)
         return
 
     # Envío de mensajes de texto
@@ -167,9 +173,9 @@ async def send_mail(client, message):
                 server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
                 server.send_message(msg)
 
-            await message.reply("Mensaje de texto enviado correctamente.", protect_content=True)
+            await message.reply("Mensaje de texto enviado correctamente.", protect_content=protect_content)
         except Exception as e:
-            await message.reply(f"Error al enviar el mensaje: {e}", protect_content=True)
+            await message.reply(f"Error al enviar el mensaje: {e}", protect_content=protect_content)
         return
 
     mail_mb = get_mail_limit(user_id)
@@ -196,12 +202,12 @@ async def send_mail(client, message):
                         server.starttls()
                     server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
                     server.send_message(msg)
-                await message.reply("Archivo enviado correctamente sin compresión.", protect_content=True)
+                await message.reply("Archivo enviado correctamente sin compresión.", protect_content=protect_content)
                 os.remove(media)
             except Exception as e:
-                await message.reply(f"Error al enviar el archivo: {e}", protect_content=True)
+                await message.reply(f"Error al enviar el archivo: {e}", protect_content=protect_content)
         else:
-            await message.reply(f"El archivo supera el límite de {mail_mb} MB, se iniciará la autocompresión.", protect_content=True)
+            await message.reply(f"El archivo supera el límite de {mail_mb} MB, se iniciará la autocompresión.", protect_content=protect_content)
             parts = compressfile(media, mail_mb)
             for part in parts:
                 try:
@@ -231,8 +237,8 @@ async def send_mail(client, message):
                         server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
                         server.send_message(msg)
 
-                    await message.reply(f"Parte {os.path.basename(part)} enviada correctamente.", protect_content=True)
+                    await message.reply(f"Parte {os.path.basename(part)} enviada correctamente.", protect_content=protect_content)
                     os.remove(part)
                     time.sleep(float(mail_delay) if mail_delay else 0)
                 except Exception as e:
-                    await message.reply(f"Error al enviar la parte {os.path.basename(part)}: {e}", protect_content=True)
+                    await message.reply(f"Error al enviar la parte {os.path.basename(part)}: {e}", protect_content=protect_content)
