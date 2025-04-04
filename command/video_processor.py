@@ -3,7 +3,8 @@ import os
 import re
 import datetime
 
-async def procesar_video(client, message, original_video_path, task_id, tareas_en_ejecucion, video_settings):
+
+async def procesar_video(client, message, user_id, original_video_path, task_id, tareas_en_ejecucion, video_settings):
     chat_id = message.chat.id
     compressed_video_path = f"{os.path.splitext(original_video_path)[0]}_compressed.mkv"
 
@@ -12,7 +13,9 @@ async def procesar_video(client, message, original_video_path, task_id, tareas_e
     try:
         total_duration = obtener_duracion_video(original_video_path)
         start_time = datetime.datetime.now()
-        process = comprimir_video(original_video_path, compressed_video_path, video_settings)
+        
+        # Aquí se pasa el user_id a comprimir_video para utilizar la configuración específica
+        process = comprimir_video(user_id, original_video_path, compressed_video_path, video_settings)
 
         last_update_time = datetime.datetime.now()
 
@@ -61,7 +64,10 @@ async def procesar_video(client, message, original_video_path, task_id, tareas_e
 
         nombre = os.path.splitext(os.path.basename(compressed_video_path))[0]
         return nombre, description, chat_id, compressed_video_path, original_video_path
+
     except Exception as e:
         await client.send_message(chat_id=chat_id, text=f"❌ **Ocurrió un error al procesar el video:**\n{e}")
-        os.remove(original_video_path)
-        os.remove(compressed_video_path)
+        if os.path.exists(original_video_path):
+            os.remove(original_video_path)
+        if os.path.exists(compressed_video_path):
+            os.remove(compressed_video_path)
