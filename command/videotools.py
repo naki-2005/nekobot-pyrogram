@@ -98,6 +98,7 @@ async def cancelar_tarea(admin_users, client, task_id, chat_id, message, allowed
 async def listar_tareas(client, chat_id, allowed_ids, message):
     user_id_requesting = message.from_user.id
     protect_content = user_id_requesting not in allowed_ids
+    print(user_id_requesting)
 
     global cola_de_tareas, tareas_en_ejecucion
 
