@@ -97,7 +97,7 @@ async def cancelar_tarea(admin_users, client, task_id, chat_id, message, allowed
 admin_users = list(map(int, os.getenv('ADMINS').split(','))) if os.getenv('ADMINS') else []
 
 async def listar_tareas(client, chat_id, allowed_ids, message):
-    user_id_requesting = int(message.from_user.id)  # Asegurando el tipo de dato consistente
+    user_id_requesting = int(message.from_user.id)  # Asegurar tipo de dato consistente
     protect_content = user_id_requesting not in allowed_ids
     print(user_id_requesting)
 
@@ -109,8 +109,15 @@ async def listar_tareas(client, chat_id, allowed_ids, message):
     tareas_en_ejecucion_filtradas = tareas_en_ejecucion if user_id_requesting in admin_users else {
         k: v for k, v in tareas_en_ejecucion.items() if int(v["user_id"]) == user_id_requesting
     }
-    cola_de_tareas_filtradas = cola_de_tareas if user_id_requesting in admin_users else [
-        tarea for tarea in cola_de_tareas if int(tarea["user_id"]) == user_id_requesting
+
+    # Enumerar toda la cola globalmente
+    cola_enumerada = [
+        (index + 1, tarea) for index, tarea in enumerate(cola_de_tareas)
+    ]
+
+    # Filtrar las tareas del usuario si no es admin
+    cola_de_tareas_filtradas = cola_enumerada if user_id_requesting in admin_users else [
+        (index, tarea) for index, tarea in cola_enumerada if int(tarea["user_id"]) == user_id_requesting
     ]
 
     # Agrega las tareas actuales al mensaje
@@ -120,9 +127,9 @@ async def listar_tareas(client, chat_id, allowed_ids, message):
             username = f"@{user_info.username}" if user_info.username else "Usuario Anónimo"
             lista_tareas += f"Tarea actual: ID {task_id} {username} (`{tarea['user_id']}`)\n\n"
 
-    # Agrega las tareas en cola al mensaje
+    # Agrega las tareas en cola al mensaje con índices globales
     if cola_de_tareas_filtradas:
-        for index, tarea in enumerate(cola_de_tareas_filtradas, start=1):
+        for index, tarea in cola_de_tareas_filtradas:
             user_info = await client.get_users(tarea["user_id"])
             username = f"@{user_info.username}" if user_info.username else "Usuario Anónimo"
             lista_tareas += f"{index}. ID: `{tarea['id']}`\n   Usuario: {username} (`{tarea['user_id']}`)\n\n"
