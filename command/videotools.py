@@ -229,11 +229,19 @@ async def compress_video(admin_users, client, message, allowed_ids):
             "client": client,
             "message": message
         })
-        await client.send_message(chat_id=chat_id, text=f"🕒 Tarea añadida a la cola con ID `{task_id}`.", protect_content=protect_content)
+        await client.send_message(
+            chat_id=chat_id,
+            text=f"🕒 Tarea añadida a la cola con ID `{task_id}`.",
+            protect_content=protect_content
+        )
         return
 
     tareas_en_ejecucion[task_id] = {"cancel": False, "user_id": user_id}
-    await client.send_message(chat_id=chat_id, text=f"🎥 Preparando la compresión del video...\n", protect_content=protect_content)
+    await client.send_message(
+        chat_id=chat_id,
+        text=f"🎥 Preparando la compresión del video...\n",
+        protect_content=protect_content
+    )
 
     try:
         if message.video or (message.document and message.document.mime_type.startswith("video/")):
@@ -258,7 +266,8 @@ async def compress_video(admin_users, client, message, allowed_ids):
                 await client.send_message(chat_id=chat_id, text="Pero lo haré solo por tí")
 
             video_path = await client.download_media(message.video or message.document)
-        elif message.reply_to_message and (message.reply_to_message.video or (message.reply_to_message.document and message.reply_to_message.document.mime_type.startswith("video/"))):
+        elif (message.reply_to_message and 
+              (message.reply_to_message.video or (message.reply_to_message.document and message.reply_to_message.document.mime_type.startswith("video/")))):
             if message.reply_to_message.video:
                 video_size = message.reply_to_message.video.file_size
             elif message.reply_to_message.document.mime_type.startswith("video/"):
@@ -282,23 +291,38 @@ async def compress_video(admin_users, client, message, allowed_ids):
                 time.sleep(1)
                 await client.send_message(chat_id=chat_id, text="Pero lo haré solo por tí")
 
-            video_path = await client.download_media(message.reply_to_message.video or message.reply_to_message.document)
+            video_path = await client.download_media(
+                message.reply_to_message.video or message.reply_to_message.document
+            )
         else:
-            await client.send_message(chat_id=chat_id, text=f"⚠️ No se encontró un video en el mensaje o respuesta asociada.", protect_content=protect_content)
+            await client.send_message(
+                chat_id=chat_id,
+                text=f"⚠️ No se encontró un video en el mensaje o respuesta asociada.",
+                protect_content=protect_content
+            )
             return
 
         # Generar la miniatura del video
         thumb_path = await generate_thumbnail(video_path)
         if not thumb_path:
-            await client.send_message(chat_id=chat_id, text="⚠️ No se pudo generar una miniatura para el video.", protect_content=protect_content)
+            await client.send_message(
+                chat_id=chat_id,
+                text="⚠️ No se pudo generar una miniatura para el video.",
+                protect_content=protect_content
+            )
 
         # Obtener la duración del video
         duration = get_video_duration(video_path)
         if duration <= 0:
-            await client.send_message(chat_id=chat_id, text="⚠️ No se pudo obtener la duración del video.", protect_content=protect_content)
+            await client.send_message(
+                chat_id=chat_id,
+                text="⚠️ No se pudo obtener la duración del video.",
+                protect_content=protect_content
+            )
 
-        # Procesar el video
-        file_name, description, chat_id, file_path, original_video_path = await procesar_video(client, message, video_path, task_id, tareas_en_ejecucion, video_settings)
+        # Procesar el video, pasando además el user_id para que se use su configuración o la default
+        file_name, description, chat_id, file_path, original_video_path = \
+            await procesar_video(client, message, user_id, video_path, task_id, tareas_en_ejecucion, video_settings)
 
         # Enviar el video comprimido con la miniatura generada
         await client.send_video(
@@ -311,7 +335,11 @@ async def compress_video(admin_users, client, message, allowed_ids):
         )
 
         # Notificar el resultado al usuario
-        await client.send_message(chat_id=chat_id, text=description, protect_content=protect_content)
+        await client.send_message(
+            chat_id=chat_id,
+            text=description,
+            protect_content=protect_content
+        )
 
         # Eliminar los archivos temporales
         os.remove(original_video_path)
@@ -327,4 +355,3 @@ async def compress_video(admin_users, client, message, allowed_ids):
         if cola_de_tareas:
             siguiente_tarea = cola_de_tareas.pop(0)
             await compress_video(admin_users, siguiente_tarea["client"], siguiente_tarea["message"], allowed_ids)
-            
