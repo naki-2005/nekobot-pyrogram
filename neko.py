@@ -115,7 +115,7 @@ async def handle_message(client, message):
         )
         time.sleep(3)
         await message.reply(
-            f"Actualmente estoy descansando, no recibo comandos.\n\nRegresa en {format_time(remaining_time)} para reactivarse."
+            f"Actualmente estoy descansando, no recibo comandos.\n\nRegresare en {format_time(remaining_time)}"
         )
         return
 
