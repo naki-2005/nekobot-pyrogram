@@ -139,87 +139,6 @@ async def listar_tareas(client, chat_id, allowed_ids, message):
 
     await client.send_message(chat_id=chat_id, text=lista_tareas, protect_content=protect_content)
 
-# Función para obtener el número total de fotogramas
-def get_video_metadata(video_path):
-    try:
-        result = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "stream=nb_frames",
-             "-of", "default=noprint_wrappers=1:nokey=1", video_path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        metadata = result.stdout.strip()
-        total_frames = int(metadata) if metadata.isdigit() else None
-
-        if total_frames is None or total_frames == 0:
-            raise ValueError("No se pudo obtener el número de fotogramas del video.")
-
-        return total_frames
-    except Exception as e:
-        print(f"Error al obtener los metadatos del video: {e}")
-        return 0
-
-async def generate_thumbnail(video_path):
-    try:
-        # Obtener la duración del video
-        video_duration = get_video_duration(video_path)
-        if video_duration <= 0:
-            raise ValueError("No se pudo determinar la duración del video.")
-
-        # Calcular un segundo aleatorio en los primeros 10,000 fotogramas (o la duración total si es menor)
-        fps = 24  # Fotogramas por segundo (supuesto común)
-        max_frames = min(video_duration * fps, 10000)
-        random_frame = random.randint(0, int(max_frames) - 1)
-
-        # Convertir fotograma en tiempo (segundos)
-        random_time = random_frame / fps
-
-        output_thumb = f"{os.path.splitext(video_path)[0]}_miniatura.jpg"
-
-        # Extraer el fotograma aleatorio
-        subprocess.run([
-            "ffmpeg",
-            "-i", video_path,
-            "-ss", str(random_time),
-            "-vframes", "1",
-            output_thumb
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-
-        # Verificar que la miniatura se haya generado correctamente
-        if not os.path.exists(output_thumb):
-            raise IOError("No se pudo generar la miniatura.")
-
-        return output_thumb
-    except Exception as e:
-        print(f"Error al generar la miniatura: {e}")
-        return None
-
-def get_video_duration(video_path):
-    try:
-        result = subprocess.run(
-            [
-                "ffprobe",
-                "-v", "error",
-                "-select_streams", "v:0",
-                "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1",
-                video_path
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        # Manejar resultados no válidos
-        duration = result.stdout.strip()
-        if duration == 'N/A' or not duration:
-            raise ValueError("No se pudo obtener la duración del video.")
-        return int(float(duration))  # Convertir a segundos
-    except Exception as e:
-        print(f"Error al obtener la duración del video: {e}")
-        return 0
-        
-
 # Ajuste en compress_video
 async def compress_video(admin_users, client, message, allowed_ids):
     user_id = message.from_user.id
@@ -366,3 +285,90 @@ async def compress_video(admin_users, client, message, allowed_ids):
         if cola_de_tareas:
             siguiente_tarea = cola_de_tareas.pop(0)
             await compress_video(admin_users, siguiente_tarea["client"], siguiente_tarea["message"], allowed_ids)
+
+
+
+
+
+
+
+# Función para obtener el número total de fotogramas
+def get_video_metadata(video_path):
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "stream=nb_frames",
+             "-of", "default=noprint_wrappers=1:nokey=1", video_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        metadata = result.stdout.strip()
+        total_frames = int(metadata) if metadata.isdigit() else None
+
+        if total_frames is None or total_frames == 0:
+            raise ValueError("No se pudo obtener el número de fotogramas del video.")
+
+        return total_frames
+    except Exception as e:
+        print(f"Error al obtener los metadatos del video: {e}")
+        return 0
+
+async def generate_thumbnail(video_path):
+    try:
+        # Obtener la duración del video
+        video_duration = get_video_duration(video_path)
+        if video_duration <= 0:
+            raise ValueError("No se pudo determinar la duración del video.")
+
+        # Calcular un segundo aleatorio en los primeros 10,000 fotogramas (o la duración total si es menor)
+        fps = 24  # Fotogramas por segundo (supuesto común)
+        max_frames = min(video_duration * fps, 10000)
+        random_frame = random.randint(0, int(max_frames) - 1)
+
+        # Convertir fotograma en tiempo (segundos)
+        random_time = random_frame / fps
+
+        output_thumb = f"{os.path.splitext(video_path)[0]}_miniatura.jpg"
+
+        # Extraer el fotograma aleatorio
+        subprocess.run([
+            "ffmpeg",
+            "-i", video_path,
+            "-ss", str(random_time),
+            "-vframes", "1",
+            output_thumb
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+
+        # Verificar que la miniatura se haya generado correctamente
+        if not os.path.exists(output_thumb):
+            raise IOError("No se pudo generar la miniatura.")
+
+        return output_thumb
+    except Exception as e:
+        print(f"Error al generar la miniatura: {e}")
+        return None
+
+def get_video_duration(video_path):
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                video_path
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        # Manejar resultados no válidos
+        duration = result.stdout.strip()
+        if duration == 'N/A' or not duration:
+            raise ValueError("No se pudo obtener la duración del video.")
+        return int(float(duration))  # Convertir a segundos
+    except Exception as e:
+        print(f"Error al obtener la duración del video: {e}")
+        return 0
+
