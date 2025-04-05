@@ -8,6 +8,9 @@ from command.video_processor import procesar_video
 from data.vars import admin_users, vip_users, video_limit, video_settings
 from data.stickers import sobre_mb
 import time
+from pyrogram import Client
+from pyrogram.types import Message
+from PIL import Image
 
 max_tareas = int(os.getenv('MAX_TASKS', '1'))
 
@@ -327,3 +330,50 @@ def get_video_duration(video_path):
         print(f"Error al obtener la duración del video: {e}")
         return 0
 
+async def cambiar_miniatura(client: Client, message: Message):
+    if message.reply_to_message:
+        # Verifica si el mensaje al que se responde contiene un video
+        reply = message.reply_to_message
+        if reply.video or (reply.document and reply.document.mime_type.startswith("video")):
+            file_id = reply.video.file_id if reply.video else reply.document.file_id
+            
+            # Verifica si el mensaje actual contiene una foto
+            if message.photo or (message.document and message.document.mime_type.startswith("image")):
+                # Descarga la imagen recibida como miniatura
+                image_path = await message.download()
+                
+                # Ajusta la imagen usando PIL
+                try:
+                    with Image.open(image_path) as img:
+                        img = img.convert("RGB")  # Asegura que sea RGB
+                        
+                        # Guarda la miniatura como JPEG con calidad optimizada para mantener <200 KB
+                        thumb_path = "thumbnail.jpg"
+                        img.save(thumb_path, format="JPEG", quality=85, optimize=True)
+
+                        # Verifica el tamaño del archivo generado
+                        while os.path.getsize(thumb_path) > 200 * 1024:  # Si > 200 KB, reduce calidad
+                            img.save(thumb_path, format="JPEG", quality=85, optimize=True)
+
+                    # Reenvía el vídeo con la miniatura ajustada
+                    await client.send_video(
+                        chat_id=message.chat.id,
+                        video=file_id,
+                        thumb=thumb_path,
+                        caption="Vídeo con miniatura actualizada."
+                    )
+
+                    await message.reply("Miniatura cambiada exitosamente.")
+                except Exception as e:
+                    await message.reply(f"Error al procesar la imagen: {e}")
+                finally:
+                    # Limpieza: elimina la miniatura temporal
+                    if os.path.exists(thumb_path):
+                        os.remove(thumb_path)
+            else:
+                await message.reply("El mensaje con el comando debe incluir una imagen válida.")
+        else:
+            await message.reply("El mensaje al que respondes no contiene un vídeo válido.")
+    else:
+        await message.reply("Debes responder a un mensaje que contenga un vídeo.")
+                        
