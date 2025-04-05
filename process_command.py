@@ -10,7 +10,7 @@ from command.admintools import add_user, remove_user, add_chat, remove_chat, ban
 from command.imgtools import create_imgchest_post
 from command.webtools import handle_scan, handle_multiscan, summarize_lines
 from command.mailtools import send_mail, set_mail, verify_mail, set_mail_limit
-from command.videotools import update_video_settings, compress_video, cancelar_tarea, listar_tareas, cambiar_minuatura
+from command.videotools import update_video_settings, compress_video, cancelar_tarea, listar_tareas, cambiar_miniatura
 from command.filetools import handle_compress, rename, set_size
 from command.telegramtools import get_file_id, send_file_by_id
 from command.help import handle_help, handle_help_callback  # Importar funciones de ayuda desde help.py
