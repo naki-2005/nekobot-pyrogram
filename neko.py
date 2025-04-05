@@ -5,8 +5,7 @@ from pyrogram import Client, filters
 from process_command import process_command
 from command.htools import manejar_opcion
 from command.help import handle_help_callback, handle_help
-import time  # Importación necesaria
-import threading  # Importación necesaria para hilos
+import time  
 from data.stickers import saludos
 import random
 from data.vars import api_id, api_hash, bot_token, admin_users, users, temp_users, temp_chats, vip_users, ban_users, MAIN_ADMIN, CODEWORD, BOT_IS_PUBLIC, PROTECT_CONTENT, allowed_ids, allowed_users
@@ -44,23 +43,6 @@ def format_time(seconds):
         formatted_time_parts.append(f"{seconds} segundo" if seconds == 1 else f"{seconds} segundos")
 
     return ", ".join(formatted_time_parts)
-
-
-# Función para mantener activa la sesión con animación dinámica
-def mantener_sesion_activa():
-    estados = ["Manteniendo la sesión activa.", 
-               "Manteniendo la sesión activa..", 
-               "Manteniendo la sesión activa..."]
-    i = 0
-
-    while True:
-        print(f'\r{estados[i % len(estados)]}', end='', flush=True)
-        i += 1
-        time.sleep(3)  # Actualiza cada 3 segundos
-
-# Crear un hilo separado para mantener la sesión activa
-hilo = threading.Thread(target=mantener_sesion_activa, daemon=True)
-hilo.start()
 
 # Comando para procesar acceso temporal
 async def process_access_command(message):
@@ -186,8 +168,6 @@ async def main():
     if MAIN_ADMIN:
         await notify_main_admin()
     print("Bot iniciado y operativo.")
-
-    # Mantén el bot corriendo hasta que se detenga manualmente
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
