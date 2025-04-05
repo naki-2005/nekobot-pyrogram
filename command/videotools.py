@@ -189,6 +189,7 @@ async def compress_video(admin_users, client, message, allowed_ids):
                 await client.send_sticker(chat_id=chat_id, sticker=sticker[0])
                 time.sleep(1)
                 await client.send_message(chat_id=chat_id, text="Pero lo haré solo por tí")
+            video_path = await client.download_media(message.video or message.document)
         elif (message.reply_to_message and 
               (message.reply_to_message.video or (message.reply_to_message.document and message.reply_to_message.document.mime_type.startswith("video/")))):
             if message.reply_to_message.video:
