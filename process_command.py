@@ -175,7 +175,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                 await asyncio.create_task(rename(client, message))
         return
 
-    if text.startswith(("/convert", "/calidad", "/autoconvert", "/cancel", "/list")) or ((message.video is not None) or (message.document and message.document.mime_type and message.document.mime_type.startswith("video/"))):
+    if text.startswith(("/convert", "/calidad", "/autoconvert", "/cancel", "/list", "/miniatura")) or ((message.video is not None) or (message.document and message.document.mime_type and message.document.mime_type.startswith("video/"))):
         if cmd("videotools", user_id in admin_users, user_id in vip_users):
             if text.startswith("/convert"):
                 if message.reply_to_message and (message.reply_to_message.video or (message.reply_to_message.document and message.reply_to_message.document.mime_type.startswith("video/"))):
@@ -211,6 +211,9 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                         text="⚠️ Debes proporcionar un ID válido para cancelar la tarea. Ejemplo: `/cancel <ID>`",
                         protect_content=True
                     )
+
+            elif text.startswith("/miniatura"):
+                cambiar_miniatura(client, message)
 
             elif text.startswith("/list"):
                 if user_id in admin_users or user_id in vip_users:
