@@ -62,7 +62,7 @@ async def update_video_settings(client, message, allowed_ids):
 
                 video_settings[user_id][key] = value
 
-        # Convertir el diccionario actualizado a texto para mostrar como respuesta
+        # Convertir el diccionario act ualizado a texto para mostrar como respuesta
         configuracion_texto = "/calidad " + " ".join(f"{k}={v}" for k, v in video_settings[user_id].items())
         await message.reply_text(f"⚙️ Configuraciones de video actualizadas:\n`{configuracion_texto}`", protect_content=protect_content)
 
@@ -76,58 +76,59 @@ async def cancelar_tarea(admin_users, client, task_id, chat_id, message, allowed
     user_id_requesting = message.from_user.id
     protect_content = user_id_requesting not in allowed_ids
 
-    global cola_de_tareas
+    global cola_de_tareas, tareas_en_ejecucion
+
     if task_id in tareas_en_ejecucion:
         tarea = tareas_en_ejecucion[task_id]
         if tarea["user_id"] == user_id_requesting or user_id_requesting in admin_users:
-            tarea["cancel"] = True
+            tarea["cancel"] = True  # Marcar la tarea como cancelada
+            del tareas_en_ejecucion[task_id]  # Eliminarla del diccionario
             await client.send_message(chat_id=chat_id, text=f"❌ Tarea `{task_id}` cancelada.", protect_content=protect_content)
+
+            # Procesar la siguiente tarea en la cola, si existe
+            if cola_de_tareas:
+                siguiente_tarea = cola_de_tareas.pop(0)
+                await compress_video(admin_users, siguiente_tarea["client"], siguiente_tarea["message"], allowed_ids)
         else:
             await client.send_message(chat_id=chat_id, text="⚠️ No tienes permiso para cancelar esta tarea.", protect_content=protect_content)
+
     elif task_id in [t["id"] for t in cola_de_tareas]:
         tarea = next((t for t in cola_de_tareas if t["id"] == task_id), None)
         if tarea and (tarea["user_id"] == user_id_requesting or user_id_requesting in admin_users):
-            cola_de_tareas = [t for t in cola_de_tareas if t["id"] != task_id]
+            cola_de_tareas = [t for t in cola_de_tareas if t["id"] != task_id]  # Remover tarea de la cola
             await client.send_message(chat_id=chat_id, text=f"❌ Tarea `{task_id}` eliminada de la cola.", protect_content=protect_content)
         else:
             await client.send_message(chat_id=chat_id, text="⚠️ No tienes permiso para eliminar esta tarea de la cola.", protect_content=protect_content)
+
     else:
         await client.send_message(chat_id=chat_id, text=f"⚠️ No se encontró la tarea con ID `{task_id}`.", protect_content=protect_content)
 
-admin_users = list(map(int, os.getenv('ADMINS').split(','))) if os.getenv('ADMINS') else []
 
+# Listar tareas
 async def listar_tareas(client, chat_id, allowed_ids, message):
     user_id_requesting = int(message.from_user.id)  # Asegurar tipo de dato consistente
     protect_content = user_id_requesting not in allowed_ids
-    print(user_id_requesting)
 
     global cola_de_tareas, tareas_en_ejecucion
 
     lista_tareas = "📝 Lista de tareas:\n\n"
 
-    # Filtra las tareas sin modificar las variables globales
     tareas_en_ejecucion_filtradas = tareas_en_ejecucion if user_id_requesting in admin_users else {
         k: v for k, v in tareas_en_ejecucion.items() if int(v["user_id"]) == user_id_requesting
     }
 
-    # Enumerar toda la cola globalmente
-    cola_enumerada = [
-        (index + 1, tarea) for index, tarea in enumerate(cola_de_tareas)
-    ]
+    cola_enumerada = [(index + 1, tarea) for index, tarea in enumerate(cola_de_tareas)]
 
-    # Filtrar las tareas del usuario si no es admin
     cola_de_tareas_filtradas = cola_enumerada if user_id_requesting in admin_users else [
         (index, tarea) for index, tarea in cola_enumerada if int(tarea["user_id"]) == user_id_requesting
     ]
 
-    # Agrega las tareas actuales al mensaje
     if tareas_en_ejecucion_filtradas:
         for task_id, tarea in tareas_en_ejecucion_filtradas.items():
             user_info = await client.get_users(tarea["user_id"])
             username = f"@{user_info.username}" if user_info.username else "Usuario Anónimo"
             lista_tareas += f"Tarea actual: ID {task_id} {username} (`{tarea['user_id']}`)\n\n"
 
-    # Agrega las tareas en cola al mensaje con índices globales
     if cola_de_tareas_filtradas:
         for index, tarea in cola_de_tareas_filtradas:
             user_info = await client.get_users(tarea["user_id"])
@@ -139,23 +140,20 @@ async def listar_tareas(client, chat_id, allowed_ids, message):
 
     await client.send_message(chat_id=chat_id, text=lista_tareas, protect_content=protect_content)
 
-# Ajuste en compress_video
+
+# Compresión de video
 async def compress_video(admin_users, client, message, allowed_ids):
     user_id = message.from_user.id
     protect_content = user_id not in allowed_ids
 
-    global cola_de_tareas
+    global cola_de_tareas, tareas_en_ejecucion
     task_id = str(uuid.uuid4())
     chat_id = message.chat.id
-
-    user_info = await client.get_users(user_id)
-    username = f"@{user_info.username}" if user_info.username else f"Usuario Anónimo ({user_id})"
 
     if len(tareas_en_ejecucion) >= max_tareas:
         cola_de_tareas.append({
             "id": task_id,
             "user_id": user_id,
-            "username": username,
             "client": client,
             "message": message
         })
@@ -167,13 +165,13 @@ async def compress_video(admin_users, client, message, allowed_ids):
         return
 
     tareas_en_ejecucion[task_id] = {"cancel": False, "user_id": user_id}
-    await client.send_message(
-        chat_id=chat_id,
-        text=f"🎥 Preparando la compresión del video...\n",
-        protect_content=protect_content
-    )
+    await client.send_message(chat_id=chat_id, text=f"🎥 Preparando la compresión del video...", protect_content=protect_content)
 
     try:
+        if tareas_en_ejecucion[task_id]["cancel"]:
+            await client.send_message(chat_id=chat_id, text=f"⚠️ La tarea `{task_id}` ha sido cancelada.", protect_content=protect_content)
+            return
+
         if message.video or (message.document and message.document.mime_type.startswith("video/")):
             video_size = message.video.file_size if message.video else message.document.file_size
 
@@ -182,100 +180,39 @@ async def compress_video(admin_users, client, message, allowed_ids):
                 await client.send_sticker(chat_id=chat_id, sticker=sticker[0])
                 time.sleep(1)
                 await client.send_message(chat_id=chat_id, text="El archivo es demasiado grande")
-                time.sleep(1)
-                await client.send_message(chat_id=chat_id, text="No voy a convertir eso")
                 return
             if video_limit and video_size > video_limit and (chat_id in admin_users or chat_id in vip_users):
                 sticker = random.choice(sobre_mb)
                 await client.send_sticker(chat_id=chat_id, sticker=sticker[0])
-                time.sleep(1)
-                await client.send_message(chat_id=chat_id, text="El archivo es demasiado grande")
-                time.sleep(1)
-                await client.send_sticker(chat_id=chat_id, sticker=sticker[1])
                 time.sleep(1)
                 await client.send_message(chat_id=chat_id, text="Pero lo haré solo por tí")
 
             video_path = await client.download_media(message.video or message.document)
-        elif (message.reply_to_message and 
-              (message.reply_to_message.video or (message.reply_to_message.document and message.reply_to_message.document.mime_type.startswith("video/")))):
-            if message.reply_to_message.video:
-                video_size = message.reply_to_message.video.file_size
-            elif message.reply_to_message.document.mime_type.startswith("video/"):
-                video_size = message.reply_to_message.document.file_size
-
-            if video_limit and video_size > video_limit and chat_id not in admin_users and chat_id not in vip_users:
-                sticker = random.choice(sobre_mb)
-                await client.send_sticker(chat_id=chat_id, sticker=sticker[0])
-                time.sleep(1)
-                await client.send_message(chat_id=chat_id, text="El archivo es demasiado grande")
-                time.sleep(1)
-                await client.send_message(chat_id=chat_id, text="No voy a convertir eso")
-                return
-            if video_limit and video_size > video_limit and (chat_id in admin_users or chat_id in vip_users):
-                sticker = random.choice(sobre_mb)
-                await client.send_sticker(chat_id=chat_id, sticker=sticker[0])
-                time.sleep(1)
-                await client.send_message(chat_id=chat_id, text="El archivo es demasiado grande")
-                time.sleep(1)
-                await client.send_sticker(chat_id=chat_id, sticker=sticker[1])
-                time.sleep(1)
-                await client.send_message(chat_id=chat_id, text="Pero lo haré solo por tí")
-
-            video_path = await client.download_media(
-                message.reply_to_message.video or message.reply_to_message.document
-            )
         else:
-            await client.send_message(
-                chat_id=chat_id,
-                text=f"⚠️ No se encontró un video en el mensaje o respuesta asociada.",
-                protect_content=protect_content
-            )
+            await client.send_message(chat_id=chat_id, text=f"⚠️ No se encontró un video en el mensaje.", protect_content=protect_content)
             return
 
-        # Generar la miniatura del video
         thumb_path = await generate_thumbnail(video_path)
-        if not thumb_path:
-            await client.send_message(
-                chat_id=chat_id,
-                text="⚠️ No se pudo generar una miniatura para el video.",
-                protect_content=protect_content
-            )
-
-        # Obtener la duración del video
         duration = get_video_duration(video_path)
-        if duration <= 0:
-            await client.send_message(
-                chat_id=chat_id,
-                text="⚠️ No se pudo obtener la duración del video.",
-                protect_content=protect_content
-            )
 
-        # Procesar el video, pasando además el user_id para que se use su configuración o la default
         file_name, description, chat_id, file_path, original_video_path = \
             await procesar_video(client, message, user_id, video_path, task_id, tareas_en_ejecucion, video_settings)
 
-        # Enviar el video comprimido con la miniatura generada
         await client.send_video(
             chat_id=user_id,
             video=file_path,
-            thumb=thumb_path,  # Miniatura generada aleatoriamente
+            thumb=thumb_path,
             caption=file_name,
             duration=duration,
             protect_content=protect_content
         )
 
-        # Notificar el resultado al usuario
-        await client.send_message(
-            chat_id=chat_id,
-            text=description,
-            protect_content=protect_content
-        )
+        await client.send_message(chat_id=chat_id, text=description, protect_content=protect_content)
 
-        # Eliminar los archivos temporales
         os.remove(original_video_path)
         os.remove(file_path)
         if thumb_path:
-            os.remove(thumb_path)  # Eliminar la miniatura
+            os.remove(thumb_path)
     finally:
         try:
             del tareas_en_ejecucion[task_id]
@@ -285,12 +222,7 @@ async def compress_video(admin_users, client, message, allowed_ids):
         if cola_de_tareas:
             siguiente_tarea = cola_de_tareas.pop(0)
             await compress_video(admin_users, siguiente_tarea["client"], siguiente_tarea["message"], allowed_ids)
-
-
-
-
-
-
+                                        
 
 # Función para obtener el número total de fotogramas
 def get_video_metadata(video_path):
