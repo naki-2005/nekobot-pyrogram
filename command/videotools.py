@@ -186,7 +186,30 @@ async def compress_video(admin_users, client, message, allowed_ids):
                 await client.send_sticker(chat_id=chat_id, sticker=sticker[0])
                 time.sleep(1)
                 await client.send_message(chat_id=chat_id, text="Pero lo haré solo por tí")
+        elif (message.reply_to_message and 
+              (message.reply_to_message.video or (message.reply_to_message.document and message.reply_to_message.document.mime_type.startswith("video/")))):
+            if message.reply_to_message.video:
+                video_size = message.reply_to_message.video.file_size
+            elif message.reply_to_message.document.mime_type.startswith("video/"):
+                video_size = message.reply_to_message.document.file_size
 
+            if video_limit and video_size > video_limit and chat_id not in admin_users and chat_id not in vip_users:
+                sticker = random.choice(sobre_mb)
+                await client.send_sticker(chat_id=chat_id, sticker=sticker[0])
+                time.sleep(1)
+                await client.send_message(chat_id=chat_id, text="El archivo es demasiado grande")
+                time.sleep(1)
+                await client.send_message(chat_id=chat_id, text="No voy a convertir eso")
+                return
+            if video_limit and video_size > video_limit and (chat_id in admin_users or chat_id in vip_users):
+                sticker = random.choice(sobre_mb)
+                await client.send_sticker(chat_id=chat_id, sticker=sticker[0])
+                time.sleep(1)
+                await client.send_message(chat_id=chat_id, text="El archivo es demasiado grande")
+                time.sleep(1)
+                await client.send_sticker(chat_id=chat_id, sticker=sticker[1])
+                time.sleep(1)
+                await client.send_message(chat_id=chat_id, text="Pero lo haré solo por tí")
             video_path = await client.download_media(message.video or message.document)
         else:
             await client.send_message(chat_id=chat_id, text=f"⚠️ No se encontró un video en el mensaje.", protect_content=protect_content)
