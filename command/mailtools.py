@@ -5,7 +5,7 @@ import py7zr
 import smtplib
 from email.message import EmailMessage
 import random
-from data.vars import admin_users, vip_users, video_limit
+from data.vars import admin_users, vip_users, video_limit, PROTECT_CONTENT
 
 # Diccionarios para almacenar información de los usuarios
 user_emails = {}
@@ -141,13 +141,12 @@ async def send_mail(client, message):
         await message.reply("Por favor, responde a un mensaje.", protect_content=protect_content)
         return
     reply_message = message.reply_to_message
-    if user_id in admin_users:
-        protect_content= False
+    if not (user_id in admin_users or user_id in vip_users or not PROTECT_CONTENT):
+        protect_content = True
 
     else:
-        protect_content= True
+        protect_content = False
 
-    # Restricciones antes de procesar cualquier contenido
     if reply_message.caption and reply_message.caption.startswith("Look Here") and reply_message.from_user.is_self:
         await message.reply("No puedes enviar este contenido debido a restricciones.", protect_content=protect_content)
         return
