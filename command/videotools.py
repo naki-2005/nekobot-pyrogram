@@ -335,22 +335,33 @@ async def cambiar_miniatura(client: Client, message: Message):
         # Verifica si el mensaje al que se responde contiene un video
         reply = message.reply_to_message
         if reply.video or (reply.document and reply.document.mime_type.startswith("video")):
-            file_id = reply.video.file_id if reply.video else reply.document.file_id
+            # Descarga el video original
+            video_path = await reply.download()
 
-            # Verifica si el mensaje actual contiene una imagen
+            # Verifica si el mensaje actual contiene una imagen válida
             if message.photo or (message.document and message.document.mime_type.startswith(("image/jpeg", "image/png"))):
                 # Descarga la imagen recibida como miniatura
                 image_path = await message.download()
-                
+
                 # Ajusta la imagen usando PIL
                 try:
                     with Image.open(image_path) as img:
-                        img = img.convert("RGB")  # Convierte a RGB si es necesario
-                        
-                        # Redimensiona la imagen a las dimensiones requeridas (máx. 320x320 píxeles)
-                        img.thumbnail((320, 320))
-                        
-                        # Guarda la miniatura como JPEG con calidad optimizada para mantener <200 KB
+                        img = img.convert("RGB")  # Convierte a RGB para asegurar compatibilidad
+
+                        # Calcula las dimensiones proporcionales para mantener el aspecto original
+                        width, height = img.size
+                        max_dimension = 320  # Dimensión máxima permitida por Telegram
+                        if width > height:
+                            new_width = max_dimension
+                            new_height = int((max_dimension / width) * height)
+                        else:
+                            new_height = max_dimension
+                            new_width = int((max_dimension / height) * width)
+
+                        # Redimensiona manteniendo proporciones
+                        img = img.resize((new_width, new_height))
+
+                        # Guarda la miniatura como JPEG con calidad optimizada
                         thumb_path = "thumbnail.jpg"
                         quality = 85  # Calidad inicial
                         img.save(thumb_path, format="JPEG", quality=quality)
@@ -360,10 +371,10 @@ async def cambiar_miniatura(client: Client, message: Message):
                             quality -= 5
                             img.save(thumb_path, format="JPEG", quality=quality)
 
-                    # Reenvía el vídeo con la miniatura ajustada
+                    # Reenvía el video descargado con la nueva miniatura
                     await client.send_video(
                         chat_id=message.chat.id,
-                        video=file_id,
+                        video=video_path,
                         thumb=thumb_path,
                         caption="🎥 Vídeo con miniatura actualizada."
                     )
@@ -373,6 +384,8 @@ async def cambiar_miniatura(client: Client, message: Message):
                     await message.reply(f"⚠️ Error al procesar la miniatura: {e}")
                 finally:
                     # Limpieza de archivos temporales
+                    if os.path.exists(video_path):
+                        os.remove(video_path)
                     if os.path.exists(image_path):
                         os.remove(image_path)
                     if os.path.exists(thumb_path):
