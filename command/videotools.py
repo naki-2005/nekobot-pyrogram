@@ -371,11 +371,17 @@ async def cambiar_miniatura(client: Client, message: Message):
                             quality -= 5
                             img.save(thumb_path, format="JPEG", quality=quality)
 
+                    # Obtén la duración del video si Telegram no lo proporciona
+                    duration = reply.video.duration if hasattr(reply.video, "duration") else None
+                    if duration is None:  # Si no tiene duración, calcula manualmente
+                        duration = get_video_duration(video_path)
+
                     # Reenvía el video descargado con la nueva miniatura
                     await client.send_video(
                         chat_id=message.chat.id,
                         video=video_path,
                         thumb=thumb_path,
+                        duration=duration,  # Incluye la duración
                         caption="🎥 Vídeo con miniatura actualizada."
                     )
 
