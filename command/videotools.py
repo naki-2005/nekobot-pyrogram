@@ -336,44 +336,50 @@ async def cambiar_miniatura(client: Client, message: Message):
         reply = message.reply_to_message
         if reply.video or (reply.document and reply.document.mime_type.startswith("video")):
             file_id = reply.video.file_id if reply.video else reply.document.file_id
-            
-            # Verifica si el mensaje actual contiene una foto
-            if message.photo or (message.document and message.document.mime_type.startswith("image")):
+
+            # Verifica si el mensaje actual contiene una imagen
+            if message.photo or (message.document and message.document.mime_type.startswith(("image/jpeg", "image/png"))):
                 # Descarga la imagen recibida como miniatura
                 image_path = await message.download()
                 
                 # Ajusta la imagen usando PIL
                 try:
                     with Image.open(image_path) as img:
-                        img = img.convert("RGB")  # Asegura que sea RGB
+                        img = img.convert("RGB")  # Convierte a RGB si es necesario
+                        
+                        # Redimensiona la imagen a las dimensiones requeridas (máx. 320x320 píxeles)
+                        img.thumbnail((320, 320))
                         
                         # Guarda la miniatura como JPEG con calidad optimizada para mantener <200 KB
                         thumb_path = "thumbnail.jpg"
-                        img.save(thumb_path, format="JPEG", quality=85, optimize=True)
+                        quality = 85  # Calidad inicial
+                        img.save(thumb_path, format="JPEG", quality=quality)
 
-                        # Verifica el tamaño del archivo generado
-                        while os.path.getsize(thumb_path) > 200 * 1024:  # Si > 200 KB, reduce calidad
-                            img.save(thumb_path, format="JPEG", quality=85, optimize=True)
+                        # Reduce la calidad si excede 200 KB
+                        while os.path.getsize(thumb_path) > 200 * 1024 and quality > 10:
+                            quality -= 5
+                            img.save(thumb_path, format="JPEG", quality=quality)
 
                     # Reenvía el vídeo con la miniatura ajustada
                     await client.send_video(
                         chat_id=message.chat.id,
                         video=file_id,
                         thumb=thumb_path,
-                        caption="Vídeo con miniatura actualizada."
+                        caption="🎥 Vídeo con miniatura actualizada."
                     )
 
-                    await message.reply("Miniatura cambiada exitosamente.")
+                    await message.reply("✅ Miniatura cambiada exitosamente.")
                 except Exception as e:
-                    await message.reply(f"Error al procesar la imagen: {e}")
+                    await message.reply(f"⚠️ Error al procesar la miniatura: {e}")
                 finally:
-                    # Limpieza: elimina la miniatura temporal
+                    # Limpieza de archivos temporales
+                    if os.path.exists(image_path):
+                        os.remove(image_path)
                     if os.path.exists(thumb_path):
                         os.remove(thumb_path)
             else:
-                await message.reply("El mensaje con el comando debe incluir una imagen válida.")
+                await message.reply("⚠️ Debes responder a un mensaje que contenga una imagen válida (JPEG/PNG).")
         else:
-            await message.reply("El mensaje al que respondes no contiene un vídeo válido.")
+            await message.reply("⚠️ El mensaje al que respondes no contiene un vídeo válido.")
     else:
-        await message.reply("Debes responder a un mensaje que contenga un vídeo.")
-                        
+        await message.reply("⚠️ Debes responder a un mensaje que contenga un vídeo.")
