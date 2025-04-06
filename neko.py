@@ -145,21 +145,28 @@ async def handle_message(client, message):
     await process_command(client, message, active_cmd, admin_cmd, user_id, username, chat_id)
 
 
+import asyncio
+import logging
+import random
+
+# Configuración del módulo logging
+logging.basicConfig(level=logging.ERROR)
+
 async def notify_main_admin():
     if MAIN_ADMIN:
         try:
             chat_id = int(MAIN_ADMIN) if MAIN_ADMIN.isdigit() else MAIN_ADMIN
-            
+
             # Enviar el sticker y el mensaje al MAIN_ADMIN
             sticker_message = await app.send_sticker(chat_id, sticker=random.choice(saludos))
             text_message = await app.send_message(
-                chat_id=chat_id, 
+                chat_id=chat_id,
                 text=f"Bot @{app.me.username} iniciado"
             )
-            
+
             # Esperar 5 segundos antes de borrar los mensajes
-            await asyncio.sleep(25)
-            await app.delete_messages(chat_id=chat_id, message_ids=[sticker_message.message_id, text_message.message_id])
+            await asyncio.sleep(5)
+            await app.delete_messages(chat_id=chat_id, message_ids=[sticker_message.id, text_message.id])
 
         except Exception as e:
             logging.error(f"Error al enviar o borrar el mensaje al MAIN_ADMIN: {e}")
