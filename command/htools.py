@@ -52,25 +52,30 @@ def convertir_a_png_con_compresion(image_path, output_dir):
         return None
 
 def crear_pdf_desde_png(page_title, png_dir, output_path):
-    """Crea un PDF usando las imágenes PNG en una carpeta."""
+    """Crea un PDF usando las imágenes PNG en una carpeta, ajustando las páginas al tamaño exacto de cada imagen."""
     try:
         pdf = FPDF()
         for image_name in sorted(os.listdir(png_dir)):
             image_path = os.path.join(png_dir, image_name)
             if image_name.lower().endswith('.png'):
-                # Ajustar el tamaño de la página al tamaño de la imagen
-                width, height = Image.open(image_path).size
-                width_mm = width * 0.264583  # Convertir píxeles a mm
-                height_mm = height * 0.264583  # Convertir píxeles a mm
-                pdf.add_page(format=(width_mm, height_mm))
-                pdf.image(image_path, x=0, y=0, w=width_mm, h=height_mm)  # Sin márgenes
+                # Abrir la imagen para obtener las dimensiones
+                with Image.open(image_path) as img:
+                    width, height = img.size
+                    # Convertir píxeles a milímetros para FPDF
+                    width_mm = width * 0.264583
+                    height_mm = height * 0.264583
+                    # Ajustar el tamaño de la página
+                    pdf.add_page()
+                    pdf.set_auto_page_break(auto=False)  # Sin márgenes automáticos
+                    pdf.set_xy(0, 0)  # Ajustar el punto de inicio
+                    pdf.image(image_path, x=0, y=0, w=width_mm, h=height_mm)
         pdf.output(output_path)
         shutil.rmtree(png_dir)
         return True
     except Exception as e:
         print(f"Error al crear el PDF: {e}")
         return False
-
+        
 
 def cambiar_default_selection(user_id, nueva_seleccion):
     """Cambia la selección predeterminada del usuario."""
