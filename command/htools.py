@@ -55,9 +55,11 @@ import os
 from fpdf import FPDF
 from PIL import Image
 
-def crear_pdf_desde_png(png_dir, output_path):
-    """Crea un PDF donde cada página es exactamente del tamaño de la imagen PNG."""
+def crear_pdf_desde_png(page_title, png_dir, output_path):
     try:
+        # Definir el nombre del archivo de salida basado en page_title
+        output_file = os.path.join(output_path, f"{page_title}.pdf")
+        
         pdf = FPDF()
         for image_name in sorted(os.listdir(png_dir)):
             if image_name.lower().endswith('.png'):
@@ -69,11 +71,13 @@ def crear_pdf_desde_png(png_dir, output_path):
                     height_mm = height * 0.264583
                     pdf.add_page(format=(width_mm, height_mm))
                     pdf.image(image_path, x=0, y=0, w=width_mm, h=height_mm)
-        pdf.output(output_path)
-        return True
+        
+        # Guardar el PDF con el nombre especificado
+        pdf.output(output_file)
+        return f"PDF creado con éxito: {output_file}"
+
     except Exception as e:
-        print(f"Error al crear el PDF: {e}")
-        return False
+        return f"Error al crear el PDF: {e}"
 
 def cambiar_default_selection(user_id, nueva_seleccion):
     """Cambia la selección predeterminada del usuario."""
