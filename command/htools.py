@@ -51,18 +51,25 @@ def convertir_a_png_con_compresion(image_path, output_dir):
         print(f"Error al convertir la imagen {image_path} a PNG: {e}")
         return None
 
-def crear_pdf_desde_png(page_title, png_dir, output_path):
-    """Crea un PDF usando las imágenes PNG en una carpeta."""
+import os
+from fpdf import FPDF
+from PIL import Image
+
+def crear_pdf_desde_png_sin_margenes(png_dir, output_path):
+    """Crea un PDF donde cada página es exactamente del tamaño de la imagen PNG."""
     try:
         pdf = FPDF()
-        pdf.set_auto_page_break(auto=True, margin=15)
         for image_name in sorted(os.listdir(png_dir)):
-            image_path = os.path.join(png_dir, image_name)
             if image_name.lower().endswith('.png'):
-                pdf.add_page()
-                pdf.image(image_path, x=10, y=10, w=190)
+                image_path = os.path.join(png_dir, image_name)
+                with Image.open(image_path) as img:
+                    width, height = img.size
+                    # Convertir píxeles a milímetros para FPDF
+                    width_mm = width * 0.264583
+                    height_mm = height * 0.264583
+                    pdf.add_page(format=(width_mm, height_mm))
+                    pdf.image(image_path, x=0, y=0, w=width_mm, h=height_mm)
         pdf.output(output_path)
-        shutil.rmtree(png_dir)
         return True
     except Exception as e:
         print(f"Error al crear el PDF: {e}")
