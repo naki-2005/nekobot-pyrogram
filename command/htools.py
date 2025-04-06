@@ -55,7 +55,7 @@ import os
 from fpdf import FPDF
 from PIL import Image
 
-def crear_pdf_desde_png_sin_margenes(png_dir, output_path):
+def crear_pdf_desde_png(png_dir, output_path):
     """Crea un PDF donde cada página es exactamente del tamaño de la imagen PNG."""
     try:
         pdf = FPDF()
