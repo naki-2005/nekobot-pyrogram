@@ -51,15 +51,8 @@ def convertir_a_png_con_compresion(image_path, output_dir):
         print(f"Error al convertir la imagen {image_path} a PNG: {e}")
         return None
 
-import os
-from fpdf import FPDF
-from PIL import Image
-
-def crear_pdf_desde_png(page_title, png_dir, output_path):
+def crear_pdf_desde_png(page_title, png_dir, pdf_file_path):
     try:
-        # Definir el nombre del archivo de salida basado en page_title
-        output_file = os.path.join(output_path, f"{page_title}.pdf")
-        
         pdf = FPDF()
         for image_name in sorted(os.listdir(png_dir)):
             if image_name.lower().endswith('.png'):
@@ -72,12 +65,12 @@ def crear_pdf_desde_png(page_title, png_dir, output_path):
                     pdf.add_page(format=(width_mm, height_mm))
                     pdf.image(image_path, x=0, y=0, w=width_mm, h=height_mm)
         
-        # Guardar el PDF con el nombre especificado
-        pdf.output(output_file)
-        return f"PDF creado con éxito: {output_file}"
-
+        # Guardar directamente en la ruta especificada
+        pdf.output(pdf_file_path)
+        return True
     except Exception as e:
-        return f"Error al crear el PDF: {e}"
+        print(f"Error al crear el PDF: {e}")
+        return False
 
 def cambiar_default_selection(user_id, nueva_seleccion):
     """Cambia la selección predeterminada del usuario."""
