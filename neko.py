@@ -144,14 +144,26 @@ async def handle_message(client, message):
     admin_cmd = os.getenv('ADMIN_CMD', '').lower()
     await process_command(client, message, active_cmd, admin_cmd, user_id, username, chat_id)
 
+
 async def notify_main_admin():
     if MAIN_ADMIN:
         try:
             chat_id = int(MAIN_ADMIN) if MAIN_ADMIN.isdigit() else MAIN_ADMIN
-            await app.send_sticker(chat_id ,sticker=random.choice(saludos))
-            await app.send_message(chat_id=chat_id, text=f"Bot @{app.me.username} iniciado")
+            
+            # Enviar el sticker y el mensaje al MAIN_ADMIN
+            sticker_message = await app.send_sticker(chat_id, sticker=random.choice(saludos))
+            text_message = await app.send_message(
+                chat_id=chat_id, 
+                text=f"Bot @{app.me.username} iniciado"
+            )
+            
+            # Esperar 5 segundos antes de borrar los mensajes
+            await asyncio.sleep(25)
+            await app.delete_messages(chat_id=chat_id, message_ids=[sticker_message.message_id, text_message.message_id])
+
         except Exception as e:
-            print(f"Error al enviar el mensaje al MAIN_ADMIN: {e}")
+            logging.error(f"Error al enviar o borrar el mensaje al MAIN_ADMIN: {e}")
+
 
 @app.on_callback_query(filters.regex("^(cbz|pdf|fotos)"))
 async def callback_handler(client, callback_query):
