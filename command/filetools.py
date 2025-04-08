@@ -137,6 +137,19 @@ async def rename(client, message):
     else:
         await message.reply('Ejecute el comando respondiendo a un archivo')
 
+
+async def caption(client, chat_id, file_id, caption):
+    # Reenvío real del archivo usando el File ID con su caption
+    await client.send_media_group(chat_id, media=[
+        {"type": "document", "file_id": file_id, "caption": caption},
+        {"type": "photo", "file_id": file_id, "caption": caption},
+        {"type": "video", "file_id": file_id, "caption": caption},
+        {"type": "audio", "file_id": file_id, "caption": caption},
+        {"type": "voice", "file_id": file_id, "caption": caption},
+        {"type": "animation", "file_id": file_id, "caption": caption}
+    ])
+    
+
 async def set_size(client, message):
     try:
         valor = int(message.text.split(" ")[1])  # Intentar convertir el valor a entero
