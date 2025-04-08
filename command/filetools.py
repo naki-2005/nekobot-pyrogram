@@ -5,8 +5,6 @@ import string
 import py7zr
 import time
 from pyrogram import Client, filters
-from pyrogram.types import InputMediaDocument, InputMediaPhoto, InputMediaVideo, InputMediaAudio, InputMediaVoice, InputMediaAnimation
-
 
 user_comp = {} 
 compression_size = 10  
@@ -140,21 +138,21 @@ async def rename(client, message):
         await message.reply('Ejecute el comando respondiendo a un archivo')
 
 
-async def caption(client, chat_id, file_id, caption):
-    # Reenvío real del archivo usando el File ID con su caption
-    media = [
-        InputMediaDocument(file_id, caption=caption),
-        InputMediaPhoto(file_id, caption=caption),
-        InputMediaVideo(file_id, caption=caption),
-        InputMediaAudio(file_id, caption=caption),
-        InputMediaVoice(file_id, caption=caption),
-        InputMediaAnimation(file_id, caption=caption)
-    ]
-    
-    try:
-        await client.send_media_group(chat_id, media=media)
-    except Exception as e:
-        await client.send_message(chat_id, f"Hubo un error al enviar el archivo: {str(e)}")
+async def caption(client, chat_id, file_id, caption_text, message):
+    if message.reply_to_message.document:
+        await client.send_document(chat_id, file_id, caption=caption_text)
+    elif message.reply_to_message.photo:
+        await client.send_photo(chat_id, file_id, caption=caption_text)
+    elif message.reply_to_message.video:
+        await client.send_video(chat_id, file_id, caption=caption_text)
+    elif message.reply_to_message.audio:
+        await client.send_audio(chat_id, file_id, caption=caption_text)
+    elif message.reply_to_message.voice:
+        await client.send_voice(chat_id, file_id, caption=caption_text)
+    elif message.reply_to_message.animation:
+        await client.send_animation(chat_id, file_id, caption=caption_text)
+    else:
+        await client.send_message(chat_id, "No se pudo determinar el tipo de archivo para reenviar.")
 
 
 async def set_size(client, message):
