@@ -164,7 +164,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
         elif text.startswith("/sendid"):
             await asyncio.create_task(send_file_by_id(client, message))
             return
-    
+            
     elif text.startswith(("/compress", "/setsize", "/rename", "/caption")):
         if cmd("filetools", user_id in admin_users, user_id in vip_users):
             if text.startswith("/compress"):
@@ -199,14 +199,13 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                     await message.reply("Responda a un mensaje con archivo multimedia válido para usarlo")
                     return
                 
-                # Captura el texto del comando como subtítulo
-                caption_text = " ".join(message.command[1:])  # Captura el texto del comando
-                if not caption_text:
-                    caption_text = "Archivo reenviado"
+                # Captura el texto después del comando como subtítulo
+                caption_text = text.split(maxsplit=1)[1] if len(text.split(maxsplit=1)) > 1 else "Archivo reenviado"
                 
                 # Reenviar el archivo según su tipo con el caption
                 await caption(client, message.chat.id, file_id, caption_text)
         return
+
 
     elif text.startswith(("/convert", "/calidad", "/autoconvert", "/cancel", "/list", "/miniatura")) or \
        ((message.video is not None) or (message.document and message.document.mime_type and message.document.mime_type.startswith("video/"))) or \
