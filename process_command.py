@@ -11,7 +11,7 @@ from command.imgtools import create_imgchest_post
 from command.webtools import handle_scan, handle_multiscan, summarize_lines
 from command.mailtools import send_mail, set_mail, verify_mail, set_mail_limit
 from command.videotools import update_video_settings, compress_video, cancelar_tarea, listar_tareas, cambiar_miniatura
-from command.filetools import handle_compress, rename, set_size
+from command.filetools import handle_compress, rename, set_size, caption
 from command.telegramtools import get_file_id, send_file_by_id
 from command.help import handle_help, handle_help_callback  # Importar funciones de ayuda desde help.py
 
@@ -165,7 +165,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
             await asyncio.create_task(send_file_by_id(client, message))
             return
     
-    elif text.startswith(("/compress", "/setsize", "/rename")):
+    elif text.startswith(("/compress", "/setsize", "/rename", "/caption")):
         if cmd("filetools", user_id in admin_users, user_id in vip_users):
             if text.startswith("/compress"):
                 await asyncio.create_task(handle_compress(client, message, username))
@@ -173,6 +173,39 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                 await asyncio.create_task(set_size(client, message))
             elif text.startswith("/rename"):
                 await asyncio.create_task(rename(client, message))
+            elif text.startswith(("/caption")):
+                if not message.reply_to_message:
+                    await message.reply("Responda a un mensaje con archivo para usarlo")
+                    return
+                original_caption = message.reply_to_message.caption if message.reply_to_message.caption else ""
+                if original_caption.startswith("Look Here"):
+                    await message.reply("No puedo realizar esa acción")
+                    return
+                file_id = None
+                if message.reply_to_message.document:
+                    file_id = message.reply_to_message.document.file_id
+                elif message.reply_to_message.photo:
+                    file_id = message.reply_to_message.photo.file_id
+                elif message.reply_to_message.video:
+                    file_id = message.reply_to_message.video.file_id
+                elif message.reply_to_message.audio:
+                    file_id = message.reply_to_message.audio.file_id
+                elif message.reply_to_message.voice:
+                    file_id = message.reply_to_message.voice.file_id
+                elif message.reply_to_message.animation:
+                    file_id = message.reply_to_message.animation.file_id
+                
+                if not file_id:
+                    await message.reply("Responda a un mensaje con archivo multimedia válido para usarlo")
+                    return
+                
+                # Captura el texto del comando como subtítulo
+                caption_text = " ".join(message.command[1:])  # Captura el texto del comando
+                if not caption_text:
+                    caption_text = "Archivo reenviado"
+                
+                # Reenviar el archivo según su tipo con el caption
+                await caption(client, message.chat.id, file_id, caption_text)
         return
 
     elif text.startswith(("/convert", "/calidad", "/autoconvert", "/cancel", "/list", "/miniatura")) or \
