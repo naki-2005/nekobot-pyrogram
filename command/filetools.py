@@ -5,6 +5,8 @@ import string
 import py7zr
 import time
 from pyrogram import Client, filters
+from pyrogram.types import InputMediaDocument, InputMediaPhoto, InputMediaVideo, InputMediaAudio, InputMediaVoice, InputMediaAnimation
+
 
 user_comp = {} 
 compression_size = 10  
@@ -140,15 +142,20 @@ async def rename(client, message):
 
 async def caption(client, chat_id, file_id, caption):
     # Reenvío real del archivo usando el File ID con su caption
-    await client.send_media_group(chat_id, media=[
-        {"type": "document", "file_id": file_id, "caption": caption},
-        {"type": "photo", "file_id": file_id, "caption": caption},
-        {"type": "video", "file_id": file_id, "caption": caption},
-        {"type": "audio", "file_id": file_id, "caption": caption},
-        {"type": "voice", "file_id": file_id, "caption": caption},
-        {"type": "animation", "file_id": file_id, "caption": caption}
-    ])
+    media = [
+        InputMediaDocument(file_id, caption=caption),
+        InputMediaPhoto(file_id, caption=caption),
+        InputMediaVideo(file_id, caption=caption),
+        InputMediaAudio(file_id, caption=caption),
+        InputMediaVoice(file_id, caption=caption),
+        InputMediaAnimation(file_id, caption=caption)
+    ]
     
+    try:
+        await client.send_media_group(chat_id, media=media)
+    except Exception as e:
+        await client.send_message(chat_id, f"Hubo un error al enviar el archivo: {str(e)}")
+
 
 async def set_size(client, message):
     try:
