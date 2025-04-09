@@ -26,6 +26,7 @@ def comprimir_video(user_id, original_video_path, compressed_video_path, video_s
     ffmpeg_command = [
         'ffmpeg', '-y', '-i', original_video_path,
         '-s', settings['resolution'],
+        '-map', '0',
         '-crf', settings['crf'],
         '-b:a', settings['audio_bitrate'],
         '-r', settings['fps'],
