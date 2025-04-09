@@ -18,23 +18,23 @@ def obtener_duracion_video(original_video_path):
         return float(total_duration.strip())
     except Exception as e:
         raise RuntimeError(f"Error al obtener la duración del video: {e}")
-import subprocess
 
 def comprimir_video(user_id, original_video_path, compressed_video_path, video_settings):
-    # Seleccionar la configuración del usuario si existe, de lo contrario usar la configuración por defecto
     settings = video_settings.get(user_id, video_settings.get('default'))
-    
     ffmpeg_command = [
         'ffmpeg', '-y', '-i', original_video_path,
+        '-map', '0',
         '-s', settings['resolution'],
-        '-crf', settings['crf'],
+        '-crf', str(settings['crf']),
         '-b:a', settings['audio_bitrate'],
-        '-r', settings['fps'],
+        '-r', str(settings['fps']),
         '-preset', settings['preset'],
         '-c:v', settings['codec'],
+        '-c:s', 'copy',
         compressed_video_path
     ]
-    return subprocess.Popen(ffmpeg_command, stderr=subprocess.PIPE, text=True)
+    subprocess.run(ffmpeg_command, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True, check=True)
+
 
 def calcular_progreso(output, total_duration):
     if "size=" in output and "time=" in output:
