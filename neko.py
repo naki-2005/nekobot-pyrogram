@@ -61,8 +61,8 @@ async def process_access_command(message):
 @app.on_message()
 async def handle_message(client, message):
     global bot_is_sleeping, start_sleep_time, sleep_duration
-    user_id = message.from_user.id if message and message.from_user and message.from_user.id is not None else 0
-    username = message.from_user.username if message and message.from_user and message.from_user.username is not None else ""
+    user_id = message.from_user.id
+    username = message.from_user.username
     chat_id = message.chat.id
     auto = True
 
