@@ -12,84 +12,42 @@ callback_data_map = {}
 operation_status = {}
 default_selection_map = {}  # Diccionario para asociar default_selection con user_id
 
+def crear_pdf_desde_imagenes(caption, imagen_dir, ruta_pdf):
+    from PIL import Image
+    import os
 
-def convertir_a_png_sobre_si_misma(img_file):
-    """Convierte una imagen a PNG optimizado y la sobreescribe."""
-    try:
-        # Verificar si el archivo existe
-        if not os.path.isfile(img_file):
-            print(f"Archivo no encontrado: {img_file}")
-            return None
-        
-        with Image.open(img_file) as img:
-            # Convertir a modo RGB si es necesario (por ejemplo, para imágenes en modo 'P' o 'LA')
-            if img.mode not in ("RGB", "RGBA"):
-                img = img.convert("RGBA")
-            
-            nuevo_path = os.path.splitext(img_file)[0] + ".png"  # Ruta con extensión .png
-            img.save(nuevo_path, "PNG", optimize=True)  # Comprimir al máximo
-            
-            # Si el nuevo archivo tiene una extensión diferente, reemplazar el original
-            if nuevo_path != img_file:
-                os.remove(img_file)  # Eliminar el archivo original
-                img_file = nuevo_path  # Actualizar img_file con el nuevo archivo optimizado
+    imagenes = []
+    for imagen_name in os.listdir(imagen_dir):
+        imagen_path = os.path.join(imagen_dir, imagen_name)
+        try:
+            # Intentar abrir la imagen
+            img = Image.open(imagen_path).convert("RGB")
+            imagenes.append(img)
+        except Exception as e:
+            print(f"Error al procesar la imagen {imagen_name}: {e}")
+            try:
+                # Intentar convertir a PNG en caso de error
+                img = Image.open(imagen_path)
+                png_path = os.path.splitext(imagen_path)[0] + ".png"
+                img.save(png_path, "PNG")
+                img = Image.open(png_path).convert("RGB")
+                imagenes.append(img)
+            except Exception as png_error:
+                print(f"No se pudo convertir la imagen {imagen_name} a PNG: {png_error}")
 
-            return img_file  # Retorna la ruta actualizada del archivo optimizado
-    except Exception as e:
-        print(f"Error al convertir la imagen {img_file} a PNG: {e}")
-        return None
-        
-def convertir_a_png_con_compresion(image_path, output_dir):
-    """Convierte imágenes de cualquier formato a PNG optimizado."""
-    try:
-        os.makedirs(output_dir, exist_ok=True)  # Crear la carpeta si no existe
-        with Image.open(image_path) as img:
-            nuevo_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(image_path))[0]}.png")
-            img.save(nuevo_path, "PNG", optimize=True)  # Comprimir al máximo
-            return nuevo_path
-    except Exception as e:
-        print(f"Error al convertir la imagen {image_path} a PNG: {e}")
-        return None
-
-def crear_pdf_desde_png(page_title, png_dir, output_path):
-    """Crea un PDF usando las imágenes PNG en una carpeta, ajustando las páginas al tamaño exacto de cada imagen."""
-    try:
-        pdf = FPDF()
-        pdf.set_auto_page_break(auto=True, margin=0)
-        for image_name in sorted(os.listdir(png_dir)):
-            image_path = os.path.join(png_dir, image_name)
-            if image_name.lower().endswith('.png'):
-                # Abrir la imagen para obtener las dimensiones
-                with Image.open(image_path) as img:
-                    pdf.add_page()
-                    #pdf.set_auto_page_break(auto=False)  # Sin márgenes automáticos
-                    #pdf.set_xy(0, 0)  # Ajustar el punto de inicio
-                    pdf.image(image_path, x=0, y=0, w=210)
-        pdf.output(output_path)
-        shutil.rmtree(png_dir)
-        return True
-    except Exception as e:
-        print(f"Error al crear el PDF: {e}")
+    if imagenes:
+        try:
+            # Guardar todas las imágenes en el PDF
+            imagenes[0].save(ruta_pdf, save_all=True, append_images=imagenes[1:])
+            print(f"PDF creado exitosamente en: {ruta_pdf}")
+            return True
+        except Exception as pdf_error:
+            print(f"Error al crear el PDF: {pdf_error}")
+            return False
+    else:
+        print("No se encontraron imágenes válidas para crear el PDF.")
         return False
-        
-
-def no_crear_pdf(folder_name, pdf_filename):
-    try:
-        pdf = FPDF()
-        pdf.set_auto_page_break(auto=True, margin=0)
-
-        for file in sorted(os.listdir(folder_name)):
-            file_path = os.path.join(folder_name, file)
-            if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp')):
-                pdf.add_page()
-                pdf.image(file_path, x=0, y=0, w=210)
-
-        pdf.output(pdf_filename)
-        #print(f"PDF creado: {pdf_filename}")
-        return pdf_filename
-    except Exception as e:
-        #print(f"Error al crear PDF: {e}")
-        return None
+                
         
 def cambiar_default_selection(user_id, nueva_seleccion):
     """Cambia la selección predeterminada del usuario."""
@@ -167,17 +125,13 @@ async def nh_combined_operation(client, message, codes, link_type, protect_conte
                 os.remove(img_file)
                 continue
 
-            if not pdf_file_path and operation_type=="download":
+            if not pdf_file_path and operation_type == "download":
                 pdf_file_path = f"{result.get('file_name', 'output')}.pdf"
-                new_png_dir = "new_png"
-                os.makedirs(new_png_dir, exist_ok=True)
-                for image_name in os.listdir("downloads"):
-                    image_path = os.path.join("downloads", image_name)
-                    convertir_a_png_con_compresion(image_path, new_png_dir)
-                pdf_creado = crear_pdf_desde_png(result.get("caption", "output"), new_png_dir, pdf_file_path)
+                pdf_creado = crear_pdf_desde_imagenes(result.get("caption", "output"), "downloads", pdf_file_path)
                 if not pdf_creado:
                     await message.reply(f"Error al generar el PDF para el código {code}.")
                     continue
+
 
             # Envío según la selección del usuario
             if user_default_selection:
