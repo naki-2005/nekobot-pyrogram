@@ -37,29 +37,24 @@ def convertir_a_png_sobre_si_misma(img_file):
 def crear_pdf_desde_imagenes(caption, imagen_dir, ruta_pdf):
     from PIL import Image
     import os
+    import re
 
     imagenes = []
-    for imagen_name in os.listdir(imagen_dir):
+    archivos = sorted(
+        [f for f in os.listdir(imagen_dir) if f.lower().endswith((".jpg", ".jpeg", ".png"))],
+        key=lambda texto: [int(fragmento) if fragmento.isdigit() else fragmento.lower() for fragmento in re.split(r'(\d+)', texto)]
+    )
+
+    for imagen_name in archivos:
         imagen_path = os.path.join(imagen_dir, imagen_name)
         try:
-            # Intentar abrir la imagen
             img = Image.open(imagen_path).convert("RGB")
             imagenes.append(img)
         except Exception as e:
             print(f"Error al procesar la imagen {imagen_name}: {e}")
-            try:
-                # Intentar convertir a PNG en caso de error
-                img = Image.open(imagen_path)
-                png_path = os.path.splitext(imagen_path)[0] + ".png"
-                img.save(png_path, "PNG")
-                img = Image.open(png_path).convert("RGB")
-                imagenes.append(img)
-            except Exception as png_error:
-                print(f"No se pudo convertir la imagen {imagen_name} a PNG: {png_error}")
 
     if imagenes:
         try:
-            # Guardar todas las imágenes en el PDF
             imagenes[0].save(ruta_pdf, save_all=True, append_images=imagenes[1:])
             print(f"PDF creado exitosamente en: {ruta_pdf}")
             return True
@@ -69,6 +64,7 @@ def crear_pdf_desde_imagenes(caption, imagen_dir, ruta_pdf):
     else:
         print("No se encontraron imágenes válidas para crear el PDF.")
         return False
+
                 
         
 def cambiar_default_selection(user_id, nueva_seleccion):
