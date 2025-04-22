@@ -10,8 +10,30 @@ from command.get_files.hfiles import descargar_hentai
 MAIN_ADMIN = os.getenv("MAIN_ADMIN")
 callback_data_map = {}
 operation_status = {}
-default_selection_map = {}  # Diccionario para asociar default_selection con user_id
+default_selection_map = {}  
+def convertir_a_png_sobre_si_misma(img_file):
+    """Convierte una imagen a PNG optimizado y la sobreescribe."""
+    try:
+        if not os.path.isfile(img_file):
+            print(f"Archivo no encontrado: {img_file}")
+            return None
+        
+        with Image.open(img_file) as img:
+            if img.mode not in ("RGB", "RGBA"):
+                img = img.convert("RGBA")
+            
+            nuevo_path = os.path.splitext(img_file)[0] + ".png"  
+            img.save(nuevo_path, "PNG", optimize=True) 
+            
+            if nuevo_path != img_file:
+                os.remove(img_file)  
+                img_file = nuevo_path  
 
+            return img_file
+    except Exception as e:
+        print(f"Error al convertir la imagen {img_file} a PNG: {e}")
+        return None
+        
 def crear_pdf_desde_imagenes(caption, imagen_dir, ruta_pdf):
     from PIL import Image
     import os
