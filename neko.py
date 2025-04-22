@@ -56,30 +56,25 @@ async def process_access_command(message):
             await message.reply("Ya estás en la lista de acceso temporal.")
     else:
         await message.reply("Palabra secreta incorrecta.")
-
-# Manejador de mensajes
+        
 @app.on_message()
 async def handle_message(client, message):
     global bot_is_sleeping, start_sleep_time, sleep_duration
-    user_id = message.from_user.id
-    username = message.from_user.username
-    chat_id = message.chat.id
+    user_id = message.from_user.id if message.from_user.id is not None else ""
+    username = message.from_user.username if message.from_user.username is not None else ""
+    chat_id = message.chat.id if message.chat.id is not None else ""
     auto = True
 
-    # Validar si el usuario está baneado
     if user_id in ban_users:
         return
 
-    # Validar si el bot no es público y el usuario no tiene acceso
     if not is_bot_public() and user_id not in allowed_users and chat_id not in allowed_users:
         return
 
-    # Comando /reactive
     if message.text and message.text.startswith("/reactive") and (str(user_id) == MAIN_ADMIN or username.lower() == MAIN_ADMIN.lower()):
         if bot_is_sleeping:
             bot_is_sleeping = False
 
-            # Notificar que el bot está activo nuevamente
             await client.send_sticker(
                 chat_id=message.chat.id,
                 sticker="CAACAgIAAxkBAAIKa2fr9k_RUYKn3a2ESnotX5OZix-DAAJlOgAC4KOCB0AuzmaDZs-sHgQ"
@@ -88,7 +83,6 @@ async def handle_message(client, message):
             await message.reply("Ok, estoy de vuelta.")
         return
 
-    # Manejo del estado del bot cuando está en descanso
     if bot_is_sleeping and start_sleep_time:
         remaining_time = max(0, sleep_duration - int(time.time() - start_sleep_time))
         await client.send_sticker(
