@@ -144,7 +144,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
 
     elif text.startswith("/imgchest"):
         if cmd("imgtools", user_id in admin_users, user_id in vip_users):
-            if message.reply_to_message and (message.reply_to_message.photo or message.reply_to_message.document):
+            if message.reply_to_message and (message.reply_to_message.photo or message.reply_to_message.document or message.reply_to_message.video):
                 await asyncio.create_task(create_imgchest_post(client, message))
             else:
                 await message.reply("Por favor, usa el comando respondiendo a una foto.")
