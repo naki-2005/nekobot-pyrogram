@@ -4,40 +4,80 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Neko Bot</title>
-    <!-- Favicon -->
-    <link rel="icon" href="https://cdn.imgchest.com/files/49zc2glz9ey.png" type="image/png">
-    <!-- Vincular CSS externo -->
-    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        h1 {
+            font-size: 3em;
+            font-weight: bold;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        img {
+            margin-top: 20px;
+            max-width: 100%;
+            height: auto;
+        }
+
+        h2 {
+            font-size: 2em;
+            font-weight: bold;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .description {
+            margin-top: 20px;
+            font-size: 1em; /* Tamaño normal */
+            text-align: center;
+        }
+
+        a {
+            text-decoration: none;
+            color: #007BFF;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
-    <button class="mode-toggle" onclick="toggleMode()">Modo Claro</button>
-    <div class="main-container">
-        <div class="right-section">
-            <h1>Neko Bot</h1>
-            <img src="https://cdn.imgchest.com/files/49zc2glz9ey.png" alt="Imagen de Neko Bot">
-        </div>
-        <div class="left-section">
-            <div class="description">
-                <h2>Descripción</h2>
-                <p>
-                    Neko Bot es un proyecto desarrollado por <a href="https://t.me/nakigeplayer" target="_blank">Naki</a> por interés y para uso personal.
-                </p>
-            </div>
-            <div class="rectangulo">
-                <h3 onclick="toggleList()">Tutoriales de Comando</h3>
-                <ul id="tutorial-list">
-                    <li><a href="/nekobot-pyrogram/pages/files.html" target="_blank">Tutorial de Archivos</a></li>
-                    <li><a href="/nekobot-pyrogram/pages/mail.html" target="_blank">Tutorial de Correo electrónico</a></li>
-                    <li><a href="/nekobot-pyrogram/pages/hentai.html" target="_blank">Tutorial de Hentai</a></li>
-                    <li><a href="/nekobot-pyrogram/pages/video.html" target="_blank">Tutorial de Videos</a></li>
-                
-                </ul>
-            </div>
-        </div>
+    <h1>Neko Bot Main Page</h1>
+    <img src="https://cdn.imgchest.com/files/49zc2glz9ey.png" alt="Imagen de Neko Bot">
+    <h2>Descripción</h2>
+    <div class="description">
+        Neko Bot es un proyecto desarrollado por <a href="https://t.me/nakigeplayer" target="_blank">Naki</a> por interes y para uso personal.
+        El bot Neko es un bot
     </div>
-    <div class="espacio-final"></div>
-
-    <!-- Vincular JavaScript externo -->
-    <script src="scripts.js"></script>
+<div id="disqus_thread"></div>
+<script>
+    /**
+    *  RECOMMENDED CONFIGURATION VARIABLES: EDIT AND UNCOMMENT THE SECTION BELOW TO INSERT DYNAMIC VALUES FROM YOUR PLATFORM OR CMS.
+    *  LEARN WHY DEFINING THESE VARIABLES IS IMPORTANT: https://disqus.com/admin/universalcode/#configuration-variables    */
+    /*
+    var disqus_config = function () {
+    this.page.url = PAGE_URL;  // Replace PAGE_URL with your page's canonical URL variable
+    this.page.identifier = PAGE_IDENTIFIER; // Replace PAGE_IDENTIFIER with your page's unique identifier variable
+    };
+    */
+    (function() { // DON'T EDIT BELOW THIS LINE
+    var d = document, s = d.createElement('script');
+    s.src = 'https://nakiblog.disqus.com/embed.js';
+    s.setAttribute('data-timestamp', +new Date());
+    (d.head || d.body).appendChild(s);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <script id="dsq-count-scr" src="//nakiblog.disqus.com/count.js" async></script>
 </body>
 </html>
