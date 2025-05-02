@@ -41,7 +41,7 @@ def crear_pdf_desde_imagenes(caption, imagen_dir, ruta_pdf):
 
     imagenes = []
     archivos = sorted(
-        [f for f in os.listdir(imagen_dir) if f.lower().endswith((".jpg", ".jpeg", ".png"))],
+        [f for f in os.listdir(imagen_dir) if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))],
         key=lambda texto: [int(fragmento) if fragmento.isdigit() else fragmento.lower() for fragmento in re.split(r'(\d+)', texto)]
     )
 
