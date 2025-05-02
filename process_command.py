@@ -82,7 +82,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
             elif text.startswith("/nh"):
                 parts = text.split(maxsplit=1)
                 codes = parts[1].split(',') if len(parts) > 1 and ',' in parts[1] else [parts[1]] if len(parts) > 1 else []
-                codes_limpiados = [re.sub(r"https://nhentai\.net|https://3hentai\.net|https://es.hentai\.com|/d/|/g/|/", "", code).strip() for code in codes]
+                codes_limpiados = [re.sub(r"https://nhentai\.net|https://[a-z]{2}\.3hentai\.net|https://3hentai\.net|/d/|/g/|/", "", code).strip() for code in codes]
                 if codes_limpiados != codes:
                     codes = codes_limpiados
                     await message.reply("Solo son necesarios los números pero ok")
@@ -98,7 +98,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
             elif text.startswith("/3h"):
                 parts = text.split(maxsplit=1)
                 codes = parts[1].split(',') if len(parts) > 1 and ',' in parts[1] else [parts[1]] if len(parts) > 1 else []
-                codes_limpiados = [re.sub(r"https://nhentai\.net|https://3hentai\.net|https://es.hentai\.com|/d/|/g/|/", "", code).strip() for code in codes]
+                codes_limpiados = [re.sub(r"https://nhentai\.net|https://[a-z]{2}\.3hentai\.net|https://3hentai\.net|/d/|/g/|/", "", code).strip() for code in codes]
                 if codes_limpiados != codes:
                     codes = codes_limpiados
                     await message.reply("Solo son necesarios los números pero ok")
@@ -114,7 +114,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
             elif text.startswith(("/cover3h")):
                 parts = text.split(maxsplit=1)
                 codes = parts[1].split(',') if len(parts) > 1 and ',' in parts[1] else [parts[1]] if len(parts) > 1 else []
-                codes_limpiados = [re.sub(r"https://nhentai\.net|https://3hentai\.net|https://es.hentai\.com|/d/|/g/|/", "", code).strip() for code in codes]
+                codes_limpiados = [re.sub(r"https://nhentai\.net|https://[a-z]{2}\.3hentai\.net|https://3hentai\.net|/d/|/g/|/", "", code).strip() for code in codes]
                 if codes_limpiados != codes:
                     codes = codes_limpiados
                     await message.reply("Solo son necesarios los números pero ok")
@@ -130,7 +130,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
             elif text.startswith("/covernh"):
                 parts = text.split(maxsplit=1)
                 codes = parts[1].split(',') if len(parts) > 1 and ',' in parts[1] else [parts[1]] if len(parts) > 1 else []
-                codes_limpiados = [re.sub(r"https://nhentai\.net|https://3hentai\.net|https://es.hentai\.com|/d/|/g/|/", "", code).strip() for code in codes]
+                codes_limpiados = [re.sub(r"https://nhentai\.net|https://[a-z]{2}\.3hentai\.net|https://3hentai\.net|/d/|/g/|/", "", code).strip() for code in codes]
                 if codes_limpiados != codes:
                     codes = codes_limpiados
                     await message.reply("Solo son necesarios los números pero ok")
