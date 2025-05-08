@@ -59,22 +59,32 @@ def descargar_hentai(url, code, base_url, operation_type, protect_content, user_
                 img_data = requests.get(img_url, headers={"User-Agent": "Mozilla/5.0"}).content
                 img_file.write(img_data)
 
-        # Buscar el número de la última página válida
-        page_number = 1
-        while True:
-            page_url = f"https://{base_url}/{code}/{page_number}/"
-            response = requests.get(page_url, headers={"User-Agent": "Mozilla/5.0"})
-            
-            if response.status_code == 404:  # Fin de las páginas
-                break
+        last_page_number = 1
 
-            # Confirmar si la página tiene una imagen válida
-            soup = BeautifulSoup(response.content, 'html.parser')
-            img_tag = soup.find('img', {'src': True})
-            if img_tag:
-                last_page_number = page_number
+        # Acceder al directorio principal donde están todas las imágenes
+        page_url = f"https://{base_url}/{code}/"
+        response = requests.get(page_url, headers={"User-Agent": "Mozilla/5.0"})
 
-            page_number += 1
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.content, "html.parser")
+
+            # Buscar todas las imágenes en el directorio
+            img_tags = soup.find_all("img", {"src": True})
+
+            if img_tags:
+                # Extraer números de las imágenes y encontrar el mayor
+                page_numbers = [
+                    int(re.search(r"(\d+)t\.(png|webp|jpg)", img_tag["src"]).group(1))
+                    for img_tag in img_tags if re.search(r"(\d+)t\.(png|webp|jpg)", img_tag["src"])
+                ]
+
+                if page_numbers:
+                    last_page_number = max(page_numbers)
+
+        results = {
+            "last_page_number": last_page_number
+        }
+
 
         if operation_type == "cover":
             page_title = f"{page_title} \n{last_page_number} Páginas\n\n https://{base_url}/{code}/"
