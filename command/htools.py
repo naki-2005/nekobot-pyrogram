@@ -139,7 +139,8 @@ async def nh_combined_operation(client, message, codes, link_type, protect_conte
 
             if operation_type=="cover":
                 img_file = convertir_a_png_sobre_si_misma(img_file)
-                await message.reply_photo(photo=img_file, caption=caption)
+                await message.reply_photo(photo=img_file, caption=caption, has_spoiler=True)
+                
                 os.remove(img_file)
                 continue
 
@@ -154,7 +155,7 @@ async def nh_combined_operation(client, message, codes, link_type, protect_conte
             # Envío según la selección del usuario
             if user_default_selection:
                 img_file = convertir_a_png_sobre_si_misma(img_file)
-                await message.reply_photo(photo=img_file, caption=caption, reply_markup=keyboard, has_spoiler=True)
+                await message.reply_photo(photo=img_file, caption=caption, has_spoiler=True)
                 os.remove(img_file)
                 # Enviar archivo según selección
                 if user_default_selection == "cbz" and cbz_file_path:
