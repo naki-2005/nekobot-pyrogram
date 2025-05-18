@@ -122,18 +122,10 @@ def descargar_hentai(url, code, base_url, operation_type, protect_content, user_
             #print(img_links)
             download_folder = "downloads"
             os.makedirs(download_folder, exist_ok=True)
+            img_links = [re.sub(r'https://t\d', 'https://i1', img_link) for img_link in img_links]
 
             for img_url in img_links:
                 try:
-                    img_links = [re.sub(r'https://t0', 'https://i1', img_link) for img_link in img_links]
-                    img_links = [re.sub(r'https://t1', 'https://i1', img_link) for img_link in img_links]
-                    img_links = [re.sub(r'https://t2', 'https://i1', img_link) for img_link in img_links]
-                    img_links = [re.sub(r'https://t3', 'https://i1', img_link) for img_link in img_links]
-                    img_links = [re.sub(r'https://t5', 'https://i1', img_link) for img_link in img_links]
-                    img_links = [re.sub(r'https://t6', 'https://i1', img_link) for img_link in img_links]
-                    img_links = [re.sub(r'https://t7', 'https://i1', img_link) for img_link in img_links]
-                    img_links = [re.sub(r'https://t8', 'https://i1', img_link) for img_link in img_links]
-                    img_links = [re.sub(r'https://t9', 'https://i1', img_link) for img_link in img_links]
                     
                     #img_links = obtener_links_validos(img_links)
                     response = requests.get(img_url, stream=True)
