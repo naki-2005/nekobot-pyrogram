@@ -108,8 +108,7 @@ def descargar_hentai(url, code, base_url, operation_type, protect_content, user_
 
             for img_tag in img_tags:
                 img_url = img_tag['src'].replace("t.", ".")
-                img_url = urljoin(page_url, img_url)
-
+                
                 img_extension = os.path.splitext(img_url)[1]
                 img_filename = os.path.join(folder_name, os.path.basename(img_url))
 
@@ -122,6 +121,7 @@ def descargar_hentai(url, code, base_url, operation_type, protect_content, user_
                     continue
 
             page_title = f"{page_title}"
+
             page_title = re.sub("Page 1  nhentai hentai doujinshi and manga|Page 1  3Hentai", "", page_title)
             
             # Usar el título como nombre de archivo
