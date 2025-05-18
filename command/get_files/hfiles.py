@@ -5,6 +5,21 @@ import zipfile
 from bs4 import BeautifulSoup
 from fpdf import FPDF
 
+
+def obtener_links_validos(img_links):
+    for i in range(10):
+        nuevo_links = [re.sub(r'https://t\d', f'https://i{i}', img_link) for img_link in img_links]
+        try:
+            response = requests.get(nuevo_links[0], stream=True)
+            response.raise_for_status()
+            print(f"Usando variante válida: {nuevo_links[0]}")
+            return nuevo_links  # Retorna la lista con los enlaces corregidos
+        except requests.exceptions.RequestException:
+            continue  # Prueba la siguiente variante
+
+    print("No se encontró ninguna variante válida.")
+    return None  # Si no hay éxito, retorna None
+
 def clean_string(s):
     return re.sub(r'[^a-zA-Z0-9\[\] ]', '', s)
 
@@ -110,7 +125,7 @@ def descargar_hentai(url, code, base_url, operation_type, protect_content, user_
 
             for img_url in img_links:
                 try:
-                    img_links = [re.sub(r'https://t', 'https://i', img_link) for img_link in img_links]
+                    img_links = obtener_links_validos(img_links)
                     response = requests.get(img_url, stream=True)
                     response.raise_for_status()  # Manejo de errores
 
