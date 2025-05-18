@@ -34,7 +34,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
     text = message.text.strip().lower() if message.text else ""
     if not is_protect_content_enabled and user_id not in allowed_ids:
         allowed_ids = allowed_ids.union({user_id})
-    user_id = message.from_user.id
+    #user_id = message.from_user.id
     auto = auto_users.get(user_id, False)
     
     def cmd(command_env, is_admin=False, is_vip=False):
