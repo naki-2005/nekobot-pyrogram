@@ -47,9 +47,41 @@ async def set_mail_limit(client, message):
     except ValueError:
         await message.reply("Por favor, proporciona un número válido como límite.")
 
+async def set_mail_delay(client, message):
+    user_id = message.from_user.id
+    try:
+        new_limit = int(message.text.split(' ', 1)[1])
+        if new_limit < 1:
+            await client.send_sticker(
+                chat_id=message.chat.id,
+                sticker="CAACAgIAAxkBAAIF02fm3-XonvGhnnaVYCwO-y71UhThAAJuOgAC4KOCB77pR2Nyg3apHgQ"
+            )
+            time.sleep(3)
+            await message.reply("¿Qué haces pendejo?")
+            return
+        if new_limit > 300:
+            if user_id in exceeded_users:
+                await client.send_sticker(
+                    chat_id=message.chat.id,
+                    sticker="CAACAgIAAxkBAAIF02fm3-XonvGhnnaVYCwO-y71UhThAAJuOgAC4KOCB77pR2Nyg3apHgQ"
+                )
+                time.sleep(3)
+                await message.reply("¿Qué haces pendejo? Eso no llegaría nunca.")
+                return
+            else:
+                exceeded_users.append(user_id)
+                new_limit = 300
+        user_delays[user_id] = new_limit
+        await message.reply(f"El tiempo de espera personal del usuario entre el envio de partes ha sido cambiado a {new_limit} MB.")
+    except ValueError:
+        await message.reply("Por favor, proporciona un número válido como límite.")
+        
+
 # Función para obtener el límite de MAIL_MB para un usuario
 def get_mail_limit(user_id):
     return user_limits.get(user_id, int(os.getenv('MAIL_MB', 20)))
+def get_user_delay(user_id):
+    return user_delays.get(user_id, int(os.getenv('MAIL_DELAY', 30)))
 
 # Modificación de la función set_mail para enviar el código de verificación por correo
 async def set_mail(client, message):
@@ -178,7 +210,9 @@ async def send_mail(client, message):
         return
 
     mail_mb = get_mail_limit(user_id)
-    mail_delay = os.getenv('MAIL_DELAY')
+    mail_delay = get_user_delay(user_id)
+    
+    #mail_delay = os.getenv('MAIL_DELAY')
 
     # Envío de archivos multimedia
     if reply_message.document or reply_message.photo or reply_message.video or reply_message.sticker:
