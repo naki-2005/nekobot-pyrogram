@@ -151,7 +151,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
         return
 
     
-    elif text.startswith(("/setmail", "/sendmail", "/verify", "/setmb")):
+    elif text.startswith(("/setmail", "/sendmail", "/verify", "/setmb", "/setdelay")):
         if cmd("mailtools", user_id in admin_users, user_id in vip_users):
             if text.startswith("/setmail"):
                 await asyncio.create_task(set_mail(client, message))
@@ -160,6 +160,9 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
 
             elif text.startswith("/setmb"):
                 await asyncio.create_task(set_mail_limit(client, message))
+
+            elif text.startswith("/setdelay"):
+                await asyncio.create_task(set_mail_delay(client, message))
                 
             elif text.startswith("/verify"):
                 await asyncio.create_task(verify_mail(client, message))
