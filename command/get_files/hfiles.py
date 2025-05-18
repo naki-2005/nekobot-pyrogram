@@ -94,33 +94,34 @@ def descargar_hentai(url, code, base_url, operation_type, protect_content, user_
                 "caption": page_title,
                 "img_file": first_img_filename,
                 "last_page_number": last_page_number
-            }
+            }        
         if operation_type == "download":
-                page_url = f"https://{base_url}/{code}/"
+            page_url = f"https://{base_url}/{code}/"
+            try:
+                response = requests.get(page_url, headers={"User-Agent": "Mozilla/5.0"})
+                response.raise_for_status()
+            except requests.exceptions.RequestException:
+                return
+
+            soup = BeautifulSoup(response.content, 'html.parser')
+            img_tags = soup.find_all('img', {'src': re.compile(r'.*t\.(png|jpg|jpeg|gif|bmp|webp)$')})
+
+            img_urls = [img_tag['src'].replace("t.", ".") for img_tag in img_tags]  # Lista de imágenes
+
+            if img_urls:  # Si hay imágenes disponibles
+                img_url = img_urls[0]  # Solo la primera imagen
+                img_filename = os.path.join(folder_name, os.path.basename(img_url))
+
                 try:
-                        response = requests.get(page_url, headers={"User-Agent": "Mozilla/5.0"})
-                        response.raise_for_status()
+                    with requests.get(img_url, headers={"User-Agent": "Mozilla/5.0"}) as img_response:
+                        img_response.raise_for_status()
+                        with open(img_filename, 'wb') as img_file:
+                            img_file.write(img_response.content)
                 except requests.exceptions.RequestException:
-                        return
+                    pass
 
-                soup = BeautifulSoup(response.content, 'html.parser')
-                img_tags = soup.find_all('img', {'src': re.compile(r'.*t\.(png|jpg|jpeg|gif|bmp|webp)$')})
+            print("Imágenes encontradas:", img_urls)  # Muestra todas las imágenes sin descargarlas
 
-                img_urls = [img_tag['src'].replace("t.", ".") for img_tag in img_tags]  # Lista de imágenes
-
-                if img_urls:  # Si hay imágenes disponibles
-                        img_url = img_urls[0]  # Solo la primera imagen
-                        img_filename = os.path.join(folder_name, os.path.basename(img_url))
-
-                        try:
-                                with requests.get(img_url, headers={"User-Agent": "Mozilla/5.0"}) as img_response:
-                                        img_response.raise_for_status()
-                                        with open(img_filename, 'wb') as img_file:
-                                                img_file.write(img_response.content)
-                        except requests.exceptions.RequestException:
-                                pass
-
-                print("Imágenes encontradas:", img_urls)  # Muestra todas las imágenes sin descargarlas
 
 
             page_title = f"{page_title}"
