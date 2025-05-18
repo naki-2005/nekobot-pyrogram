@@ -105,7 +105,7 @@ def descargar_hentai(url, code, base_url, operation_type, protect_content, user_
             
             img_links = [re.sub(r'(/\d+)t(\.(png|jpg|jpeg|gif|bmp|webp))$', r'\1\2', img['src']) for img in img_tags]
             print(img_links)
-            download_folder = "temp"
+            download_folder = "downloads"
             os.makedirs(download_folder, exist_ok=True)
 
             for img_url in img_links:
