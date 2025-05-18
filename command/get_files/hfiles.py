@@ -105,15 +105,27 @@ def descargar_hentai(url, code, base_url, operation_type, protect_content, user_
             
             img_links = [re.sub(r'(/\d+)t(\.(png|jpg|jpeg|gif|bmp|webp))$', r'\1\2', img['src']) for img in img_tags]
             print(img_links)
-            
-            for img_tag in img_tags:
-                original_url = img_tag['src'].replace('t.', '', 1)
-                img_name = original_url.split('/')[-1]
-                img_filename = os.path.join(folder_name, img_name)
-                
-                with requests.get(original_url, headers={"User-Agent": "Mozilla/5.0"}) as r:
-                    with open(img_filename, 'wb') as f:
-                        f.write(r.content)
+            download_folder = "temp"
+            os.makedirs(download_folder, exist_ok=True)
+
+            for img_url in img_links:
+                try:
+                    response = requests.get(img_url, stream=True)
+                    response.raise_for_status()  # Manejo de errores
+
+                    # Obtener el nombre del archivo desde el URL
+                    file_name = os.path.join(download_folder, img_url.split("/")[-1])
+
+                    # Guardar la imagen
+                    with open(file_name, "wb") as file:
+                        for chunk in response.iter_content(1024):
+                            file.write(chunk)
+
+                    print(f"Descargado: {file_name}")
+
+                except requests.exceptions.RequestException as e:
+                    print(f"Error al descargar {img_url}: {e}")
+
                 
             page_title = f"{page_title}"
             page_title = re.sub("Page 1  nhentai hentai doujinshi and manga|Page 1  3Hentai", "", page_title)
