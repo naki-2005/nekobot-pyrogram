@@ -11,6 +11,7 @@ from data.vars import admin_users, vip_users, video_limit, PROTECT_CONTENT
 user_emails = {}
 verification_storage = {}
 user_limits = {}
+user_delays = {}
 exceeded_users = []
 
 # Función para generar un código de verificación de 6 números
