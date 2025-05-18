@@ -73,7 +73,8 @@ async def set_mail_delay(client, message):
                 exceeded_users.append(user_id)
                 new_limit = 300
         user_delays[user_id] = new_limit
-        await message.reply(f"El tiempo de espera personal del usuario entre el envio de partes ha sido cambiado a {new_limit} MB.")
+        time.sleep(4)
+        await message.reply(f"El tiempo de espera personal del usuario entre el envio de partes ha sido cambiado a {new_limit} segundos.")
     except ValueError:
         await message.reply("Por favor, proporciona un número válido como límite.")
         
@@ -244,6 +245,7 @@ async def send_mail(client, message):
             await message.reply(f"El archivo supera el límite de {mail_mb} MB, se iniciará la autocompresión.", protect_content=protect_content)
             parts = compressfile(media, mail_mb)
             for part in parts:
+                cantidad_de_parts = len(parts)
                 try:
                     mail_server = os.getenv('MAIL_SERVER')
                     if not mail_server:
@@ -258,7 +260,7 @@ async def send_mail(client, message):
                     security_enabled = len(server_details) > 2 and server_details[2].lower() == 'tls'
 
                     msg = EmailMessage()
-                    msg['Subject'] = f"Parte {os.path.basename(part)}"
+                    msg['Subject'] = f"Parte {os.path.basename(part)} de {cantidad_de_parts}"
                     msg['From'] = f"Neko Bot <{os.getenv('MAILDIR')}>"
                     msg['To'] = email
 
@@ -271,7 +273,7 @@ async def send_mail(client, message):
                         server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
                         server.send_message(msg)
 
-                    await message.reply(f"Parte {os.path.basename(part)} enviada correctamente.", protect_content=protect_content)
+                    await message.reply(f"Parte {os.path.basename(part)} de {cantidad_de_parts} enviada correctamente.", protect_content=protect_content)
                     os.remove(part)
                     time.sleep(float(mail_delay) if mail_delay else 0)
                 except Exception as e:
