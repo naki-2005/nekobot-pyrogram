@@ -104,12 +104,13 @@ def descargar_hentai(url, code, base_url, operation_type, protect_content, user_
             img_tags = soup.find_all('img', {'src': re.compile('/\d+t\.(png|jpg|jpeg|gif|bmp|webp)$')})
             
             img_links = [re.sub(r'(/\d+)t(\.(png|jpg|jpeg|gif|bmp|webp))$', r'\1\2', img['src']) for img in img_tags]
-            print(img_links)
+            #print(img_links)
             download_folder = "downloads"
             os.makedirs(download_folder, exist_ok=True)
 
             for img_url in img_links:
                 try:
+                    img_links = [re.sub(r'https://t', 'https://i', img_link) for img_link in img_links]
                     response = requests.get(img_url, stream=True)
                     response.raise_for_status()  # Manejo de errores
 
