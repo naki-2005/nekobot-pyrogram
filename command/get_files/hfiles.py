@@ -125,7 +125,9 @@ def descargar_hentai(url, code, base_url, operation_type, protect_content, user_
 
             for img_url in img_links:
                 try:
-                    img_links = obtener_links_validos(img_links)
+                    img_links = [re.sub(r'https://t\d', 'https://i1', img_link) for img_link in img_links]
+                    
+                    #img_links = obtener_links_validos(img_links)
                     response = requests.get(img_url, stream=True)
                     response.raise_for_status()  # Manejo de errores
 
