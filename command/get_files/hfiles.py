@@ -101,7 +101,7 @@ def descargar_hentai(url, code, base_url, operation_type, protect_content, user_
             response = requests.get(main_page_url, headers={"User-Agent": "Mozilla/5.0"})
             soup = BeautifulSoup(response.content, 'html.parser')
 
-            img_tags = soup.find_all('img', {'src': re.compile(I'/\d+t\.(png|jpg|jpeg|gif|bmp|webp)$')})
+            img_tags = soup.find_all('img', {'src': re.compile('/\d+t\.(png|jpg|jpeg|gif|bmp|webp)$')})
             
             img_links = [re.sub(r'(/\d+)t(\.(png|jpg|jpeg|gif|bmp|webp))$', r'\1\2', img['src']) for img in img_tags]
             print(img_links)
