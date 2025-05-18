@@ -60,9 +60,9 @@ async def process_access_command(message):
 @app.on_message()
 async def handle_message(client, message):
     global bot_is_sleeping, start_sleep_time, sleep_duration
-    user_id = message.from_user.id if message.from_user.id is not None else ""
-    username = message.from_user.username if message.from_user.username is not None else ""
-    chat_id = message.chat.id if message.chat.id is not None else ""
+    user_id = message.from_user.id if message.from_user else ""
+    username = message.from_user.username if message.from_user  else ""
+    chat_id = message.chat.id if message.chat else ""
     auto = True
 
     if user_id in ban_users:
