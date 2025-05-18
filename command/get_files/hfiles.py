@@ -97,28 +97,20 @@ def descargar_hentai(url, code, base_url, operation_type, protect_content, user_
             }
             
         if operation_type == "download":
-            page_number = 1
-            while True:
-                page_url = f"https://{base_url}/{code}/{page_number}/"
-                try:
-                    response = requests.get(page_url, headers={"User-Agent": "Mozilla/5.0"})
-                    response.raise_for_status()
-                except requests.exceptions.RequestException:
-                    break
-
-                soup = BeautifulSoup(response.content, 'html.parser')
-                img_tag = soup.find('img', {'src': re.compile(r'.*\.(png|jpg|jpeg|gif|bmp|webp)$')})
-                if not img_tag:
-                    break
-
-                img_url = img_tag['src']
-                img_extension = os.path.splitext(img_url)[1]
-                img_filename = os.path.join(folder_name, f"{page_number}{img_extension}")
-
-                with open(img_filename, 'wb') as img_file:
-                    img_file.write(requests.get(img_url, headers={"User-Agent": "Mozilla/5.0"}).content)
-
-                page_number += 1
+            main_page_url = f"https://{base_url}/{code}/"
+            response = requests.get(main_page_url, headers={"User-Agent": "Mozilla/5.0"})
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            img_tags = soup.find_all('img', {'src': re.compile(r't\..*\.(png|jpg|jpeg|gif|bmp|webp)$')})
+            
+            for img_tag in img_tags:
+                original_url = img_tag['src'].replace('t.', '', 1)
+                img_name = original_url.split('/')[-1]
+                img_filename = os.path.join(folder_name, img_name)
+                
+                with requests.get(original_url, headers={"User-Agent": "Mozilla/5.0"}) as r:
+                    with open(img_filename, 'wb') as f:
+                        f.write(r.content)
                 
             page_title = f"{page_title}"
             page_title = re.sub("Page 1  nhentai hentai doujinshi and manga|Page 1  3Hentai", "", page_title)
