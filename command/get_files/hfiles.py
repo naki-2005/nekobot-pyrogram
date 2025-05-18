@@ -7,27 +7,7 @@ from fpdf import FPDF
 
 def clean_string(s):
     return re.sub(r'[^a-zA-Z0-9\[\] ]', '', s)
-def obtener_enlaces_imagenes(base_url, code):
-    page_url = f"https://{base_url}/{code}/"
-    
-    try:
-        respuesta = requests.get(page_url)
-        respuesta.raise_for_status()  # Verifica si la solicitud fue exitosa
-    except requests.exceptions.RequestException as e:
-        print(f"Error al acceder a la página: {e}")
-        return []
 
-    sopa = BeautifulSoup(respuesta.text, 'html.parser')
-    
-    enlaces_imagenes = []
-    for img in sopa.find_all('img'):
-        src = img.get('src')
-        if src and re.search(r't\.(png|jpg|jpeg|gif)$', src):
-            src_modificado = re.sub(r't(?=\.(png|jpg|jpeg|gif)$)', '', src)
-            enlaces_imagenes.append(src_modificado)
-    
-    return enlaces_imagenes
-    
 def no_crear_pdf(folder_name, pdf_filename):
     try:
         pdf = FPDF()
@@ -104,21 +84,7 @@ def descargar_hentai(url, code, base_url, operation_type, protect_content, user_
         results = {
             "last_page_number": last_page_number
         }
-        if operation_type == "download":
-            img_urls = obtener_enlaces_imagenes(base_url, code)
 
-            if img_urls:  # Si hay imágenes disponibles
-                for img_url in img_urls:
-                    img_filename = os.path.join(folder_name, os.path.basename(img_url))
-
-                    try:
-                        with requests.get(img_url, headers={"User-Agent": "Mozilla/5.0"}) as img_response:
-                            img_response.raise_for_status()
-                            with open(img_filename, 'wb') as img_file:
-                                img_file.write(img_response.content)
-                    except requests.exceptions.RequestException:
-                        pass
-                        
 
         if operation_type == "cover":
             page_title = f"{page_title} \n{last_page_number} Páginas\n\n https://{base_url}/{code}/"
@@ -128,11 +94,33 @@ def descargar_hentai(url, code, base_url, operation_type, protect_content, user_
                 "caption": page_title,
                 "img_file": first_img_filename,
                 "last_page_number": last_page_number
-            }        
+            }
+            
+        if operation_type == "download":
+            page_number = 1
+            while True:
+                page_url = f"https://{base_url}/{code}/{page_number}/"
+                try:
+                    response = requests.get(page_url, headers={"User-Agent": "Mozilla/5.0"})
+                    response.raise_for_status()
+                except requests.exceptions.RequestException:
+                    break
 
+                soup = BeautifulSoup(response.content, 'html.parser')
+                img_tag = soup.find('img', {'src': re.compile(r'.*\.(png|jpg|jpeg|gif|bmp|webp)$')})
+                if not img_tag:
+                    break
 
+                img_url = img_tag['src']
+                img_extension = os.path.splitext(img_url)[1]
+                img_filename = os.path.join(folder_name, f"{page_number}{img_extension}")
+
+                with open(img_filename, 'wb') as img_file:
+                    img_file.write(requests.get(img_url, headers={"User-Agent": "Mozilla/5.0"}).content)
+
+                page_number += 1
+                
             page_title = f"{page_title}"
-
             page_title = re.sub("Page 1  nhentai hentai doujinshi and manga|Page 1  3Hentai", "", page_title)
             
             # Usar el título como nombre de archivo
