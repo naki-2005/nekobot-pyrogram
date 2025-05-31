@@ -90,6 +90,10 @@ async def set_mail(client, message):
     email = message.text.split(' ', 1)[1]
     user_id = message.from_user.id
     mail_confirmed = os.getenv('MAIL_CONFIRMED')
+    if user_id in admin_users:
+        user_emails[user_id] = email
+        await message.reply("Correo electrónico registrado automáticamente porque eres el administrador de bot")
+        return
     if mail_confirmed:
         confirmed_users = {
             item.split('=')[0]: item.split('=')[1].split(';') 
