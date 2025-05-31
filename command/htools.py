@@ -54,7 +54,7 @@ def crear_pdf_desde_imagenes(caption, imagen_dir, ruta_pdf):
             print(f"Error al procesar la imagen {imagen_name}: {e}")
 
     # Agregar la imagen "spam.png" al final
-    spam_path = os.path.join(imagen_dir, "spam.png")
+    spam_path = os.path.join(imagen_dir, "command/spam.png")
     if os.path.exists(spam_path):
         try:
             spam_img = Image.open(spam_path).convert("RGB")
