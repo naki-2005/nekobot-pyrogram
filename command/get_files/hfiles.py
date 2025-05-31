@@ -5,21 +5,6 @@ import zipfile
 from bs4 import BeautifulSoup
 from fpdf import FPDF
 
-
-def obtener_links_validos(img_links):
-    for i in range(10):
-        nuevo_links = [re.sub(r'https://t\d', f'https://i{i}', img_link) for img_link in img_links]
-        try:
-            response = requests.get(nuevo_links[0], stream=True)
-            response.raise_for_status()
-            print(f"Usando variante válida: {nuevo_links[0]}")
-            return nuevo_links  # Retorna la lista con los enlaces corregidos
-        except requests.exceptions.RequestException:
-            continue  # Prueba la siguiente variante
-
-    print("No se encontró ninguna variante válida.")
-    return None  # Si no hay éxito, retorna None
-
 def clean_string(s):
     return re.sub(r'[^a-zA-Z0-9\[\] ]', '', s)
 
@@ -112,38 +97,28 @@ def descargar_hentai(url, code, base_url, operation_type, protect_content, user_
             }
             
         if operation_type == "download":
-            main_page_url = f"https://{base_url}/{code}/"
-            response = requests.get(main_page_url, headers={"User-Agent": "Mozilla/5.0"})
-            soup = BeautifulSoup(response.content, 'html.parser')
-
-            img_tags = soup.find_all('img', {'src': re.compile('/\d+t\.(png|jpg|jpeg|gif|bmp|webp)$')})
-            
-            img_links = [re.sub(r'(/\d+)t(\.(png|jpg|jpeg|gif|bmp|webp))$', r'\1\2', img['src']) for img in img_tags]
-            #print(img_links)
-            download_folder = "downloads"
-            os.makedirs(download_folder, exist_ok=True)
-            img_links = [re.sub(r'https://t\d', 'https://i1', img_link) for img_link in img_links]
-
-            for img_url in img_links:
+            page_number = 1
+            while True:
+                page_url = f"https://{base_url}/{code}/{page_number}/"
                 try:
-                    
-                    #img_links = obtener_links_validos(img_links)
-                    response = requests.get(img_url, stream=True)
-                    response.raise_for_status()  # Manejo de errores
+                    response = requests.get(page_url, headers={"User-Agent": "Mozilla/5.0"})
+                    response.raise_for_status()
+                except requests.exceptions.RequestException:
+                    break
 
-                    # Obtener el nombre del archivo desde el URL
-                    file_name = os.path.join(download_folder, img_url.split("/")[-1])
+                soup = BeautifulSoup(response.content, 'html.parser')
+                img_tag = soup.find('img', {'src': re.compile(r'.*\.(png|jpg|jpeg|gif|bmp|webp)$')})
+                if not img_tag:
+                    break
 
-                    # Guardar la imagen
-                    with open(file_name, "wb") as file:
-                        for chunk in response.iter_content(1024):
-                            file.write(chunk)
+                img_url = img_tag['src']
+                img_extension = os.path.splitext(img_url)[1]
+                img_filename = os.path.join(folder_name, f"{page_number}{img_extension}")
 
-                    print(f"Descargado: {file_name}")
+                with open(img_filename, 'wb') as img_file:
+                    img_file.write(requests.get(img_url, headers={"User-Agent": "Mozilla/5.0"}).content)
 
-                except requests.exceptions.RequestException as e:
-                    print(f"Error al descargar {img_url}: {e}")
-
+                page_number += 1
                 
             page_title = f"{page_title}"
             page_title = re.sub("Page 1  nhentai hentai doujinshi and manga|Page 1  3Hentai", "", page_title)
