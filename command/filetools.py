@@ -112,8 +112,7 @@ async def handle_compress(client, message, username):
     
     except Exception as e:
         await message.reply(f'Error: {str(e)}')
-    
-        
+
 async def rename(client, message):
     reply_message = message.reply_to_message
 
@@ -124,18 +123,36 @@ async def rename(client, message):
 
     if reply_message and reply_message.media:
         try:
-            await message.reply("Descargando el archivo para renombrarlo...")
-            new_name = message.text.split(' ', 1)[1]
+            # Verificar si el usuario proporcionó un nuevo nombre
+            parts = message.text.split(' ', 1)
+            if len(parts) < 2:
+                await message.reply("Por favor, proporciona un nuevo nombre para el archivo.")
+                return
+
+            new_name = parts[1]
+
+            # Mensaje de descarga y eliminación al finalizar
+            download_msg = await message.reply("Descargando el archivo para renombrarlo...")
             file_path = await client.download_media(reply_message)
+            await download_msg.delete()
+
+            # Renombrar el archivo
             new_file_path = os.path.join(os.path.dirname(file_path), new_name)
             os.rename(file_path, new_file_path)
-            await message.reply("Subiendo el archivo con nuevo nombre...")
-            await client.send_document(message.chat.id, new_file_path)
+
+            # Mensaje de subida y eliminación al finalizar
+            upload_msg = await message.reply("Subiendo el archivo con nuevo nombre...")
+            await client.send_document(message.chat.id, new_file_path, reply_to_message_id=reply_message.message_id)
+            await upload_msg.delete()
+
+            # Eliminar el archivo local
             os.remove(new_file_path)
+
         except Exception as e:
             await message.reply(f'Error: {str(e)}')
     else:
         await message.reply('Ejecute el comando respondiendo a un archivo')
+        
 
 
 async def caption(client, chat_id, file_id, caption_text, message):
