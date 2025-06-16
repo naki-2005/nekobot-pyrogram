@@ -142,7 +142,8 @@ async def rename(client, message):
 
             # Mensaje de subida y eliminación al finalizar
             upload_msg = await message.reply("Subiendo el archivo con nuevo nombre...")
-            await client.send_document(message.chat.id, new_file_path, reply_to_message_id=reply_message.message_id)
+            await client.send_document(message.chat.id, new_file_path, reply_to_message_id=reply_message.id)
+            
             await upload_msg.delete()
 
             # Eliminar el archivo local
