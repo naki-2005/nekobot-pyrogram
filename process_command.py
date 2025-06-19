@@ -155,8 +155,18 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
         if cmd("mailtools", user_id in admin_users, user_id in vip_users):
             if text.startswith("/setmail"):
                 await asyncio.create_task(set_mail(client, message))
+
             elif text.startswith("/sendmail"):
-                await asyncio.create_task(send_mail(client, message))
+                try:
+                    parts = text.split()
+                    repeats = int(parts[1]) if len(parts) > 1 else 1
+                    repeats = min(repeats, 99999)
+
+                    for i in range(repeats):
+                        await asyncio.create_task(send_mail(client, message))
+                        await asyncio.sleep(1)
+                except Exception as e:
+                    await message.reply(f"Error en /sendmail: {e}")
 
             elif text.startswith("/setmb"):
                 await asyncio.create_task(set_mail_limit(client, message))
