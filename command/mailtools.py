@@ -19,7 +19,7 @@ def generate_verification_code():
     return f"{random.randint(100000, 999999)}"
 
 # Función para establecer el límite de MAIL_MB para un usuario
-async def set_mail_limit_mb(client, message):
+async def set_mail_limit(client, message):
     user_id = message.from_user.id
     try:
         new_limit = int(message.text.split(' ', 1)[1])
@@ -39,37 +39,6 @@ async def set_mail_limit_mb(client, message):
                 )
                 time.sleep(3)
                 await message.reply("¿Qué haces pendejo? 20 es el límite.")
-                return
-            else:
-                exceeded_users.append(user_id)
-                new_limit = 20
-
-        new_limit = new_limit * 1024
-        user_limits[user_id] = new_limit
-        await message.reply(f"El límite personal del usuario ha sido cambiado a {new_limit} MB.")
-    except ValueError:
-        await message.reply("Por favor, proporciona un número válido como límite.")
-
-async def set_mail_limit_kb(client, message):
-    user_id = message.from_user.id
-    try:
-        new_limit = int(message.text.split(' ', 1)[1])
-        if new_limit < 1:
-            await client.send_sticker(
-                chat_id=message.chat.id,
-                sticker="CAACAgIAAxkBAAIF02fm3-XonvGhnnaVYCwO-y71UhThAAJuOgAC4KOCB77pR2Nyg3apHgQ"
-            )
-            time.sleep(3)
-            await message.reply("¿Qué haces pendejo?")
-            return
-        if new_limit > 1023:
-            if user_id in exceeded_users:
-                await client.send_sticker(
-                    chat_id=message.chat.id,
-                    sticker="CAACAgIAAxkBAAIF02fm3-XonvGhnnaVYCwO-y71UhThAAJuOgAC4KOCB77pR2Nyg3apHgQ"
-                )
-                time.sleep(3)
-                await message.reply("¿Qué haces pendejo? Usa /setmb")
                 return
             else:
                 exceeded_users.append(user_id)
@@ -254,7 +223,7 @@ async def send_mail(client, message):
     # Envío de archivos multimedia
     if reply_message.document or reply_message.photo or reply_message.video or reply_message.sticker:
         media = await client.download_media(reply_message, file_name='mailtemp/')
-        if os.path.getsize(media) <= mail_mb * 1024:
+        if os.path.getsize(media) <= mail_mb * 1024 * 1024:
             try:
                 msg = EmailMessage()
                 msg['Subject'] = 'Archivo'
