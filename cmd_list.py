@@ -1,4 +1,5 @@
 from pyrogram.types import BotCommand
+import asyncio
 
 async def lista_cmd(app):
     await app.set_bot_commands([
