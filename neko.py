@@ -8,6 +8,7 @@ from command.help import handle_help_callback, handle_help
 import time  
 from data.stickers import saludos
 import random
+from cmd_list import lista_cmd
 from data.vars import api_id, api_hash, bot_token, admin_users, users, temp_users, temp_chats, vip_users, ban_users, MAIN_ADMIN, CODEWORD, BOT_IS_PUBLIC, PROTECT_CONTENT, allowed_ids, allowed_users
 nest_asyncio.apply()
 
@@ -59,6 +60,7 @@ async def process_access_command(message):
         
 @app.on_message()
 async def handle_message(client, message):
+    await lista_cmd(app)
     global bot_is_sleeping, start_sleep_time, sleep_duration
     user_id = message.from_user.id if message.from_user else ""
     username = message.from_user.username if message.from_user  else ""
