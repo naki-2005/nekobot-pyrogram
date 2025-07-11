@@ -151,7 +151,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
         return
 
     
-    elif text.startswith(("/setmail", "/sendmail", "/verify", "/setmb", "/setdelay", "multisetmail", "multisendmail")):
+    elif text.startswith(("/setmail", "/sendmail", "/verify", "/setmb", "/setdelay", "/multisetmail", "/multisendmail")):
         if cmd("mailtools", user_id in admin_users, user_id in vip_users):
             if text.startswith("/setmail"):
                 await asyncio.create_task(set_mail(client, message))
