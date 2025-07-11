@@ -287,6 +287,7 @@ async def send_mail(client, message):
 # Diccionario para almacenar configuraciones de múltiples correos
 multi_user_emails = {}
 
+
 async def multisetmail(client, message):
     user_id = message.from_user.id
     if user_id not in admin_users:
@@ -320,8 +321,8 @@ async def multisetmail(client, message):
                     await message.reply(f"Límite de tamaño inválido para {email}. Debe ser entre 1 y 100 MB.")
                     return
                     
-                if limit_msgs < 1 or limit_msgs > 10:
-                    await message.reply(f"Límite de mensajes inválido para {email}. Debe ser entre 1 y 10.")
+                if limit_msgs < 1 or limit_msgs > 100:
+                    await message.reply(f"Límite de mensajes inválido para {email}. Debe ser entre 1 y 100.")
                     return
                     
                 email_config[email] = {'size_limit': limit_mb, 'msg_limit': limit_msgs}
@@ -357,17 +358,26 @@ async def multisendmail(client, message):
     
     reply_message = message.reply_to_message
     
-    # Obtener el tamaño del archivo sin descargarlo
+    # Obtener información del archivo
+    original_filename = ""
     file_size = 0
+    
     if reply_message.document:
         file_size = reply_message.document.file_size
+        original_filename = reply_message.document.file_name
     elif reply_message.video:
         file_size = reply_message.video.file_size
+        original_filename = f"video_{reply_message.video.file_unique_id}.mp4"
     elif reply_message.photo:
         file_size = reply_message.photo.sizes[-1].file_size
+        original_filename = f"photo_{reply_message.photo.file_unique_id}.jpg"
     else:
         await message.reply("Solo se pueden enviar archivos (documentos, fotos o videos) con este comando.")
         return
+    
+    # Si no tenemos nombre de archivo, generamos uno por defecto
+    if not original_filename:
+        original_filename = f"archivo_{int(time.time())}.bin"
     
     total_size_mb = file_size / (1024 * 1024)
     
@@ -380,15 +390,15 @@ async def multisendmail(client, message):
         return
     
     # Si pasa la verificación de tamaño, procedemos con la descarga
-    processing_msg = await message.reply(f"📁 Archivo verificado ({total_size_mb:.2f} MB). Iniciando procesamiento...")
+    processing_msg = await message.reply(f"📁 Procesando: {original_filename} ({total_size_mb:.2f} MB)...")
     
     try:
         media = await client.download_media(reply_message, file_name='mailtemp/')
         
-        # Comprimir el archivo
-        archive_path = f"{media}.7z"
+        # Comprimir el archivo manteniendo el nombre original
+        archive_path = f"mailtemp/{original_filename}.7z"
         with py7zr.SevenZipFile(archive_path, 'w') as archive:
-            archive.write(media, os.path.basename(media))
+            archive.write(media, original_filename)
         
         # Leer el archivo comprimido
         with open(archive_path, 'rb') as f:
@@ -434,13 +444,16 @@ async def multisendmail(client, message):
                 current_position += chunk_size
                 remaining_msgs -= 1
                 
-                part_file = f"part_{part_num:03d}.7z"
+                # Nombre del archivo manteniendo el original con extensión .7z
+                attachment_filename = f"{original_filename}.7z"
+                part_file = f"mailtemp/{attachment_filename}.part{part_num}"
+                
                 with open(part_file, 'wb') as f:
                     f.write(part_data)
                 
                 try:
                     msg = EmailMessage()
-                    msg['Subject'] = f"Parte {part_num} de {total_parts}"
+                    msg['Subject'] = f"{original_filename} [{part_num}/{total_parts}]"
                     msg['From'] = f"Neko Bot <{os.getenv('MAILDIR')}>"
                     msg['To'] = email
                     
@@ -449,7 +462,7 @@ async def multisendmail(client, message):
                             f.read(),
                             maintype='application',
                             subtype='octet-stream',
-                            filename=part_file
+                            filename=attachment_filename  # Mantenemos el nombre original
                         )
                     
                     mail_server = os.getenv('MAIL_SERVER')
@@ -465,7 +478,7 @@ async def multisendmail(client, message):
                         server.send_message(msg)
                     
                     await processing_msg.edit_text(
-                        f"📤 Enviando parte {part_num}/{total_parts} a {email}\n"
+                        f"📤 Enviando {original_filename} [{part_num}/{total_parts}] a {email}\n"
                         f"📦 Tamaño: {chunk_size/(1024*1024):.2f}MB\n"
                         f"✉️ Mensajes restantes en este correo: {remaining_msgs}/{msg_limit}"
                     )
@@ -481,10 +494,10 @@ async def multisendmail(client, message):
                         os.remove(part_file)
                     return
     
-        await processing_msg.edit_text("✅ ¡Todos los archivos han sido enviados exitosamente!")
+        await processing_msg.edit_text(f"✅ {original_filename} enviado completamente!")
         
     except Exception as e:
-        await processing_msg.edit_text(f"❌ Error en el proceso: {str(e)}")
+        await processing_msg.edit_text(f"❌ Error procesando {original_filename}: {str(e)}")
         # Limpieza de archivos temporales en caso de error
         if 'media' in locals() and os.path.exists(media):
             os.remove(media)
