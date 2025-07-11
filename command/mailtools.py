@@ -6,7 +6,7 @@ import smtplib
 from email.message import EmailMessage
 import random
 from data.vars import admin_users, vip_users, video_limit, PROTECT_CONTENT
-
+import asyncio
 # Diccionarios para almacenar información de los usuarios
 user_emails = {}
 verification_storage = {}
