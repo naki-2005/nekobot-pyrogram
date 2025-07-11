@@ -282,3 +282,184 @@ async def send_mail(client, message):
                     time.sleep(float(mail_delay) if mail_delay else 0)
                 except Exception as e:
                     await message.reply(f"Error al enviar la parte {os.path.basename(part)}: {e}", protect_content=protect_content)
+
+# Diccionario para almacenar configuraciones de múltiples correos
+multi_user_emails = {}
+
+async def multisetmail(client, message):
+    user_id = message.from_user.id
+    if user_id not in admin_users:
+        await message.reply("Esta función es solo para administradores.", protect_content=True)
+        return
+    
+    try:
+        # Parsear la entrada: correo1@neko.mail:150,correo2@te.dt:100
+        emails_data = message.text.split(' ', 1)[1]
+        email_entries = [entry.strip() for entry in emails_data.split(',') if entry.strip()]
+        
+        email_config = {}
+        for entry in email_entries:
+            if ':' not in entry:
+                await message.reply(f"Formato incorrecto en: {entry}. Debe ser correo:limite_mb")
+                return
+            
+            email, limit_str = entry.rsplit(':', 1)
+            try:
+                limit = int(limit_str)
+                if limit < 1 or limit > 100:  # Puedes ajustar el límite máximo
+                    await message.reply(f"Límite inválido para {email}. Debe ser entre 1 y 100 MB.")
+                    return
+                email_config[email] = limit
+            except ValueError:
+                await message.reply(f"Límite inválido para {email}. Debe ser un número.")
+                return
+        
+        multi_user_emails[user_id] = email_config
+        await message.reply(
+            f"Configuración de múltiples correos actualizada:\n" +
+            "\n".join([f"{email}: {limit}MB" for email, limit in email_config.items()])
+        )
+    except Exception as e:
+        await message.reply(f"Error al procesar la configuración: {str(e)}")
+
+async def multisendmail(client, message):
+    user_id = message.from_user.id
+    if user_id not in admin_users:
+        await message.reply("Esta función es solo para administradores.", protect_content=True)
+        return
+    
+    if user_id not in multi_user_emails or not multi_user_emails[user_id]:
+        await message.reply("Primero configura los correos con /multisetmail correo1:limite,correo2:limite,...")
+        return
+    
+    if not message.reply_to_message:
+        await message.reply("Por favor, responde al mensaje que contiene el archivo a enviar.")
+        return
+    
+    reply_message = message.reply_to_message
+    
+    # Obtener el tamaño del archivo sin descargarlo
+    file_size = 0
+    if reply_message.document:
+        file_size = reply_message.document.file_size
+    elif reply_message.video:
+        file_size = reply_message.video.file_size
+    elif reply_message.photo:
+        # Para fotos tomamos el tamaño de la última versión (la más grande)
+        file_size = reply_message.photo.sizes[-1].file_size
+    else:
+        await message.reply("Solo se pueden enviar archivos (documentos, fotos o videos) con este comando.")
+        return
+    
+    total_size_mb = file_size / (1024 * 1024)
+    
+    # Calcular capacidad total de los correos
+    email_config = multi_user_emails[user_id]
+    total_capacity = sum(email_config.values())
+    
+    if total_size_mb > total_capacity:
+        await message.reply("Todos los correos registrados no pueden recibir este fichero")
+        return
+    
+    # Si pasa la verificación de tamaño, procedemos con la descarga
+    await message.reply(f"Archivo verificado ({total_size_mb:.2f} MB). Iniciando descarga y procesamiento...")
+    
+    try:
+        media = await client.download_media(reply_message, file_name='mailtemp/')
+        
+        # Comprimir el archivo
+        archive_path = f"{media}.7z"
+        with py7zr.SevenZipFile(archive_path, 'w') as archive:
+            archive.write(media, os.path.basename(media))
+        
+        # Leer el archivo comprimido
+        with open(archive_path, 'rb') as f:
+            compressed_data = f.read()
+        
+        os.remove(archive_path)
+        os.remove(media)
+        
+        current_position = 0
+        part_num = 1
+        total_parts = 0
+        
+        # Calcular número total de partes
+        for email, limit in email_config.items():
+            limit_bytes = limit * 1024 * 1024
+            remaining_for_email = limit_bytes
+            
+            while current_position < len(compressed_data) and remaining_for_email > 0:
+                chunk_size = min(remaining_for_email, len(compressed_data) - current_position)
+                total_parts += 1
+                current_position += chunk_size
+                remaining_for_email -= chunk_size
+        
+        current_position = 0
+        part_num = 1
+        
+        # Enviar las partes
+        for email, limit in email_config.items():
+            if current_position >= len(compressed_data):
+                break
+                
+            limit_bytes = limit * 1024 * 1024
+            remaining_for_email = limit_bytes
+            
+            while current_position < len(compressed_data) and remaining_for_email > 0:
+                chunk_size = min(remaining_for_email, len(compressed_data) - current_position)
+                part_data = compressed_data[current_position:current_position + chunk_size]
+                current_position += chunk_size
+                remaining_for_email -= chunk_size
+                
+                part_file = f"part_{part_num:03d}.7z"
+                with open(part_file, 'wb') as f:
+                    f.write(part_data)
+                
+                try:
+                    msg = EmailMessage()
+                    msg['Subject'] = f"Parte {part_num} de {total_parts}"
+                    msg['From'] = f"Neko Bot <{os.getenv('MAILDIR')}>"
+                    msg['To'] = email
+                    
+                    with open(part_file, 'rb') as f:
+                        msg.add_attachment(
+                            f.read(),
+                            maintype='application',
+                            subtype='octet-stream',
+                            filename=part_file
+                        )
+                    
+                    mail_server = os.getenv('MAIL_SERVER')
+                    server_details = mail_server.split(':')
+                    smtp_host = server_details[0]
+                    smtp_port = int(server_details[1])
+                    security_enabled = len(server_details) > 2 and server_details[2].lower() == 'tls'
+                    
+                    with smtplib.SMTP(smtp_host, smtp_port) as server:
+                        if security_enabled:
+                            server.starttls()
+                        server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
+                        server.send_message(msg)
+                    
+                    await message.reply(f"✅ Parte {part_num}/{total_parts} enviada a {email}")
+                    os.remove(part_file)
+                    part_num += 1
+                    
+                    # Pequeño delay entre envíos
+                    await asyncio.sleep(2)
+                    
+                except Exception as e:
+                    await message.reply(f"❌ Error al enviar parte {part_num}: {str(e)}")
+                    if os.path.exists(part_file):
+                        os.remove(part_file)
+                    return
+    
+        await message.reply("🎉 ¡Todos los archivos han sido enviados exitosamente!")
+        
+    except Exception as e:
+        await message.reply(f"❌ Error en el proceso: {str(e)}")
+        # Limpieza de archivos temporales en caso de error
+        if 'media' in locals() and os.path.exists(media):
+            os.remove(media)
+        if 'archive_path' in locals() and os.path.exists(archive_path):
+            os.remove(archive_path)
