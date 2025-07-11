@@ -293,34 +293,52 @@ async def multisetmail(client, message):
         return
     
     try:
-        # Parsear la entrada: correo1@neko.mail:150,correo2@te.dt:100
+        # Parsear la entrada: correo1@ejemplo:20*4,correo2@otro:10*2
         emails_data = message.text.split(' ', 1)[1]
         email_entries = [entry.strip() for entry in emails_data.split(',') if entry.strip()]
         
         email_config = {}
         for entry in email_entries:
             if ':' not in entry:
-                await message.reply(f"Formato incorrecto en: {entry}. Debe ser correo:limite_mb")
+                await message.reply(f"Formato incorrecto en: {entry}. Debe ser correo:limite_mb*limite_mensajes")
                 return
             
-            email, limit_str = entry.rsplit(':', 1)
+            email, limits = entry.rsplit(':', 1)
+            
+            if '*' not in limits:
+                await message.reply(f"Formato incorrecto en: {entry}. Debe incluir límite de mensajes (ej: 20*4)")
+                return
+                
+            limit_mb, limit_msgs = limits.split('*')
+            
             try:
-                limit = int(limit_str)
-                if limit < 1 or limit > 100:  # Puedes ajustar el límite máximo
-                    await message.reply(f"Límite inválido para {email}. Debe ser entre 1 y 100 MB.")
+                limit_mb = int(limit_mb)
+                limit_msgs = int(limit_msgs)
+                
+                if limit_mb < 1 or limit_mb > 100:
+                    await message.reply(f"Límite de tamaño inválido para {email}. Debe ser entre 1 y 100 MB.")
                     return
-                email_config[email] = limit
+                    
+                if limit_msgs < 1 or limit_msgs > 10:
+                    await message.reply(f"Límite de mensajes inválido para {email}. Debe ser entre 1 y 10.")
+                    return
+                    
+                email_config[email] = {'size_limit': limit_mb, 'msg_limit': limit_msgs}
+                
             except ValueError:
-                await message.reply(f"Límite inválido para {email}. Debe ser un número.")
+                await message.reply(f"Límites inválidos para {email}. Deben ser números.")
                 return
         
         multi_user_emails[user_id] = email_config
-        await message.reply(
-            f"Configuración de múltiples correos actualizada:\n" +
-            "\n".join([f"{email}: {limit}MB" for email, limit in email_config.items()])
-        )
+        response = "✅ Configuración de múltiples correos actualizada:\n"
+        response += "\n".join([
+            f"{email}: {config['size_limit']}MB*{config['msg_limit']} mensajes" 
+            for email, config in email_config.items()
+        ])
+        await message.reply(response)
+        
     except Exception as e:
-        await message.reply(f"Error al procesar la configuración: {str(e)}")
+        await message.reply(f"❌ Error al procesar la configuración: {str(e)}")
 
 async def multisendmail(client, message):
     user_id = message.from_user.id
@@ -329,7 +347,7 @@ async def multisendmail(client, message):
         return
     
     if user_id not in multi_user_emails or not multi_user_emails[user_id]:
-        await message.reply("Primero configura los correos con /multisetmail correo1:limite,correo2:limite,...")
+        await message.reply("Primero configura los correos con /multisetmail correo1:limite*msgs,correo2:limite*msgs,...")
         return
     
     if not message.reply_to_message:
@@ -345,7 +363,6 @@ async def multisendmail(client, message):
     elif reply_message.video:
         file_size = reply_message.video.file_size
     elif reply_message.photo:
-        # Para fotos tomamos el tamaño de la última versión (la más grande)
         file_size = reply_message.photo.sizes[-1].file_size
     else:
         await message.reply("Solo se pueden enviar archivos (documentos, fotos o videos) con este comando.")
@@ -355,14 +372,14 @@ async def multisendmail(client, message):
     
     # Calcular capacidad total de los correos
     email_config = multi_user_emails[user_id]
-    total_capacity = sum(email_config.values())
+    total_capacity = sum(conf['size_limit'] * conf['msg_limit'] for conf in email_config.values())
     
     if total_size_mb > total_capacity:
-        await message.reply("Todos los correos registrados no pueden recibir este fichero")
+        await message.reply("❌ Todos los correos registrados no pueden recibir este fichero")
         return
     
     # Si pasa la verificación de tamaño, procedemos con la descarga
-    await message.reply(f"Archivo verificado ({total_size_mb:.2f} MB). Iniciando descarga y procesamiento...")
+    processing_msg = await message.reply(f"📁 Archivo verificado ({total_size_mb:.2f} MB). Iniciando procesamiento...")
     
     try:
         media = await client.download_media(reply_message, file_name='mailtemp/')
@@ -384,32 +401,37 @@ async def multisendmail(client, message):
         total_parts = 0
         
         # Calcular número total de partes
-        for email, limit in email_config.items():
-            limit_bytes = limit * 1024 * 1024
-            remaining_for_email = limit_bytes
+        for email, config in email_config.items():
+            size_limit = config['size_limit'] * 1024 * 1024
+            msg_limit = config['msg_limit']
             
-            while current_position < len(compressed_data) and remaining_for_email > 0:
-                chunk_size = min(remaining_for_email, len(compressed_data) - current_position)
+            remaining_for_email = size_limit * msg_limit
+            remaining_msgs = msg_limit
+            
+            while (current_position < len(compressed_data) and (remaining_for_email > 0) and (remaining_msgs > 0):
+                chunk_size = min(size_limit, len(compressed_data) - current_position, remaining_for_email)
                 total_parts += 1
                 current_position += chunk_size
                 remaining_for_email -= chunk_size
+                remaining_msgs -= 1
         
         current_position = 0
         part_num = 1
         
         # Enviar las partes
-        for email, limit in email_config.items():
+        for email, config in email_config.items():
             if current_position >= len(compressed_data):
                 break
                 
-            limit_bytes = limit * 1024 * 1024
-            remaining_for_email = limit_bytes
+            size_limit = config['size_limit'] * 1024 * 1024
+            msg_limit = config['msg_limit']
+            remaining_msgs = msg_limit
             
-            while current_position < len(compressed_data) and remaining_for_email > 0:
-                chunk_size = min(remaining_for_email, len(compressed_data) - current_position)
+            while (current_position < len(compressed_data)) and (remaining_msgs > 0):
+                chunk_size = min(size_limit, len(compressed_data) - current_position)
                 part_data = compressed_data[current_position:current_position + chunk_size]
                 current_position += chunk_size
-                remaining_for_email -= chunk_size
+                remaining_msgs -= 1
                 
                 part_file = f"part_{part_num:03d}.7z"
                 with open(part_file, 'wb') as f:
@@ -441,7 +463,11 @@ async def multisendmail(client, message):
                         server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
                         server.send_message(msg)
                     
-                    await message.reply(f"✅ Parte {part_num}/{total_parts} enviada a {email}")
+                    await processing_msg.edit_text(
+                        f"📤 Enviando parte {part_num}/{total_parts} a {email}\n"
+                        f"📦 Tamaño: {chunk_size/(1024*1024):.2f}MB\n"
+                        f"✉️ Mensajes restantes en este correo: {remaining_msgs}/{msg_limit}"
+                    )
                     os.remove(part_file)
                     part_num += 1
                     
@@ -449,15 +475,15 @@ async def multisendmail(client, message):
                     await asyncio.sleep(2)
                     
                 except Exception as e:
-                    await message.reply(f"❌ Error al enviar parte {part_num}: {str(e)}")
+                    await processing_msg.edit_text(f"❌ Error al enviar parte {part_num}: {str(e)}")
                     if os.path.exists(part_file):
                         os.remove(part_file)
                     return
     
-        await message.reply("🎉 ¡Todos los archivos han sido enviados exitosamente!")
+        await processing_msg.edit_text("✅ ¡Todos los archivos han sido enviados exitosamente!")
         
     except Exception as e:
-        await message.reply(f"❌ Error en el proceso: {str(e)}")
+        await processing_msg.edit_text(f"❌ Error en el proceso: {str(e)}")
         # Limpieza de archivos temporales en caso de error
         if 'media' in locals() and os.path.exists(media):
             os.remove(media)
