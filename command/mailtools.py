@@ -283,6 +283,7 @@ async def send_mail(client, message):
                 except Exception as e:
                     await message.reply(f"Error al enviar la parte {os.path.basename(part)}: {e}", protect_content=protect_content)
 
+
 # Diccionario para almacenar configuraciones de múltiples correos
 multi_user_emails = {}
 
@@ -408,7 +409,7 @@ async def multisendmail(client, message):
             remaining_for_email = size_limit * msg_limit
             remaining_msgs = msg_limit
             
-            while (current_position < len(compressed_data) and (remaining_for_email > 0) and (remaining_msgs > 0):
+            while (current_position < len(compressed_data)) and (remaining_for_email > 0) and (remaining_msgs > 0):
                 chunk_size = min(size_limit, len(compressed_data) - current_position, remaining_for_email)
                 total_parts += 1
                 current_position += chunk_size
