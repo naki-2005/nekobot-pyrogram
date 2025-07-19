@@ -6,6 +6,7 @@ import threading
 import subprocess
 from io import BytesIO
 from PIL import Image
+from telegram import InputFile
 
 defaultselectionmap = {}
 
@@ -116,32 +117,32 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             continue
 
         progresomsg = await message.reply(
-            f"📦 Generando archivo para {nombrebase} ({len(imagenes)} páginas)...\nProgreso 0/{len(imagenes)}"
+            f"📦 Descargando archivos desde el servidor para {nombrebase}..."
         )
 
         try:
             if seleccion in ["cbz", "both"]:
                 cbz_url = f"https://naki-hdl.onrender.com/direct/dl1/{codigo}"
-                resp = requests.get(cbz_url, timeout=30)
+                resp = requests.get(cbz_url, timeout=600)
                 resp.raise_for_status()
                 archivo_cbz = BytesIO(resp.content)
+                archivo_cbz.name = f"{nombrebase}.cbz"
                 await client.send_document(
                     chat_id=message.chat.id,
-                    document=archivo_cbz,
-                    filename=f"{nombrebase}.cbz",
+                    document=InputFile(archivo_cbz),
                     caption=nombrebase,
                     protect_content=proteger
                 )
 
             if seleccion in ["pdf", "both"]:
                 pdf_url = f"https://naki-hdl.onrender.com/direct/dl1-pdf/{codigo}"
-                resp = requests.get(pdf_url, timeout=30)
+                resp = requests.get(pdf_url, timeout=600)
                 resp.raise_for_status()
                 archivo_pdf = BytesIO(resp.content)
+                archivo_pdf.name = f"{nombrebase}.pdf"
                 await client.send_document(
                     chat_id=message.chat.id,
-                    document=archivo_pdf,
-                    filename=f"{nombrebase}.pdf",
+                    document=InputFile(archivo_pdf),
                     caption=nombrebase,
                     protect_content=proteger
                 )
