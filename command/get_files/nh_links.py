@@ -3,8 +3,13 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import argparse
 
-def obtener_info_y_links(code):
-    web_1 = "https://nhentai.net"  # ← Personaliza tu URL base aquí
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
+import argparse
+
+def obtener_info_y_links(code, cover=False):
+    web_1 = "https://nhentai.net"
 
     base_url = f"{web_1}/g/{code}"
     headers = {
@@ -46,7 +51,25 @@ def obtener_info_y_links(code):
                         if partes:
                             texto_final.append(" ".join(partes))
 
-    # 🖼️ Obtener links de imágenes
+    # 🖼️ Obtener una sola imagen si es COVER
+    if cover:
+        primera_pagina = f"{web_1}/g/{code}/1/"
+        try:
+            res = requests.get(primera_pagina, headers=headers, timeout=10)
+            res.raise_for_status()
+            sub_soup = BeautifulSoup(res.text, "html.parser")
+            section = sub_soup.find("section", id="image-container")
+            if section:
+                img_tag = section.find("img")
+                if img_tag and img_tag.get("src"):
+                    img_url = urljoin(web_1, img_tag["src"])
+                    return {"texto": "\n".join(texto_final), "imagenes": [img_url]}
+        except requests.exceptions.RequestException:
+            return {"texto": "\n".join(texto_final), "imagenes": []}
+
+        return {"texto": "\n".join(texto_final), "imagenes": []}
+
+    # 🖼️ Obtener todas las imágenes si NO es cover
     imagenes = []
     thumbnail_container = content.find("div", id="thumbnail-container")
     thumbs = thumbnail_container.find("div", class_="thumbs") if thumbnail_container else None
@@ -74,13 +97,14 @@ def obtener_info_y_links(code):
         "imagenes": imagenes
     }
 
-# 🎯 Argumentos CLI
+# 🎯 CLI de prueba
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Obtener texto e imágenes por código")
     parser.add_argument("-code", "-C", dest="code", required=True, help="Código del recurso")
+    parser.add_argument("--cover", action="store_true", help="Solo obtener portada")
     args = parser.parse_args()
 
-    datos = obtener_info_y_links(args.code)
+    datos = obtener_info_y_links(args.code, cover=args.cover)
 
     print("📄 Información textual:")
     print(datos["texto"])
