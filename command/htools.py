@@ -58,7 +58,7 @@ def obtenerporcli(codigo, tipo, cover):
         print("Error ejecutando script externo", e)
         return {"texto": "", "imagenes": []}
 
-async def nhcombinedoperation(client, message, codigos, tipo, proteger, userid, operacion):
+async def nh_combined_operation(client, message, codigos, tipo, proteger, userid, operacion):
     seleccion = defaultselectionmap.get(userid, "cbz")
 
     for codigo in codigos:
