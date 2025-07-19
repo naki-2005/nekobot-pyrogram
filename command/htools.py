@@ -3,6 +3,7 @@ import re
 import tempfile
 import shutil
 import requests
+import threading
 from PIL import Image
 import aiofiles
 from command.get_files.nh_links import obtener_info_y_links as obtener_nh
@@ -22,11 +23,21 @@ def cambiar_default_selection(user_id, nueva_seleccion):
 def limpiar_nombre(nombre):
     return re.sub(r'[\\/:*?"<>|]', '', nombre).strip()
 
+def descargar_imagen(url, path):
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        with open(path, 'wb') as f:
+            f.write(resp.content)
+    except Exception:
+        pass
+
 async def nh_combined_operation(client, message, codigos, tipo, proteger, user_id, operacion):
-    seleccion = default_selection_map.get(user_id, "cbz")  # default lowercase
+    seleccion = default_selection_map.get(user_id, "cbz")  # Valor predeterminado
 
     for codigo in codigos:
-        datos = obtener_nh(codigo) if tipo == "nh" else obtener_3h(codigo)
+        # 🔍 Se pasa el segundo argumento: True si es operación 'cover'
+        datos = obtener_nh(codigo, operacion == "cover") if tipo == "nh" else obtener_3h(codigo, operacion == "cover")
         nombre = limpiar_nombre(datos["texto"]) or f"{tipo}_{codigo}"
         imagenes = datos["imagenes"]
 
@@ -34,43 +45,42 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, user_i
             await message.reply(f"❌ No se encontraron imágenes para {codigo}.")
             continue
 
-        if operacion == "cover":
-            try:
-                resp = requests.get(imagenes[0], timeout=10)
-                resp.raise_for_status()
-                img_path = f"{nombre}_cover.jpg"
-                with open(img_path, 'wb') as f:
-                    f.write(resp.content)
+        # 🖼️ Siempre enviar preview de la primera imagen
+        try:
+            preview_path = f"{nombre}_preview.jpg"
+            descargar_imagen(imagenes[0], preview_path)
+            caption = f"{nombre}\nNúmero de páginas: {len(imagenes)}"
+            await client.send_photo(
+                chat_id=message.chat.id,
+                photo=preview_path,
+                caption=caption,
+                protect_content=proteger
+            )
+            os.remove(preview_path)
+        except Exception:
+            pass
 
-                caption = f"{nombre}\nNúmero de páginas: {len(imagenes)}"
-                await client.send_photo(
-                    chat_id=message.chat.id,
-                    photo=img_path,
-                    caption=caption,
-                    protect_content=proteger
-                )
-                os.remove(img_path)
-            except Exception:
-                await message.reply(f"❌ Error al obtener la portada de {nombre}.")
+        if operacion == "cover":
             continue
 
         await message.reply(f"📦 Generando archivo para {nombre} ({len(imagenes)} páginas)...")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             paths = []
+            threads = []
 
             for idx, url in enumerate(imagenes):
-                try:
-                    resp = requests.get(url, timeout=10)
-                    resp.raise_for_status()
-                    ext = os.path.splitext(url)[1].lower()
-                    ext = ext if ext in [".jpg", ".jpeg", ".png"] else ".jpg"
-                    path = os.path.join(tmpdir, f"{idx+1:03d}{ext}")
-                    async with aiofiles.open(path, 'wb') as f:
-                        await f.write(resp.content)
-                    paths.append(path)
-                except Exception:
-                    continue
+                ext = os.path.splitext(url)[1].lower()
+                ext = ext if ext in [".jpg", ".jpeg", ".png"] else ".jpg"
+                path = os.path.join(tmpdir, f"{idx+1:03d}{ext}")
+                t = threading.Thread(target=descargar_imagen, args=(url, path))
+                threads.append(t)
+                paths.append(path)
+
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
 
             archivos = []
 
@@ -89,7 +99,6 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, user_i
                             with Image.open(path) as im:
                                 main_images.append(im.convert("RGB"))
                         except Exception:
-                            # Transformar imagen que falla en el append
                             try:
                                 with Image.open(path) as bad_img:
                                     fixed = bad_img.convert("RGB")
@@ -110,4 +119,3 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, user_i
                     protect_content=proteger
                 )
                 os.remove(archivo)
-
