@@ -18,6 +18,7 @@ def cambiar_default_selection(userid, nuevaseleccion):
     defaultselectionmap[userid] = nuevaseleccion
 
 def limpiarnombre(nombre):
+    # Solo letras, números y espacios
     return re.sub(r'[^a-zA-Z0-9 ]', '', nombre.replace('\n', ' ')).strip()
 
 def descargarimagen(url, path):
@@ -30,8 +31,8 @@ def descargarimagen(url, path):
         pass
 
 def obtenerporcli(codigo, tipo, cover):
-    script = "nhlinkspy" if tipo == "nh" else "h3linkspy"
-    path = os.path.join("command", "getfiles", script)
+    script = "nh_links.py" if tipo == "nh" else "h3_links.py"
+    path = os.path.join("command", "get_files", script)
     comando = ["python3", path, "-C", codigo]
     if cover:
         comando.append("--cover")
@@ -44,9 +45,9 @@ def obtenerporcli(codigo, tipo, cover):
 
         modotexto = False
         for linea in salida:
-            if linea.strip().startswith(""):
+            if linea.strip().startswith("📄"):
                 modotexto = True
-            elif linea.strip().startswith(""):
+            elif linea.strip().startswith("🖼️"):
                 modotexto = False
             elif modotexto:
                 texto += linea.strip() + " "
@@ -55,7 +56,7 @@ def obtenerporcli(codigo, tipo, cover):
 
         return {"texto": texto.strip(), "imagenes": imagenes}
     except Exception as e:
-        print("Error ejecutando script externo", e)
+        print("❌ Error ejecutando script externo:", e)
         return {"texto": "", "imagenes": []}
 
 async def nh_combined_operation(client, message, codigos, tipo, proteger, userid, operacion):
@@ -67,9 +68,10 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
         imagenes = datos["imagenes"]
 
         if not imagenes:
-            await message.reply(f"No se encontraron imagenes para {codigo}")
+            await message.reply(f"❌ No se encontraron imágenes para {codigo}")
             continue
 
+        # 🖼️ Enviar preview con múltiples intentos
         try:
             previewurl = imagenes[0]
             ext = os.path.splitext(previewurl)[1].lower()
@@ -80,7 +82,7 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             await client.send_photo(
                 chat_id=message.chat.id,
                 photo=previewpath,
-                caption=f"{nombrebase} Numero de paginas {len(imagenes)}",
+                caption=f"{nombrebase} Número de páginas {len(imagenes)}",
                 protect_content=proteger
             )
             os.remove(previewpath)
@@ -94,7 +96,7 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                 await client.send_photo(
                     chat_id=message.chat.id,
                     photo=fallbackpath,
-                    caption=f"{nombrebase} Numero de paginas {len(imagenes)}",
+                    caption=f"{nombrebase} Número de páginas {len(imagenes)}",
                     protect_content=proteger
                 )
                 os.remove(fallbackpath)
@@ -105,18 +107,18 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                     await client.send_document(
                         chat_id=message.chat.id,
                         document=previewpath,
-                        caption=f"{nombrebase} Numero de paginas {len(imagenes)}",
+                        caption=f"{nombrebase} Número de páginas {len(imagenes)}",
                         protect_content=proteger
                     )
                     os.remove(previewpath)
                 except Exception as e:
-                    await message.reply(f"No pude enviar la portada {type(e).__name__} {e}")
+                    await message.reply(f"❌ No pude enviar la portada. {type(e).__name__}: {e}")
 
         if operacion == "cover":
             continue
 
         progresomsg = await message.reply(
-            f"Generando archivo para {nombrebase} {len(imagenes)} paginas Progreso 0 de {len(imagenes)}"
+            f"📦 Generando archivo para {nombrebase} ({len(imagenes)} páginas)...\nProgreso 0/{len(imagenes)}"
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -134,7 +136,7 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                 if (idx + 1) % 5 == 0 or (idx + 1) == len(imagenes):
                     try:
                         await progresomsg.edit_text(
-                            f"Generando archivo para {nombrebase} {len(imagenes)} paginas Progreso {idx + 1} de {len(imagenes)}"
+                            f"📦 Generando archivo para {nombrebase} ({len(imagenes)} páginas)...\nProgreso {idx + 1}/{len(imagenes)}"
                         )
                     except Exception:
                         pass
@@ -171,7 +173,7 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                         mainimages[0].save(pdfpath, save_all=True, append_images=mainimages[1:])
                         archivos.append(pdfpath)
                 except Exception:
-                    await message.reply(f"Error al generar PDF para {nombrebase}")
+                    await message.reply(f"❌ Error al generar PDF para {nombrebase}")
 
             for archivo in archivos:
                 await client.send_document(
