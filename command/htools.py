@@ -9,7 +9,7 @@ from PIL import Image
 
 defaultselectionmap = {}
 
-def cambiardefaultselection(userid, nuevaseleccion):
+def cambiar_default_selection(userid, nuevaseleccion):
     opcionesvalidas = [None, "pdf", "cbz", "both"]
     if nuevaseleccion is not None:
         nuevaseleccion = nuevaseleccion.lower()
