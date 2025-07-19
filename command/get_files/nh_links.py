@@ -3,14 +3,8 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import argparse
 
-import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin
-import argparse
-
 def obtener_info_y_links(code, cover=False):
     web_1 = "https://nhentai.net"
-
     base_url = f"{web_1}/g/{code}"
     headers = {
         "User-Agent": (
@@ -25,14 +19,14 @@ def obtener_info_y_links(code, cover=False):
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         print("❌ Error:", e)
-        return {"texto": "", "imagenes": []}
+        return {"texto": "", "imagenes": [], "total_paginas": 0}
 
     soup = BeautifulSoup(response.text, "html.parser")
     content = soup.find("div", id="content")
     if not content:
-        return {"texto": "", "imagenes": []}
+        return {"texto": "", "imagenes": [], "total_paginas": 0}
 
-    # 🧠 Extraer texto
+    # 📄 Extraer texto
     texto_final = []
     info_div = content.find("div", id="bigcontainer")
     if info_div:
@@ -51,7 +45,13 @@ def obtener_info_y_links(code, cover=False):
                         if partes:
                             texto_final.append(" ".join(partes))
 
-    # 🖼️ Obtener una sola imagen si es COVER
+    # 🔢 Detectar total de thumbnails
+    thumbnail_container = content.find("div", id="thumbnail-container")
+    thumbs = thumbnail_container.find("div", class_="thumbs") if thumbnail_container else None
+    thumb_divs = thumbs.find_all("div", class_="thumb-container") if thumbs else []
+    total_paginas = len(thumb_divs)
+
+    # 🖼️ Modo cover: buscar solo la primera imagen
     if cover:
         primera_pagina = f"{web_1}/g/{code}/1/"
         try:
@@ -63,20 +63,19 @@ def obtener_info_y_links(code, cover=False):
                 img_tag = section.find("img")
                 if img_tag and img_tag.get("src"):
                     img_url = urljoin(web_1, img_tag["src"])
-                    return {"texto": "\n".join(texto_final), "imagenes": [img_url]}
+                    return {
+                        "texto": "\n".join(texto_final),
+                        "imagenes": [img_url],
+                        "total_paginas": total_paginas
+                    }
         except requests.exceptions.RequestException:
-            return {"texto": "\n".join(texto_final), "imagenes": []}
+            return {"texto": "\n".join(texto_final), "imagenes": [], "total_paginas": total_paginas}
 
-        return {"texto": "\n".join(texto_final), "imagenes": []}
+        return {"texto": "\n".join(texto_final), "imagenes": [], "total_paginas": total_paginas}
 
-    # 🖼️ Obtener todas las imágenes si NO es cover
+    # 🖼️ Obtener todas las imágenes
     imagenes = []
-    thumbnail_container = content.find("div", id="thumbnail-container")
-    thumbs = thumbnail_container.find("div", class_="thumbs") if thumbnail_container else None
-    thumb_divs = thumbs.find_all("div", class_="thumb-container") if thumbs else []
-    total = len(thumb_divs)
-
-    for i in range(1, total + 1):
+    for i in range(1, total_paginas + 1):
         pagina_url = f"{web_1}/g/{code}/{i}/"
         try:
             res = requests.get(pagina_url, headers=headers, timeout=10)
@@ -94,7 +93,8 @@ def obtener_info_y_links(code, cover=False):
 
     return {
         "texto": "\n".join(texto_final),
-        "imagenes": imagenes
+        "imagenes": imagenes,
+        "total_paginas": total_paginas
     }
 
 # 🎯 CLI de prueba
@@ -108,6 +108,8 @@ if __name__ == "__main__":
 
     print("📄 Información textual:")
     print(datos["texto"])
+    print(f"\n🧮 Total de páginas: {datos['total_paginas']}")
+
     print("\n🖼️ URLs de imágenes:")
     for url in datos["imagenes"]:
         print(url)
