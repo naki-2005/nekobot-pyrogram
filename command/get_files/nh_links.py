@@ -26,7 +26,7 @@ def obtener_info_y_links(code, cover=False):
     if not content:
         return {"texto": "", "imagenes": [], "total_paginas": 0}
 
-    # 📄 Extraer texto
+    # 📄 Extraer texto del encabezado
     texto_final = []
     info_div = content.find("div", id="bigcontainer")
     if info_div:
@@ -51,7 +51,7 @@ def obtener_info_y_links(code, cover=False):
     thumb_divs = thumbs.find_all("div", class_="thumb-container") if thumbs else []
     total_paginas = len(thumb_divs)
 
-    # 🖼️ Modo cover: buscar solo la primera imagen
+    # 🖼️ Solo portada
     if cover:
         primera_pagina = f"{web_1}/g/{code}/1/"
         try:
@@ -69,11 +69,15 @@ def obtener_info_y_links(code, cover=False):
                         "total_paginas": total_paginas
                     }
         except requests.exceptions.RequestException:
-            return {"texto": "\n".join(texto_final), "imagenes": [], "total_paginas": total_paginas}
+            pass
 
-        return {"texto": "\n".join(texto_final), "imagenes": [], "total_paginas": total_paginas}
+        return {
+            "texto": "\n".join(texto_final),
+            "imagenes": [],
+            "total_paginas": total_paginas
+        }
 
-    # 🖼️ Obtener todas las imágenes
+    # 🖼️ Todas las imágenes
     imagenes = []
     for i in range(1, total_paginas + 1):
         pagina_url = f"{web_1}/g/{code}/{i}/"
@@ -84,12 +88,14 @@ def obtener_info_y_links(code, cover=False):
             continue
 
         sub_soup = BeautifulSoup(res.text, "html.parser")
-        section = sub_soup.find("section", id="image-container")
+        section = sub_soup.find("div", id="content")
         if section:
-            img_tag = section.find("img")
-            if img_tag and img_tag.get("src"):
-                img_url = urljoin(web_1, img_tag["src"])
-                imagenes.append(img_url)
+            section_img = section.find("section", id="image-container")
+            if section_img:
+                img_tag = section_img.find("img")
+                if img_tag and img_tag.get("src"):
+                    img_url = urljoin(web_1, img_tag["src"])
+                    imagenes.append(img_url)
 
     return {
         "texto": "\n".join(texto_final),
@@ -109,7 +115,6 @@ if __name__ == "__main__":
     print("📄 Información textual:")
     print(datos["texto"])
     print(f"\n🧮 Total de páginas: {datos['total_paginas']}")
-
     print("\n🖼️ URLs de imágenes:")
     for url in datos["imagenes"]:
         print(url)
