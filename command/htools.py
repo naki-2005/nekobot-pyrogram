@@ -6,7 +6,7 @@ import requests
 from PIL import Image
 import aiofiles
 from command.get_files.nh_links import obtener_info_y_links as obtener_nh
-from command.get_files.3h_links import obtener_titulo_y_imagenes as obtener_3h
+from command.get_files.h3_links import obtener_titulo_y_imagenes as obtener_3h
 
 default_selection_map = {}
 
