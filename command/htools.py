@@ -14,7 +14,7 @@ def cambiar_default_selection(user_id, nueva_seleccion):
     if nueva_seleccion is not None:
         nueva_seleccion = nueva_seleccion.lower()
     if nueva_seleccion not in opciones_validas:
-        raise ValueError("Selección inválida. Debe ser None, 'PDF', 'CBZ', o 'Both'.")
+        raise ValueError("Selección inválida. Debe ser None, 'pdf', 'cbz', o 'both'.")
     default_selection_map[user_id] = nueva_seleccion
 
 def limpiar_nombre(nombre):
@@ -70,7 +70,7 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, user_i
             await message.reply(f"❌ No se encontraron imágenes para {codigo}.")
             continue
 
-        # 🖼️ Enviar preview con conversión .webp → .png si falla
+        # 🖼️ Preview con fallback .png y documento si todo falla
         try:
             preview_url = imagenes[0]
             ext = os.path.splitext(preview_url)[1].lower()
@@ -85,11 +85,13 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, user_i
                 protect_content=proteger
             )
             os.remove(preview_path)
+
         except Exception:
             fallback_path = f"{nombre}_fallback.png"
             try:
                 with Image.open(preview_path) as img:
                     img.convert("RGB").save(fallback_path)
+
                 await client.send_photo(
                     chat_id=message.chat.id,
                     photo=fallback_path,
@@ -98,8 +100,18 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, user_i
                 )
                 os.remove(fallback_path)
                 os.remove(preview_path)
+
             except Exception:
-                await message.reply("❌ No pude enviar la portada.")
+                try:
+                    await client.send_document(
+                        chat_id=message.chat.id,
+                        document=preview_path,
+                        caption=f"{nombre}\nNúmero de páginas: {len(imagenes)}",
+                        protect_content=proteger
+                    )
+                    os.remove(preview_path)
+                except Exception as e:
+                    await message.reply(f"❌ No pude enviar la portada. {type(e).__name__}: {e}")
 
         if operacion == "cover":
             continue
