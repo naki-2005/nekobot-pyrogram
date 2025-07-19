@@ -1,10 +1,10 @@
 import os
 import re
 import tempfile
-import shutil
 import requests
 import threading
 import subprocess
+from io import BytesIO
 from PIL import Image
 
 defaultselectionmap = {}
@@ -18,7 +18,6 @@ def cambiar_default_selection(userid, nuevaseleccion):
     defaultselectionmap[userid] = nuevaseleccion
 
 def limpiarnombre(nombre):
-    # Solo letras, números y espacios
     return re.sub(r'[^a-zA-Z0-9 ]', '', nombre.replace('\n', ' ')).strip()
 
 def descargarimagen(url, path):
@@ -71,7 +70,6 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             await message.reply(f"❌ No se encontraron imágenes para {codigo}")
             continue
 
-        # 🖼️ Enviar preview con múltiples intentos
         try:
             previewurl = imagenes[0]
             ext = os.path.splitext(previewurl)[1].lower()
@@ -121,68 +119,34 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             f"📦 Generando archivo para {nombrebase} ({len(imagenes)} páginas)...\nProgreso 0/{len(imagenes)}"
         )
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            paths = []
-            threads = []
-
-            for idx, url in enumerate(imagenes):
-                ext = os.path.splitext(url)[1].lower()
-                ext = ext if ext in [".jpg", ".jpeg", ".png", ".webp"] else ".jpg"
-                path = os.path.join(tmpdir, f"{idx+1:03d}{ext}")
-                t = threading.Thread(target=descargarimagen, args=(url, path))
-                threads.append(t)
-                paths.append(path)
-
-                if (idx + 1) % 5 == 0 or (idx + 1) == len(imagenes):
-                    try:
-                        await progresomsg.edit_text(
-                            f"📦 Generando archivo para {nombrebase} ({len(imagenes)} páginas)...\nProgreso {idx + 1}/{len(imagenes)}"
-                        )
-                    except Exception:
-                        pass
-
-            for t in threads:
-                t.start()
-            for t in threads:
-                t.join()
-
-            archivos = []
-
+        try:
             if seleccion in ["cbz", "both"]:
-                cbzpath = f"{nombrebase}.cbz"
-                shutil.make_archive(nombrebase, 'zip', tmpdir)
-                os.rename(f"{nombrebase}.zip", cbzpath)
-                archivos.append(cbzpath)
-
-            if seleccion in ["pdf", "both"]:
-                pdfpath = f"{nombrebase}.pdf"
-                try:
-                    mainimages = []
-                    for path in paths:
-                        try:
-                            with Image.open(path) as im:
-                                mainimages.append(im.convert("RGB"))
-                        except Exception:
-                            try:
-                                with Image.open(path) as badimg:
-                                    fixed = badimg.convert("RGB")
-                                    mainimages.append(fixed)
-                            except Exception:
-                                continue
-                    if mainimages:
-                        mainimages[0].save(pdfpath, save_all=True, append_images=mainimages[1:])
-                        archivos.append(pdfpath)
-                except Exception:
-                    await message.reply(f"❌ Error al generar PDF para {nombrebase}")
-
-            for archivo in archivos:
+                cbz_url = f"https://naki-hdl.onrender.com/direct/dl1/{codigo}"
+                resp = requests.get(cbz_url, timeout=30)
+                resp.raise_for_status()
+                archivo_cbz = BytesIO(resp.content)
                 await client.send_document(
                     chat_id=message.chat.id,
-                    document=archivo,
+                    document=archivo_cbz,
+                    filename=f"{nombrebase}.cbz",
                     caption=nombrebase,
                     protect_content=proteger
                 )
-                os.remove(archivo)
+
+            if seleccion in ["pdf", "both"]:
+                pdf_url = f"https://naki-hdl.onrender.com/direct/dl1-pdf/{codigo}"
+                resp = requests.get(pdf_url, timeout=30)
+                resp.raise_for_status()
+                archivo_pdf = BytesIO(resp.content)
+                await client.send_document(
+                    chat_id=message.chat.id,
+                    document=archivo_pdf,
+                    filename=f"{nombrebase}.pdf",
+                    caption=nombrebase,
+                    protect_content=proteger
+                )
+        except Exception as e:
+            await message.reply(f"❌ No pude descargar los archivos para {codigo}. {type(e).__name__}: {e}")
 
         try:
             await progresomsg.delete()
