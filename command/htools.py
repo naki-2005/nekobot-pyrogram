@@ -18,7 +18,8 @@ def cambiar_default_selection(user_id, nueva_seleccion):
     default_selection_map[user_id] = nueva_seleccion
 
 def limpiar_nombre(nombre):
-    return re.sub(r'[\\/:*?"<>|]', '', nombre).strip()
+    # Elimina caracteres no válidos y convierte saltos de línea en espacios
+    return re.sub(r'[\\/:*?"<>|]', '', nombre.replace('\n', ' ')).strip()
 
 def descargar_imagen(url, path):
     try:
@@ -70,7 +71,7 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, user_i
             await message.reply(f"❌ No se encontraron imágenes para {codigo}.")
             continue
 
-        # 🖼️ Preview con fallback .png y documento si todo falla
+        # 🖼️ Enviar preview con fallbacks
         try:
             preview_url = imagenes[0]
             ext = os.path.splitext(preview_url)[1].lower()
