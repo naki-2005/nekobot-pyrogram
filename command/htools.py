@@ -6,7 +6,6 @@ import threading
 import subprocess
 from io import BytesIO
 from PIL import Image
-from telegram import InputFile
 
 defaultselectionmap = {}
 
@@ -71,6 +70,7 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             await message.reply(f"❌ No se encontraron imágenes para {codigo}")
             continue
 
+        # 🖼️ Portada
         try:
             previewurl = imagenes[0]
             ext = os.path.splitext(previewurl)[1].lower()
@@ -127,9 +127,10 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                 resp.raise_for_status()
                 archivo_cbz = BytesIO(resp.content)
                 archivo_cbz.name = f"{nombrebase}.cbz"
+
                 await client.send_document(
-                    chat_id=message.chat.id,
-                    document=InputFile(archivo_cbz),
+                    message.chat.id,
+                    archivo_cbz,
                     caption=nombrebase,
                     protect_content=proteger
                 )
@@ -140,12 +141,14 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                 resp.raise_for_status()
                 archivo_pdf = BytesIO(resp.content)
                 archivo_pdf.name = f"{nombrebase}.pdf"
+
                 await client.send_document(
-                    chat_id=message.chat.id,
-                    document=InputFile(archivo_pdf),
+                    message.chat.id,
+                    archivo_pdf,
                     caption=nombrebase,
                     protect_content=proteger
                 )
+
         except Exception as e:
             await message.reply(f"❌ No pude descargar los archivos para {codigo}. {type(e).__name__}: {e}")
 
