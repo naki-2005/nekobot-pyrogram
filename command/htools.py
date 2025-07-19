@@ -4,6 +4,7 @@ import tempfile
 import shutil
 import requests
 import threading
+import subprocess
 from PIL import Image
 import aiofiles
 from command.get_files.nh_links import obtener_info_y_links as obtener_nh
@@ -32,12 +33,44 @@ def descargar_imagen(url, path):
     except Exception:
         pass
 
+def obtener_cover_externo(codigo, tipo):
+    comando = ["python3"]
+    if tipo == "nh":
+        comando.append("command/get_files/nh_links.py")
+    else:
+        comando.append("command/get_files/h3_links.py")
+    comando.extend(["-C", codigo, "--cover"])
+
+    try:
+        result = subprocess.run(comando, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=20)
+        salida = result.stdout.splitlines()
+        texto = ""
+        imagenes = []
+
+        modo_texto = False
+        for linea in salida:
+            if linea.strip().startswith("📄"):
+                modo_texto = True
+            elif linea.strip().startswith("🖼️"):
+                modo_texto = False
+            elif modo_texto:
+                texto += linea.strip() + "\n"
+            elif linea.strip().startswith("http"):
+                imagenes.append(linea.strip())
+
+        return {"texto": texto.strip(), "imagenes": imagenes}
+    except Exception as e:
+        print(f"❌ Error ejecutando CLI externo: {e}")
+        return {"texto": "", "imagenes": []}
+
 async def nh_combined_operation(client, message, codigos, tipo, proteger, user_id, operacion):
     seleccion = default_selection_map.get(user_id, "cbz")  # Valor predeterminado
 
     for codigo in codigos:
-        # 🔍 Se pasa el segundo argumento: True si es operación 'cover'
-        datos = obtener_nh(codigo, operacion == "cover") if tipo == "nh" else obtener_3h(codigo, operacion == "cover")
+        datos = obtener_cover_externo(codigo, tipo) if operacion == "cover" else (
+            obtener_nh(codigo, False) if tipo == "nh" else obtener_3h(codigo, False)
+        )
+
         nombre = limpiar_nombre(datos["texto"]) or f"{tipo}_{codigo}"
         imagenes = datos["imagenes"]
 
