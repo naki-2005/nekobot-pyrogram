@@ -19,46 +19,48 @@ def obtener_titulo_y_imagenes(code, cover=False):
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         print("❌ Error al conectar:", e)
-        return {"texto": "", "imagenes": []}
+        return {"texto": "", "imagenes": [], "total_paginas": 0}
 
     soup = BeautifulSoup(response.text, "html.parser")
 
     # 📄 Título desde <head><title>
     titulo = soup.title.string.strip() if soup.title and soup.title.string else "Sin título"
 
-    # ⚡ Modo portada → obtener solo la primera imagen y salir
-    if cover:
-        gallery = soup.find("div", id="main-content")
-        if gallery:
-            thumbs = gallery.find("div", id="thumbnail-gallery")
-            if thumbs:
-                first_thumb = thumbs.find("div", class_="single-thumb")
-                if first_thumb:
-                    img_tag = first_thumb.find("img")
-                    if img_tag:
-                        src_url = img_tag.get("data-src") or img_tag.get("src")
-                        if src_url:
-                            full_img_url = re.sub(r't(?=\.\w{3,4}$)', '', src_url)
-                            return {"texto": titulo, "imagenes": [full_img_url]}
-        return {"texto": titulo, "imagenes": []}
-
-    # 🖼️ Si no es cover, buscar todas las imágenes como siempre
-    imagenes = []
+    # 🔢 Contar total de thumbnails como páginas
     gallery = soup.find("div", id="main-content")
-    if gallery:
-        thumbs = gallery.find("div", id="thumbnail-gallery")
-        if thumbs:
-            for div in thumbs.find_all("div", class_="single-thumb"):
-                img_tag = div.find("img")
-                if img_tag:
-                    src_url = img_tag.get("data-src") or img_tag.get("src")
-                    if src_url:
-                        full_img_url = re.sub(r't(?=\.\w{3,4}$)', '', src_url)
-                        imagenes.append(full_img_url)
+    thumbs = gallery.find("div", id="thumbnail-gallery") if gallery else None
+    thumb_divs = thumbs.find_all("div", class_="single-thumb") if thumbs else []
+    total_paginas = len(thumb_divs)
+
+    # ⚡ Modo portada → obtener solo una imagen
+    if cover:
+        if thumbs and thumb_divs:
+            img_tag = thumb_divs[0].find("img")
+            if img_tag:
+                src_url = img_tag.get("data-src") or img_tag.get("src")
+                if src_url:
+                    full_img_url = re.sub(r't(?=\.\w{3,4}$)', '', src_url)
+                    return {
+                        "texto": titulo,
+                        "imagenes": [full_img_url],
+                        "total_paginas": total_paginas
+                    }
+        return {"texto": titulo, "imagenes": [], "total_paginas": total_paginas}
+
+    # 📦 Extraer todas las imágenes
+    imagenes = []
+    for div in thumb_divs:
+        img_tag = div.find("img")
+        if img_tag:
+            src_url = img_tag.get("data-src") or img_tag.get("src")
+            if src_url:
+                full_img_url = re.sub(r't(?=\.\w{3,4}$)', '', src_url)
+                imagenes.append(full_img_url)
 
     return {
         "texto": titulo,
-        "imagenes": imagenes
+        "imagenes": imagenes,
+        "total_paginas": total_paginas
     }
 
 # 🎯 CLI
@@ -72,6 +74,7 @@ if __name__ == "__main__":
 
     print("📄 Título:")
     print(datos["texto"])
+    print(f"\n🧮 Total de páginas: {datos['total_paginas']}")
     print("\n🖼️ Imágenes HD:")
     for url in datos["imagenes"]:
         print(url)
