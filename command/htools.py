@@ -38,7 +38,7 @@ def obtenerporcli(codigo, tipo, cover):
         comando.append("--cover")
 
     try:
-        result = subprocess.run(comando, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=60)
+        result = subprocess.run(comando, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1200)
         salida = result.stdout.splitlines()
         texto = ""
         imagenes = []
