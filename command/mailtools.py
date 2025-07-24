@@ -30,7 +30,7 @@ async def verify_protect(user_id):
         return protect_content
 
 async def start_auto_send(client, user_id):
-    protect_content = verify_protect(user_id)
+    protect_content = await verify_protect(user_id)
     if user_id not in part_queue:
         return
     queue = part_queue[user_id]
@@ -69,7 +69,7 @@ async def start_auto_send(client, user_id):
 
 async def mail_query(client, callback_query):
     user_id = callback_query.from_user.id
-    protect_content = verify_protect(user_id)
+    protect_content = await verify_protect(user_id)
     data = callback_query.data
     if user_id not in part_queue:
         await callback_query.answer("No hay partes en cola.", show_alert=True)
@@ -126,7 +126,7 @@ def generate_verification_code():
 # Función para establecer el límite de MAIL_MB para un usuario
 async def set_mail_limit(client, message):
     user_id = message.from_user.id
-    protect_content = verify_protect(user_id)
+    protect_content = await verify_protect(user_id)
     try:
         new_limit = int(message.text.split(' ', 1)[1])
         if new_limit < 1:
@@ -156,7 +156,7 @@ async def set_mail_limit(client, message):
 
 async def set_mail_delay(client, message):
     user_id = message.from_user.id
-    protect_content = verify_protect(user_id)
+    protect_content = await verify_protect(user_id)
     try:
         raw_input = message.text.split(' ', 1)[1].strip().lower()
 
@@ -240,7 +240,7 @@ def send_email(destino, asunto, contenido=None, adjunto=False):
 async def set_mail(client, message):
     email = message.text.split(' ', 1)[1]
     user_id = message.from_user.id
-    protect_content = verify_protect(user_id)
+    protect_content = await verify_protect(user_id)
     mail_confirmed = os.getenv('MAIL_CONFIRMED')
     if user_id in admin_users:
         user_emails[user_id] = email
@@ -271,7 +271,7 @@ Si no solicitaste este código simplemente ignóralo.
 # Función para verificar el código y registrar el correo
 async def verify_mail(client, message):
     user_id = message.from_user.id
-    protect_content = verify_protect(user_id)
+    protect_content = await verify_protect(user_id)
     code = message.text.split(' ', 1)[1]
     if user_id in verification_storage:
         stored_email = verification_storage[user_id]['email']
@@ -308,7 +308,7 @@ def compressfile(file_path, part_size):
 
 async def send_mail(client, message):
     user_id = message.from_user.id
-    protect_content = verify_protect(user_id)
+    protect_content = await verify_protect(user_id)
     if user_id not in user_emails:
         await message.reply("No has registrado ningún correo, usa /setmail para hacerlo.", protect_content=True)
         return
@@ -382,7 +382,7 @@ multi_user_emails = {}
 
 async def multisetmail(client, message):
     user_id = message.from_user.id
-    protect_content = verify_protect(user_id)
+    protect_content = await verify_protect(user_id)
     if user_id not in admin_users:
         await message.reply("Esta función es solo para administradores.", protect_content=True); return
     try:
@@ -415,7 +415,7 @@ async def multisetmail(client, message):
         
 async def multisendmail(client, message):
     user_id = message.from_user.id
-    protect_content = verify_protect(user_id)
+    protect_content = await verify_protect(user_id)
     if user_id not in admin_users:
         await message.reply("Esta función es solo para administradores.", protect_content=True); return
     if user_id not in multi_user_emails or not multi_user_emails[user_id]:
