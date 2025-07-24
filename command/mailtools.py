@@ -7,6 +7,8 @@ from email.message import EmailMessage
 import random
 from data.vars import admin_users, vip_users, video_limit, PROTECT_CONTENT
 import asyncio
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+part_queue = {}              # Cola de partes por usuario para envío manual
 # Diccionarios para almacenar información de los usuarios
 user_emails = {}
 verification_storage = {}
@@ -183,19 +185,27 @@ def compressfile(file_path, part_size):
             part_num += 1
     return parts
 
+
 async def send_mail(client, message):
     user_id = message.from_user.id
+
     if user_id not in user_emails:
         await message.reply("No has registrado ningún correo, usa /setmail para hacerlo.", protect_content=True)
         return
 
     email = user_emails[user_id]
+
     if not message.reply_to_message:
         await message.reply("Por favor, responde a un mensaje.", protect_content=True)
         return
 
     reply_message = message.reply_to_message
-    protect_content = not (user_id in admin_users or user_id in vip_users or not PROTECT_CONTENT)
+
+    protect_content = not (
+        user_id in admin_users or
+        user_id in vip_users or
+        not PROTECT_CONTENT
+    )
 
     if reply_message.caption and reply_message.caption.startswith("Look Here") and reply_message.from_user.is_self:
         await message.reply("No puedes enviar este contenido debido a restricciones.", protect_content=protect_content)
@@ -204,7 +214,7 @@ async def send_mail(client, message):
     mail_mb = get_mail_limit(user_id)
     mail_delay = get_user_delay(user_id)
 
-    # Texto
+    # Envío de texto directo
     if reply_message.text:
         try:
             send_email(email, 'Mensaje de texto', contenido=reply_message.text)
@@ -213,7 +223,7 @@ async def send_mail(client, message):
             await message.reply(f"Error al enviar el mensaje: {e}", protect_content=protect_content)
         return
 
-    # Archivo
+    # Archivos multimedia
     if reply_message.document or reply_message.photo or reply_message.video or reply_message.sticker:
         media = await client.download_media(reply_message, file_name='mailtemp/')
         if os.path.getsize(media) <= mail_mb * 1024 * 1024:
@@ -227,15 +237,45 @@ async def send_mail(client, message):
             await message.reply(f"El archivo supera el límite de {mail_mb} MB, se iniciará la autocompresión.", protect_content=protect_content)
             parts = compressfile(media, mail_mb)
             cantidad_de_parts = len(parts)
-            for part in parts:
-                try:
-                    asunto = f"Parte {os.path.basename(part)} de {cantidad_de_parts}"
-                    send_email(email, asunto, adjunto=part)
-                    await message.reply(f"Parte {os.path.basename(part)} de {cantidad_de_parts} enviada correctamente.", protect_content=protect_content)
-                    os.remove(part)
-                    time.sleep(float(mail_delay) if mail_delay else 0)
-                except Exception as e:
-                    await message.reply(f"Error al enviar la parte {os.path.basename(part)}: {e}", protect_content=protect_content)
+
+            if mail_delay == "manual":
+                part_queue[user_id] = {
+                    "parts": parts,
+                    "email": email,
+                    "index": 0,
+                    "total": cantidad_de_parts,
+                    "message_id": message.message_id
+                }
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Enviar siguiente parte", callback_data="send_next_part")],
+                    [InlineKeyboardButton("Enviar automáticamente", callback_data="no_action")],
+                    [
+                        InlineKeyboardButton("10 seg", callback_data="auto_delay_10"),
+                        InlineKeyboardButton("30 seg", callback_data="auto_delay_30"),
+                        InlineKeyboardButton("60 seg", callback_data="auto_delay_60")
+                    ],
+                    [
+                        InlineKeyboardButton("90 seg", callback_data="auto_delay_90"),
+                        InlineKeyboardButton("180 seg", callback_data="auto_delay_180")
+                    ],
+                    [InlineKeyboardButton("Cancelar envío", callback_data="cancel_send")]
+                ])
+
+                await message.reply(
+                    f"Tienes {cantidad_de_parts} partes listas para enviar.",
+                    reply_markup=keyboard,
+                    protect_content=protect_content
+                )
+            else:
+                for part in parts:
+                    try:
+                        asunto = f"Parte {os.path.basename(part)} de {cantidad_de_parts}"
+                        send_email(email, asunto, adjunto=part)
+                        await message.reply(f"Parte {os.path.basename(part)} de {cantidad_de_parts} enviada correctamente.", protect_content=protect_content)
+                        os.remove(part)
+                        time.sleep(float(mail_delay) if mail_delay else 0)
+                    except Exception as e:
+                        await message.reply(f"Error al enviar la parte {os.path.basename(part)}: {e}", protect_content=protect_content)
 
 # Diccionario para almacenar configuraciones de múltiples correos
 multi_user_emails = {}
