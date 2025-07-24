@@ -291,168 +291,68 @@ async def multisetmail(client, message):
             for email, config in email_config.items()
         ])
         await message.reply(response)
-        
-    except Exception as e:
-        await message.reply(f"❌ Error al procesar la configuración: {str(e)}")
 
 async def multisendmail(client, message):
     user_id = message.from_user.id
     if user_id not in admin_users:
-        await message.reply("Esta función es solo para administradores.", protect_content=True)
-        return
-    
+        await message.reply("Esta función es solo para administradores.", protect_content=True); return
     if user_id not in multi_user_emails or not multi_user_emails[user_id]:
-        await message.reply("Primero configura los correos con /multisetmail correo1:limite*msgs,correo2:limite*msgs,...")
-        return
-    
+        await message.reply("Primero configura los correos con /multisetmail correo1:limite*msgs,correo2:limite*msgs,..."); return
     if not message.reply_to_message:
-        await message.reply("Por favor, responde al mensaje que contiene el archivo a enviar.")
-        return
-    
+        await message.reply("Por favor, responde al mensaje que contiene el archivo a enviar."); return
     reply_message = message.reply_to_message
-    
-    # Obtener información del archivo
-    original_filename = ""
-    file_size = 0
-    
+    original_filename = ""; file_size = 0
     if reply_message.document:
-        file_size = reply_message.document.file_size
-        original_filename = reply_message.document.file_name
+        file_size = reply_message.document.file_size; original_filename = reply_message.document.file_name
     elif reply_message.video:
-        file_size = reply_message.video.file_size
-        original_filename = f"video_{reply_message.video.file_unique_id}.mp4"
+        file_size = reply_message.video.file_size; original_filename = f"video_{reply_message.video.file_unique_id}.mp4"
     elif reply_message.photo:
-        file_size = reply_message.photo.sizes[-1].file_size
-        original_filename = f"photo_{reply_message.photo.file_unique_id}.jpg"
+        file_size = reply_message.photo.sizes[-1].file_size; original_filename = f"photo_{reply_message.photo.file_unique_id}.jpg"
     else:
-        await message.reply("Solo se pueden enviar archivos (documentos, fotos o videos) con este comando.")
-        return
-    
-    # Si no tenemos nombre de archivo, generamos uno por defecto
-    if not original_filename:
-        original_filename = f"archivo_{int(time.time())}.bin"
-    
+        await message.reply("Solo se pueden enviar archivos (documentos, fotos o videos) con este comando."); return
+    if not original_filename: original_filename = f"archivo_{int(time.time())}.bin"
     total_size_mb = file_size / (1024 * 1024)
-    
-    # Calcular capacidad total de los correos
     email_config = multi_user_emails[user_id]
     total_capacity = sum(conf['size_limit'] * conf['msg_limit'] for conf in email_config.values())
-    
     if total_size_mb > total_capacity:
-        await message.reply("❌ Todos los correos registrados no pueden recibir este fichero")
-        return
-    
-    # Si pasa la verificación de tamaño, procedemos con la descarga
+        await message.reply("❌ Todos los correos registrados no pueden recibir este fichero"); return
     processing_msg = await message.reply(f"📁 Procesando: {original_filename} ({total_size_mb:.2f} MB)...")
-    
     try:
         media = await client.download_media(reply_message, file_name='mailtemp/')
-        
-        # Comprimir el archivo manteniendo el nombre original
         archive_path = f"mailtemp/{original_filename}.7z"
-        with py7zr.SevenZipFile(archive_path, 'w') as archive:
-            archive.write(media, original_filename)
-        
-        # Leer el archivo comprimido
-        with open(archive_path, 'rb') as f:
-            compressed_data = f.read()
-        
-        os.remove(archive_path)
-        os.remove(media)
-        
-        current_position = 0
-        part_num = 1
-        total_parts = 0
-        
-        # Calcular número total de partes
+        with py7zr.SevenZipFile(archive_path, 'w') as archive: archive.write(media, original_filename)
+        with open(archive_path, 'rb') as f: compressed_data = f.read()
+        os.remove(archive_path); os.remove(media)
+        current_position = 0; part_num = 1; total_parts = 0
         for email, config in email_config.items():
-            size_limit = config['size_limit'] * 1024 * 1024
-            msg_limit = config['msg_limit']
-            
-            remaining_for_email = size_limit * msg_limit
-            remaining_msgs = msg_limit
-            
-            while (current_position < len(compressed_data)) and (remaining_for_email > 0) and (remaining_msgs > 0):
-                chunk_size = min(size_limit, len(compressed_data) - current_position, remaining_for_email)
-                total_parts += 1
-                current_position += chunk_size
-                remaining_for_email -= chunk_size
-                remaining_msgs -= 1
-        
-        current_position = 0
-        part_num = 1
-        
-        # Enviar las partes
+            size_limit = config['size_limit'] * 1024 * 1024; msg_limit = config['msg_limit']
+            total_parts += min((len(compressed_data) - current_position + size_limit - 1) // size_limit, msg_limit)
+        current_position = 0; part_num = 1
         for email, config in email_config.items():
-            if current_position >= len(compressed_data):
-                break
-                
-            size_limit = config['size_limit'] * 1024 * 1024
-            msg_limit = config['msg_limit']
-            remaining_msgs = msg_limit
-            
-            while (current_position < len(compressed_data)) and (remaining_msgs > 0):
+            if current_position >= len(compressed_data): break
+            size_limit = config['size_limit'] * 1024 * 1024; remaining_msgs = config['msg_limit']
+            while current_position < len(compressed_data) and remaining_msgs > 0:
                 chunk_size = min(size_limit, len(compressed_data) - current_position)
                 part_data = compressed_data[current_position:current_position + chunk_size]
-                current_position += chunk_size
-                remaining_msgs -= 1
-                
-                # Nombre del archivo manteniendo el original con extensión .7z
+                current_position += chunk_size; remaining_msgs -= 1
                 attachment_filename = f"{original_filename}.7z"
                 part_file = f"mailtemp/{attachment_filename}.part{part_num}"
-                
-                with open(part_file, 'wb') as f:
-                    f.write(part_data)
-                
+                with open(part_file, 'wb') as f: f.write(part_data)
                 try:
-                    msg = EmailMessage()
-                    msg['Subject'] = f"{original_filename} [{part_num}/{total_parts}]"
-                    msg['From'] = f"Neko Bot <{os.getenv('MAILDIR')}>"
-                    msg['To'] = email
-                    
-                    with open(part_file, 'rb') as f:
-                        msg.add_attachment(
-                            f.read(),
-                            maintype='application',
-                            subtype='octet-stream',
-                            filename=attachment_filename  # Mantenemos el nombre original
-                        )
-                    
-                    mail_server = os.getenv('MAIL_SERVER')
-                    server_details = mail_server.split(':')
-                    smtp_host = server_details[0]
-                    smtp_port = int(server_details[1])
-                    security_enabled = len(server_details) > 2 and server_details[2].lower() == 'tls'
-                    
-                    with smtplib.SMTP(smtp_host, smtp_port) as server:
-                        if security_enabled:
-                            server.starttls()
-                        server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
-                        server.send_message(msg)
-                    
+                    asunto = f"{original_filename} [{part_num}/{total_parts}]"
+                    send_email(email, asunto, adjunto=part_file)
                     await processing_msg.edit_text(
                         f"📤 Enviando {original_filename} [{part_num}/{total_parts}] a {email}\n"
                         f"📦 Tamaño: {chunk_size/(1024*1024):.2f}MB\n"
-                        f"✉️ Mensajes restantes en este correo: {remaining_msgs}/{msg_limit}"
+                        f"✉️ Mensajes restantes en este correo: {remaining_msgs}/{config['msg_limit']}"
                     )
-                    os.remove(part_file)
-                    part_num += 1
-                    
-                    # Pequeño delay entre envíos
+                    os.remove(part_file); part_num += 1
                     await asyncio.sleep(2)
-                    
                 except Exception as e:
                     await processing_msg.edit_text(f"❌ Error al enviar parte {part_num}: {str(e)}")
-                    if os.path.exists(part_file):
-                        os.remove(part_file)
-                    return
-    
+                    if os.path.exists(part_file): os.remove(part_file); return
         await processing_msg.edit_text(f"✅ {original_filename} enviado completamente!")
-        
     except Exception as e:
+        if 'media' in locals() and os.path.exists(media): os.remove(media)
+        if 'archive_path' in locals() and os.path.exists(archive_path): os.remove(archive_path)
         await processing_msg.edit_text(f"❌ Error procesando {original_filename}: {str(e)}")
-        # Limpieza de archivos temporales en caso de error
-        if 'media' in locals() and os.path.exists(media):
-            os.remove(media)
-        if 'archive_path' in locals() and os.path.exists(archive_path):
-            os.remove(archive_path)
