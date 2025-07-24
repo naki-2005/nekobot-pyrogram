@@ -59,23 +59,19 @@ async def mail_query(client, callback_query):
     user_id = callback_query.from_user.id
     protect_content = verify_protect(user_id)
     data = callback_query.data
-
     if user_id not in part_queue:
         await callback_query.answer("No hay partes en cola.", show_alert=True)
         return
-
+    queue = part_queue[user_id]
+    parts = queue["parts"]
+    email = queue["email"]
+    index = queue["index"]
+    total = queue["total"]
     if data == "send_next_part":
-        queue = part_queue[user_id]
-        parts = queue["parts"]
-        email = queue["email"]
-        index = queue["index"]
-        total = queue["total"]
-
         if index >= total:
             await callback_query.message.edit_text("Todas las partes se han enviado.")
             del part_queue[user_id]
             return
-
         part = parts[index]
         asunto = f"Parte {os.path.basename(part)} de {total}"
         try:
@@ -83,19 +79,17 @@ async def mail_query(client, callback_query):
             await callback_query.message.reply(f"Parte {os.path.basename(part)} enviada correctamente.")
             os.remove(part)
             queue["index"] += 1
-
             partes_restantes = total - queue["index"]
-            if partes_restantes <= 0:
+            if partes_restantes > 0:
+                await callback_query.message.edit_text(
+                    f"Queda{'' if partes_restantes == 1 else 'n'} {partes_restantes} parte{'s' if partes_restantes > 1 else ''} por enviar.",
+                    reply_markup=correo_manual
+                )
+            else:
                 await callback_query.message.edit_text("Todas las partes se han enviado.")
                 del part_queue[user_id]
-            else:
-                await callback_query.message.edit_text(
-                    f"Quedan {partes_restantes} parte{'s' if partes_restantes > 1 else ''} por enviar.",
-                    reply_markup=correo_manual if partes_restantes > 1 else None
-                )
-
         except Exception as e:
-            await callback_query.message.reply(f"Error al enviar la parte {os.path.basename(part)}: {e}")
+            await callback_query.message.reply(f"Error al enviar la parte: {e}")
 
     elif data.startswith("auto_delay_"):
         delay_value = int(data.replace("auto_delay_", ""))
