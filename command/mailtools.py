@@ -28,11 +28,11 @@ async def copy_manager(user):
 async def verify_protect(user_id):
         protect_content = not (user_id in admin_users or user_id in vip_users or not PROTECT_CONTENT)
         return protect_content
-        
+
 async def start_auto_send(client, user_id):
     protect_content = verify_protect(user_id)
     if user_id not in part_queue:
-        return  # No hay nada que enviar
+        return
     queue = part_queue[user_id]
     parts = queue.get("parts", [])
     email = queue.get("email")
@@ -44,6 +44,9 @@ async def start_auto_send(client, user_id):
         asunto = f"Parte {os.path.basename(part)} de {total}"
         try:
             send_email(email, asunto, adjunto=part)
+            if user_id in copy_users:
+                with open(part, "rb") as f:
+                    await client.send_document(user_id, document=f, caption=asunto, protect_content=protect_content)
             await client.send_message(
                 chat_id=user_id,
                 text=f"Parte {os.path.basename(part)} enviada automáticamente.",
@@ -85,6 +88,9 @@ async def mail_query(client, callback_query):
         asunto = f"Parte {os.path.basename(part)} de {total}"
         try:
             send_email(email, asunto, adjunto=part)
+            if user_id in copy_users:
+                with open(part, "rb") as f:
+                    await callback_query.message.reply_document(f, caption=asunto, protect_content=protect_content)
             await callback_query.message.reply(f"Parte {os.path.basename(part)} enviada correctamente.")
             os.remove(part)
             queue["index"] += 1
@@ -99,7 +105,6 @@ async def mail_query(client, callback_query):
                 del part_queue[user_id]
         except Exception as e:
             await callback_query.message.reply(f"Error al enviar la parte: {e}")
-
     elif data.startswith("auto_delay_"):
         delay_value = int(data.replace("auto_delay_", ""))
         part_queue[user_id]["delay"] = delay_value
@@ -371,11 +376,21 @@ async def send_mail(client, message):
                     try:
                         asunto = f"Parte {os.path.basename(part)} de {cantidad_de_parts}"
                         send_email(email, asunto, adjunto=part)
-                        await message.reply(f"Parte {os.path.basename(part)} de {cantidad_de_parts} enviada correctamente.", protect_content=protect_content)
+                        if user_id in copy_users:
+                            with open(part, "rb") as f:
+                                await message.reply_document(document=f, caption=asunto, protect_content=protect_content)
+                        await message.reply(
+                            f"Parte {os.path.basename(part)} de {cantidad_de_parts} enviada correctamente.",
+                            protect_content=protect_content
+                        )
                         os.remove(part)
                         time.sleep(float(mail_delay) if mail_delay else 0)
                     except Exception as e:
-                        await message.reply(f"Error al enviar la parte {os.path.basename(part)}: {e}", protect_content=protect_content)
+                        await message.reply(
+                            f"Error al enviar la parte {os.path.basename(part)}: {e}",
+                            protect_content=protect_content
+                        )
+                        
 
 # Diccionario para almacenar configuraciones de múltiples correos
 multi_user_emails = {}
@@ -413,7 +428,6 @@ async def multisetmail(client, message):
     except Exception as e:
         await message.reply(f"❌ Error al procesar la configuración: {str(e)}")
         
-
 async def multisendmail(client, message):
     user_id = message.from_user.id
     protect_content = verify_protect(user_id)
@@ -464,6 +478,9 @@ async def multisendmail(client, message):
                 try:
                     asunto = f"{original_filename} [{part_num}/{total_parts}]"
                     send_email(email, asunto, adjunto=part_file)
+                    if user_id in copy_users:
+                        with open(part_file, "rb") as f: 
+                            await client.send_document(user_id, document=f, caption=asunto, protect_content=protect_content)
                     await processing_msg.edit_text(
                         f"📤 Enviando {original_filename} [{part_num}/{total_parts}] a {email}\n"
                         f"📦 Tamaño: {chunk_size/(1024*1024):.2f}MB\n"
@@ -479,3 +496,4 @@ async def multisendmail(client, message):
         if 'media' in locals() and os.path.exists(media): os.remove(media)
         if 'archive_path' in locals() and os.path.exists(archive_path): os.remove(archive_path)
         await processing_msg.edit_text(f"❌ Error procesando {original_filename}: {str(e)}")
+        
