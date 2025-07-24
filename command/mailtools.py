@@ -5,7 +5,7 @@ import py7zr
 import smtplib
 from email.message import EmailMessage
 import random
-from data.vars import admin_users, vip_users, video_limit, PROTECT_CONTENT
+from data.vars import admin_users, vip_users, video_limit, PROTECT_CONTENT, correo_manual
 import asyncio
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -341,24 +341,9 @@ async def send_mail(client, message):
                     "total": cantidad_de_parts
                     #"message_id": message.message_id
                 }
-                keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Enviar siguiente parte", callback_data="send_next_part")],
-                    [InlineKeyboardButton("Enviar automáticamente", callback_data="no_action")],
-                    [
-                        InlineKeyboardButton("10 seg", callback_data="auto_delay_10"),
-                        InlineKeyboardButton("30 seg", callback_data="auto_delay_30"),
-                        InlineKeyboardButton("60 seg", callback_data="auto_delay_60")
-                    ],
-                    [
-                        InlineKeyboardButton("90 seg", callback_data="auto_delay_90"),
-                        InlineKeyboardButton("180 seg", callback_data="auto_delay_180")
-                    ],
-                    [InlineKeyboardButton("Cancelar envío", callback_data="cancel_send")]
-                ])
-
                 await message.reply(
                     f"Tienes {cantidad_de_parts} partes listas para enviar.",
-                    reply_markup=keyboard,
+                    reply_markup=correo_manual,
                     protect_content=protect_content
                 )
             else:
