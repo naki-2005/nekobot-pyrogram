@@ -15,7 +15,16 @@ verification_storage = {}
 user_limits = {}
 user_delays = {}
 exceeded_users = []
+copy_users = []
 
+async def copy_manager(user):
+    if user not in copy_users:
+        copy_users.append(user)
+        #return #f"Usuario '{user}' agregado a la lista."
+    else:
+        copy_users.remove(user)
+        #return #f"Usuario '{user}' eliminado de la lista."
+            
 async def verify_protect(user_id):
         protect_content = not (user_id in admin_users or user_id in vip_users or not PROTECT_CONTENT)
         return protect_content
