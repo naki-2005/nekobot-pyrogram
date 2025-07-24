@@ -16,6 +16,11 @@ user_limits = {}
 user_delays = {}
 exceeded_users = []
 
+protect_content = not (
+        user_id in admin_users or
+        user_id in vip_users or
+        not PROTECT_CONTENT
+)
 async def start_auto_send(client, user_id):
     if user_id not in part_queue:
         return  # No hay nada que enviar
@@ -33,7 +38,7 @@ async def start_auto_send(client, user_id):
             await client.send_message(
                 chat_id=user_id,
                 text=f"Parte {os.path.basename(part)} enviada automáticamente.",
-                protect_content=True
+                protect_content=protect_content
             )
             os.remove(part)
             await asyncio.sleep(delay)
@@ -41,13 +46,13 @@ async def start_auto_send(client, user_id):
             await client.send_message(
                 chat_id=user_id,
                 text=f"Error al enviar la parte {os.path.basename(part)}: {e}",
-                protect_content=True
+                protect_content=protect_content
             )
     del part_queue[user_id]
     await client.send_message(
         chat_id=user_id,
         text="📬 Envío automático de partes completado.",
-        protect_content=True
+        protect_content=protect_content
     )
     
 async def mail_query(client, callback_query):
