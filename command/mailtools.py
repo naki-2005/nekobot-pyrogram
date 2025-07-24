@@ -240,57 +240,38 @@ async def send_mail(client, message):
 # Diccionario para almacenar configuraciones de múltiples correos
 multi_user_emails = {}
 
-
 async def multisetmail(client, message):
     user_id = message.from_user.id
     if user_id not in admin_users:
-        await message.reply("Esta función es solo para administradores.", protect_content=True)
-        return
-    
+        await message.reply("Esta función es solo para administradores.", protect_content=True); return
     try:
-        # Parsear la entrada: correo1@ejemplo:20*4,correo2@otro:10*2
         emails_data = message.text.split(' ', 1)[1]
         email_entries = [entry.strip() for entry in emails_data.split(',') if entry.strip()]
-        
         email_config = {}
         for entry in email_entries:
             if ':' not in entry:
-                await message.reply(f"Formato incorrecto en: {entry}. Debe ser correo:limite_mb*limite_mensajes")
-                return
-            
+                await message.reply(f"Formato incorrecto en: {entry}. Debe ser correo:limite_mb*limite_mensajes"); return
             email, limits = entry.rsplit(':', 1)
-            
             if '*' not in limits:
-                await message.reply(f"Formato incorrecto en: {entry}. Debe incluir límite de mensajes (ej: 20*4)")
-                return
-                
+                await message.reply(f"Formato incorrecto en: {entry}. Debe incluir límite de mensajes (ej: 20*4)"); return
             limit_mb, limit_msgs = limits.split('*')
-            
             try:
-                limit_mb = int(limit_mb)
-                limit_msgs = int(limit_msgs)
-                
+                limit_mb = int(limit_mb); limit_msgs = int(limit_msgs)
                 if limit_mb < 1 or limit_mb > 100:
-                    await message.reply(f"Límite de tamaño inválido para {email}. Debe ser entre 1 y 100 MB.")
-                    return
-                    
+                    await message.reply(f"Límite de tamaño inválido para {email}. Debe ser entre 1 y 100 MB."); return
                 if limit_msgs < 1 or limit_msgs > 100:
-                    await message.reply(f"Límite de mensajes inválido para {email}. Debe ser entre 1 y 100.")
-                    return
-                    
+                    await message.reply(f"Límite de mensajes inválido para {email}. Debe ser entre 1 y 100."); return
                 email_config[email] = {'size_limit': limit_mb, 'msg_limit': limit_msgs}
-                
             except ValueError:
-                await message.reply(f"Límites inválidos para {email}. Deben ser números.")
-                return
-        
+                await message.reply(f"Límites inválidos para {email}. Deben ser números."); return
         multi_user_emails[user_id] = email_config
-        response = "✅ Configuración de múltiples correos actualizada:\n"
-        response += "\n".join([
-            f"{email}: {config['size_limit']}MB*{config['msg_limit']} mensajes" 
-            for email, config in email_config.items()
+        response = "✅ Configuración de múltiples correos actualizada:\n" + "\n".join([
+            f"{email}: {config['size_limit']}MB*{config['msg_limit']} mensajes" for email, config in email_config.items()
         ])
         await message.reply(response)
+    except Exception as e:
+        await message.reply(f"❌ Error al procesar la configuración: {str(e)}")
+        
 
 async def multisendmail(client, message):
     user_id = message.from_user.id
