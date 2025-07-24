@@ -78,14 +78,45 @@ async def set_mail_delay(client, message):
     except ValueError:
         await message.reply("Por favor, proporciona un número válido como límite.")
         
-
 # Función para obtener el límite de MAIL_MB para un usuario
 def get_mail_limit(user_id):
     return user_limits.get(user_id, int(os.getenv('MAIL_MB', 20)))
 def get_user_delay(user_id):
     return user_delays.get(user_id, int(os.getenv('MAIL_DELAY', 30)))
 
-# Modificación de la función set_mail para enviar el código de verificación por correo
+
+def send_email(destino, asunto, contenido=None, adjunto=False):
+    import os
+    import smtplib
+    from email.message import EmailMessage
+
+    msg = EmailMessage()
+    msg['Subject'] = asunto
+    msg['From'] = f"Neko Bot <{os.getenv('MAILDIR')}>"
+    msg['To'] = destino
+
+    if adjunto:
+        with open(adjunto, 'rb') as f:
+            msg.add_attachment(
+                f.read(),
+                maintype='application',
+                subtype='octet-stream',
+                filename=os.path.basename(adjunto)
+            )
+    else:
+        msg.set_content(contenido if contenido else asunto)
+
+    server_details = os.getenv('MAIL_SERVER').split(':')
+    smtp_host = server_details[0]
+    smtp_port = int(server_details[1])
+    security_enabled = len(server_details) > 2 and server_details[2].lower() == 'tls'
+
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        if security_enabled:
+            server.starttls()
+        server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
+        server.send_message(msg)
+        
 async def set_mail(client, message):
     email = message.text.split(' ', 1)[1]
     user_id = message.from_user.id
@@ -103,35 +134,19 @@ async def set_mail(client, message):
             user_emails[user_id] = email
             await message.reply("Correo electrónico registrado automáticamente porque el administrador de bot reconoce tu dirección.")
             return
+
     verification_code = generate_verification_code()
     try:
-        msg = EmailMessage()
-        msg['Subject'] = 'Código de Verificación'
-        msg['From'] = f"Neko Bot <{os.getenv('MAILDIR')}>"
-        msg['To'] = email
-        msg.set_content(f"""
-        Tu código de verificación de correo es: {verification_code}
-        Si no solicitaste este código simplemente ignóralo.
-        """)
-        mail_server = os.getenv('MAIL_SERVER')
-        if not mail_server:
-            raise ValueError("La configuración de MAIL_SERVER no está definida. Asegúrate de configurarla correctamente.")
-        server_details = mail_server.split(':')
-        if len(server_details) < 2:
-            raise ValueError("MAIL_SERVER debe estar en el formato 'host:puerto:opcional_tls'.")
-        smtp_host = server_details[0]
-        smtp_port = int(server_details[1])
-        security_enabled = len(server_details) > 2 and server_details[2].lower() == 'tls'
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
-            if security_enabled:
-                server.starttls()
-            server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
-            server.send_message(msg)
+        contenido = f"""
+Tu código de verificación de correo es: {verification_code}
+Si no solicitaste este código simplemente ignóralo.
+"""
+        send_email(email, 'Código de Verificación', contenido=contenido)
         verification_storage[user_id] = {'email': email, 'code': verification_code}
         await message.reply("Código de verificación enviado a tu correo. Introduce el código usando /verify.")
     except Exception as e:
         await message.reply(f"Error al enviar el correo de verificación: {e}")
-
+        
 # Función para verificar el código y registrar el correo
 async def verify_mail(client, message):
     user_id = message.from_user.id
@@ -168,79 +183,42 @@ def compressfile(file_path, part_size):
             part_num += 1
     return parts
 
-# Enviar correo al usuario registrado
 async def send_mail(client, message):
     user_id = message.from_user.id
     if user_id not in user_emails:
         await message.reply("No has registrado ningún correo, usa /setmail para hacerlo.", protect_content=True)
         return
+
     email = user_emails[user_id]
     if not message.reply_to_message:
-        await message.reply("Por favor, responde a un mensaje.", protect_content=protect_content)
+        await message.reply("Por favor, responde a un mensaje.", protect_content=True)
         return
-    reply_message = message.reply_to_message
-    if not (user_id in admin_users or user_id in vip_users or not PROTECT_CONTENT):
-        protect_content = True
 
-    else:
-        protect_content = False
+    reply_message = message.reply_to_message
+    protect_content = not (user_id in admin_users or user_id in vip_users or not PROTECT_CONTENT)
 
     if reply_message.caption and reply_message.caption.startswith("Look Here") and reply_message.from_user.is_self:
         await message.reply("No puedes enviar este contenido debido a restricciones.", protect_content=protect_content)
         return
 
-    # Envío de mensajes de texto
+    mail_mb = get_mail_limit(user_id)
+    mail_delay = get_user_delay(user_id)
+
+    # Texto
     if reply_message.text:
         try:
-            msg = EmailMessage()
-            msg['Subject'] = 'Mensaje de texto'
-            msg['From'] = f"Neko Bot <{os.getenv('MAILDIR')}>"
-            msg['To'] = email
-            msg.set_content(reply_message.text)
-
-            mail_server = os.getenv('MAIL_SERVER')
-            server_details = mail_server.split(':')
-            smtp_host = server_details[0]
-            smtp_port = int(server_details[1])
-            security_enabled = len(server_details) > 2 and server_details[2].lower() == 'tls'
-
-            with smtplib.SMTP(smtp_host, smtp_port) as server:
-                if security_enabled:
-                    server.starttls()
-                server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
-                server.send_message(msg)
-
+            send_email(email, 'Mensaje de texto', contenido=reply_message.text)
             await message.reply("Mensaje de texto enviado correctamente.", protect_content=protect_content)
         except Exception as e:
             await message.reply(f"Error al enviar el mensaje: {e}", protect_content=protect_content)
         return
 
-    mail_mb = get_mail_limit(user_id)
-    mail_delay = get_user_delay(user_id)
-    
-    #mail_delay = os.getenv('MAIL_DELAY')
-
-    # Envío de archivos multimedia
+    # Archivo
     if reply_message.document or reply_message.photo or reply_message.video or reply_message.sticker:
         media = await client.download_media(reply_message, file_name='mailtemp/')
         if os.path.getsize(media) <= mail_mb * 1024 * 1024:
             try:
-                msg = EmailMessage()
-                msg['Subject'] = 'Archivo'
-                msg['From'] = f"Neko Bot <{os.getenv('MAILDIR')}>"
-                msg['To'] = email
-                with open(media, 'rb') as f:
-                    msg.add_attachment(f.read(), maintype='application', subtype='octet-stream', filename=os.path.basename(media))
-                mail_server = os.getenv('MAIL_SERVER')
-                server_details = mail_server.split(':')
-                smtp_host = server_details[0]
-                smtp_port = int(server_details[1])
-                security_enabled = len(server_details) > 2 and server_details[2].lower() == 'tls'
-                with smtplib.SMTP(smtp_host, smtp_port) as server:
-                    if security_enabled:
-                        server.starttls()
-                    server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
-                    server.send_message(msg)
+                send_email(email, 'Archivo', adjunto=media)
                 await message.reply("Archivo enviado correctamente sin compresión.", protect_content=protect_content)
                 os.remove(media)
             except Exception as e:
@@ -248,41 +226,16 @@ async def send_mail(client, message):
         else:
             await message.reply(f"El archivo supera el límite de {mail_mb} MB, se iniciará la autocompresión.", protect_content=protect_content)
             parts = compressfile(media, mail_mb)
+            cantidad_de_parts = len(parts)
             for part in parts:
-                cantidad_de_parts = len(parts)
                 try:
-                    mail_server = os.getenv('MAIL_SERVER')
-                    if not mail_server:
-                        raise ValueError("MAIL_SERVER no está definido en las variables de entorno.")
-
-                    server_details = mail_server.split(':')
-                    if len(server_details) < 2:
-                        raise ValueError("MAIL_SERVER debe estar en el formato 'host:puerto:opcional_tls'.")
-
-                    smtp_host = server_details[0]
-                    smtp_port = int(server_details[1])
-                    security_enabled = len(server_details) > 2 and server_details[2].lower() == 'tls'
-
-                    msg = EmailMessage()
-                    msg['Subject'] = f"Parte {os.path.basename(part)} de {cantidad_de_parts}"
-                    msg['From'] = f"Neko Bot <{os.getenv('MAILDIR')}>"
-                    msg['To'] = email
-
-                    with open(part, 'rb') as f:
-                        msg.add_attachment(f.read(), maintype='application', subtype='octet-stream', filename=os.path.basename(part))
-
-                    with smtplib.SMTP(smtp_host, smtp_port) as server:
-                        if security_enabled:
-                            server.starttls()
-                        server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
-                        server.send_message(msg)
-
+                    asunto = f"Parte {os.path.basename(part)} de {cantidad_de_parts}"
+                    send_email(email, asunto, adjunto=part)
                     await message.reply(f"Parte {os.path.basename(part)} de {cantidad_de_parts} enviada correctamente.", protect_content=protect_content)
                     os.remove(part)
                     time.sleep(float(mail_delay) if mail_delay else 0)
                 except Exception as e:
                     await message.reply(f"Error al enviar la parte {os.path.basename(part)}: {e}", protect_content=protect_content)
-
 
 # Diccionario para almacenar configuraciones de múltiples correos
 multi_user_emails = {}
