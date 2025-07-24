@@ -32,9 +32,11 @@ auto_users = {}
 async def process_command(client: Client, message: Message, active_cmd: str, admin_cmd: str, user_id: int, username: str, chat_id: int):
     global allowed_ids
     text = message.text.strip().lower() if message.text else ""
+    if message.from_user is None:
+        return 
+    user_id = message.from_user.id
     if not is_protect_content_enabled and user_id not in allowed_ids:
         allowed_ids = allowed_ids.union({user_id})
-    user_id = message.from_user.id
     auto = auto_users.get(user_id, False)
     
     def cmd(command_env, is_admin=False, is_vip=False):
