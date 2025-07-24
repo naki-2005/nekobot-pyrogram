@@ -4,8 +4,10 @@ import nest_asyncio
 import logging
 import random
 from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from process_command import process_command
 from command.help import handle_help_callback
+from command.mailtools import mail_query
 from cmd_list import lista_cmd
 from data.stickers import saludos, STICKER_SALUDO, STICKER_DESCANSO, STICKER_REACTIVADO
 from data.vars import (
@@ -113,8 +115,16 @@ async def notify_main_admin():
             logging.error(f"Error al enviar o borrar el mensaje al MAIN_ADMIN: {e}")
 
 @app.on_callback_query()
-async def help_callback_handler(client, callback_query):
-    await handle_help_callback(client, callback_query)
+async def callback_handler(client, callback_query):
+    data = callback_query.data
+    mail_related = ["send_next_part", "cancel_send", "no_action"] + [f"auto_delay_{x}" for x in [10, 30, 60, 90, 180]]
+    help_related = [f"help_{x}" for x in [1, 2, 3, 4, 5]] + ["help_back"]
+    if data in mail_related:
+        await mail_query(client, callback_query)
+    elif data in help_related:
+        await handle_help_callback(client, callback_query)
+    else:
+        await callback_query.answer("No se ha encontrado una respuesta Query correcta.", show_alert=True)
 
 async def main():
     await app.start()
