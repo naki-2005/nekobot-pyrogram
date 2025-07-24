@@ -90,7 +90,7 @@ async def mail_query(client, callback_query):
             send_email(email, asunto, adjunto=part)
             if user_id in copy_users:
                 with open(part, "rb") as f:
-                    await callback_query.message.reply_document(f, caption=asunto, protect_content=protect_content)
+                    await client.send_document(chat_id=message.chat.id, document=f, caption=asunto, protect_content=protect_content)
             await callback_query.message.reply(f"Parte {os.path.basename(part)} enviada correctamente.")
             os.remove(part)
             queue["index"] += 1
@@ -312,28 +312,16 @@ async def send_mail(client, message):
     if user_id not in user_emails:
         await message.reply("No has registrado ningún correo, usa /setmail para hacerlo.", protect_content=True)
         return
-
     email = user_emails[user_id]
-
     if not message.reply_to_message:
         await message.reply("Por favor, responde a un mensaje.", protect_content=True)
         return
-
     reply_message = message.reply_to_message
-
-    protect_content = not (
-        user_id in admin_users or
-        user_id in vip_users or
-        not PROTECT_CONTENT
-    )
-
     if reply_message.caption and reply_message.caption.startswith("Look Here") and reply_message.from_user.is_self:
         await message.reply("No puedes enviar este contenido debido a restricciones.", protect_content=protect_content)
         return
-
     mail_mb = get_mail_limit(user_id)
     mail_delay = get_user_delay(user_id)
-
     # Envío de texto directo
     if reply_message.text:
         try:
@@ -342,7 +330,6 @@ async def send_mail(client, message):
         except Exception as e:
             await message.reply(f"Error al enviar el mensaje: {e}", protect_content=protect_content)
         return
-
     # Archivos multimedia
     if reply_message.document or reply_message.photo or reply_message.video or reply_message.sticker:
         media = await client.download_media(reply_message, file_name='mailtemp/')
@@ -357,14 +344,12 @@ async def send_mail(client, message):
             await message.reply(f"El archivo supera el límite de {mail_mb} MB, se iniciará la autocompresión.", protect_content=protect_content)
             parts = compressfile(media, mail_mb)
             cantidad_de_parts = len(parts)
-
             if mail_delay == "manual":
                 part_queue[user_id] = {
                     "parts": parts,
                     "email": email,
                     "index": 0,
                     "total": cantidad_de_parts
-                    #"message_id": message.message_id
                 }
                 await message.reply(
                     f"Tienes {cantidad_de_parts} partes listas para enviar.",
@@ -378,7 +363,7 @@ async def send_mail(client, message):
                         send_email(email, asunto, adjunto=part)
                         if user_id in copy_users:
                             with open(part, "rb") as f:
-                                await message.reply_document(document=f, caption=asunto, protect_content=protect_content)
+                                await client.send_document(chat_id=message.chat.id, document=f, caption=asunto, protect_content=protect_content)
                         await message.reply(
                             f"Parte {os.path.basename(part)} de {cantidad_de_parts} enviada correctamente.",
                             protect_content=protect_content
