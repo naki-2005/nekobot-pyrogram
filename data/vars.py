@@ -29,3 +29,19 @@ video_settings = {
         'codec': 'libx265'
     }
 }
+
+
+correo_manual = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Enviar siguiente parte", callback_data="send_next_part")],
+                    [InlineKeyboardButton("Enviar automáticamente", callback_data="no_action")],
+                    [
+                        InlineKeyboardButton("10 seg", callback_data="auto_delay_10"),
+                        InlineKeyboardButton("30 seg", callback_data="auto_delay_30"),
+                        InlineKeyboardButton("60 seg", callback_data="auto_delay_60")
+                    ],
+                    [
+                        InlineKeyboardButton("90 seg", callback_data="auto_delay_90"),
+                        InlineKeyboardButton("180 seg", callback_data="auto_delay_180")
+                    ],
+                    [InlineKeyboardButton("Cancelar envío", callback_data="cancel_send")]
+                ])
