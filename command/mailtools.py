@@ -17,7 +17,7 @@ user_delays = {}
 exceeded_users = []
 
 async def verify_protect(user_id):
-        protect_content = not (user_id in admin_users or, user_id in vip_users or, not PROTECT_CONTENT)
+        protect_content = not (user_id in admin_users or user_id in vip_users or not PROTECT_CONTENT)
         return protect_content
         
 async def start_auto_send(client, user_id):
