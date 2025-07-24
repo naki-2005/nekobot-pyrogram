@@ -96,7 +96,15 @@ async def set_mail_limit(client, message):
 async def set_mail_delay(client, message):
     user_id = message.from_user.id
     try:
-        new_limit = int(message.text.split(' ', 1)[1])
+        raw_input = message.text.split(' ', 1)[1].strip().lower()
+
+        if raw_input == "manual":
+            user_delays[user_id] = "manual"
+            await message.reply("Modo manual activado. El tiempo de espera será definido por otros parámetros.")
+            return
+
+        new_limit = int(raw_input)
+
         if new_limit < 1:
             await client.send_sticker(
                 chat_id=message.chat.id,
@@ -105,6 +113,7 @@ async def set_mail_delay(client, message):
             time.sleep(3)
             await message.reply("¿Qué haces pendejo?")
             return
+
         if new_limit > 300:
             if user_id in exceeded_users:
                 await client.send_sticker(
@@ -117,11 +126,15 @@ async def set_mail_delay(client, message):
             else:
                 exceeded_users.append(user_id)
                 new_limit = 300
+
         user_delays[user_id] = new_limit
         time.sleep(4)
-        await message.reply(f"El tiempo de espera personal del usuario entre el envio de partes ha sido cambiado a {new_limit} segundos.")
-    except ValueError:
-        await message.reply("Por favor, proporciona un número válido como límite.")
+        await message.reply(
+            f"El tiempo de espera personal del usuario entre el envío de partes ha sido cambiado a {new_limit} segundos."
+        )
+
+    except (IndexError, ValueError):
+        await message.reply("Por favor, proporciona un número válido como límite o escribe 'manual'.")
         
 # Función para obtener el límite de MAIL_MB para un usuario
 def get_mail_limit(user_id):
