@@ -16,6 +16,49 @@ user_limits = {}
 user_delays = {}
 exceeded_users = []
 
+async def mail_query(client, callback_query):
+    user_id = callback_query.from_user.id
+    data = callback_query.data
+
+    if user_id not in part_queue:
+        await callback_query.answer("No hay partes en cola.", show_alert=True)
+        return
+
+    if data == "send_next_part":
+        queue = part_queue[user_id]
+        parts = queue["parts"]
+        email = queue["email"]
+        index = queue["index"]
+        total = queue["total"]
+
+        if index >= total:
+            await callback_query.message.edit_text("Todas las partes fueron enviadas.")
+            del part_queue[user_id]
+            return
+
+        part = parts[index]
+        asunto = f"Parte {os.path.basename(part)} de {total}"
+        try:
+            send_email(email, asunto, adjunto=part)
+            await callback_query.message.reply(f"Parte {os.path.basename(part)} enviada correctamente.")
+            os.remove(part)
+            queue["index"] += 1
+        except Exception as e:
+            await callback_query.message.reply(f"Error al enviar la parte {os.path.basename(part)}: {e}")
+    
+    elif data.startswith("auto_delay_"):
+        delay_value = int(data.replace("auto_delay_", ""))
+        part_queue[user_id]["delay"] = delay_value
+        await callback_query.message.edit_text(f"Envío automático activado con {delay_value} segundos de espera.")
+        await start_auto_send(client, user_id)
+
+    elif data == "cancel_send":
+        del part_queue[user_id]
+        await callback_query.message.edit_text("Envío cancelado por el usuario.")
+
+    elif data == "no_action":
+        await callback_query.answer("Este botón es decorativo 😎", show_alert=False)
+        
 # Función para generar un código de verificación de 6 números
 def generate_verification_code():
     return f"{random.randint(100000, 999999)}"
