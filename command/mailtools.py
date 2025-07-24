@@ -54,7 +54,7 @@ async def start_auto_send(client, user_id):
         text="📬 Envío automático de partes completado.",
         protect_content=protect_content
     )
-    
+
 async def mail_query(client, callback_query):
     user_id = callback_query.from_user.id
     data = callback_query.data
@@ -71,7 +71,7 @@ async def mail_query(client, callback_query):
         total = queue["total"]
 
         if index >= total:
-            await callback_query.message.edit_text("Todas las partes fueron enviadas.")
+            await callback_query.message.edit_text("Todas las partes se han enviado.")
             del part_queue[user_id]
             return
 
@@ -82,9 +82,20 @@ async def mail_query(client, callback_query):
             await callback_query.message.reply(f"Parte {os.path.basename(part)} enviada correctamente.")
             os.remove(part)
             queue["index"] += 1
+
+            partes_restantes = total - queue["index"]
+            if partes_restantes <= 0:
+                await callback_query.message.edit_text("Todas las partes se han enviado.")
+                del part_queue[user_id]
+            else:
+                await callback_query.message.edit_text(
+                    f"Quedan {partes_restantes} parte{'s' if partes_restantes > 1 else ''} por enviar.",
+                    reply_markup=correo_manual if partes_restantes > 1 else None
+                )
+
         except Exception as e:
             await callback_query.message.reply(f"Error al enviar la parte {os.path.basename(part)}: {e}")
-    
+
     elif data.startswith("auto_delay_"):
         delay_value = int(data.replace("auto_delay_", ""))
         part_queue[user_id]["delay"] = delay_value
@@ -97,7 +108,8 @@ async def mail_query(client, callback_query):
 
     elif data == "no_action":
         await callback_query.answer("Este botón es decorativo 😎", show_alert=False)
-        
+            
+
 # Función para generar un código de verificación de 6 números
 def generate_verification_code():
     return f"{random.randint(100000, 999999)}"
