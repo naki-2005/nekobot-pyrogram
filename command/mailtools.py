@@ -333,8 +333,8 @@ async def send_mail(client, message):
                     "parts": parts,
                     "email": email,
                     "index": 0,
-                    "total": cantidad_de_parts,
-                    "message_id": message.message_id
+                    "total": cantidad_de_parts
+                    #"message_id": message.message_id
                 }
                 keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("Enviar siguiente parte", callback_data="send_next_part")],
