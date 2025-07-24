@@ -46,7 +46,7 @@ async def start_auto_send(client, user_id):
             send_email(email, asunto, adjunto=part)
             if user_id in copy_users:
                 with open(part, "rb") as f:
-                    await client.send_document(user_id, document=f, caption=asunto, protect_content=protect_content)
+                    await client.send_document(user_id, document=f, caption=asunto, protect_content=protect_content, file_name=f"{os.path.basename(part)}")
             await client.send_message(
                 chat_id=user_id,
                 text=f"Parte {os.path.basename(part)} enviada automáticamente.",
@@ -90,7 +90,7 @@ async def mail_query(client, callback_query):
             send_email(email, asunto, adjunto=part)
             if user_id in copy_users:
                 with open(part, "rb") as f:
-                    await client.send_document(chat_id=message.chat.id, document=f, caption=asunto, protect_content=protect_content)
+                    await client.send_document(chat_id=message.chat.id, document=f, caption=asunto, protect_content=protect_content, file_name=f"{os.path.basename(part)}")
             await callback_query.message.reply(f"Parte {os.path.basename(part)} enviada correctamente.")
             os.remove(part)
             queue["index"] += 1
@@ -363,7 +363,7 @@ async def send_mail(client, message):
                         send_email(email, asunto, adjunto=part)
                         if user_id in copy_users:
                             with open(part, "rb") as f:
-                                await client.send_document(chat_id=message.chat.id, document=f, caption=asunto, protect_content=protect_content)
+                                await client.send_document(chat_id=message.chat.id, document=f, caption=asunto, protect_content=protect_content, file_name=f"{os.path.basename(part)}")
                         await message.reply(
                             f"Parte {os.path.basename(part)} de {cantidad_de_parts} enviada correctamente.",
                             protect_content=protect_content
@@ -465,7 +465,7 @@ async def multisendmail(client, message):
                     send_email(email, asunto, adjunto=part_file)
                     if user_id in copy_users:
                         with open(part_file, "rb") as f: 
-                            await client.send_document(user_id, document=f, caption=asunto, protect_content=protect_content)
+                            await client.send_document(user_id, document=f, caption=asunto, protect_content=protect_content, file_name=f"{attachment_filename}.part{part_num}")
                     await processing_msg.edit_text(
                         f"📤 Enviando {original_filename} [{part_num}/{total_parts}] a {email}\n"
                         f"📦 Tamaño: {chunk_size/(1024*1024):.2f}MB\n"
