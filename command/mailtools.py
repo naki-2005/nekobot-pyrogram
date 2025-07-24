@@ -8,14 +8,48 @@ import random
 from data.vars import admin_users, vip_users, video_limit, PROTECT_CONTENT
 import asyncio
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-part_queue = {}              # Cola de partes por usuario para envío manual
-# Diccionarios para almacenar información de los usuarios
+
+part_queue = {}
 user_emails = {}
 verification_storage = {}
 user_limits = {}
 user_delays = {}
 exceeded_users = []
 
+async def start_auto_send(client, user_id):
+    if user_id not in part_queue:
+        return  # No hay nada que enviar
+    queue = part_queue[user_id]
+    parts = queue.get("parts", [])
+    email = queue.get("email")
+    index = queue.get("index", 0)
+    total = queue.get("total", len(parts))
+    delay = queue.get("delay", 10)
+    for i in range(index, total):
+        part = parts[i]
+        asunto = f"Parte {os.path.basename(part)} de {total}"
+        try:
+            send_email(email, asunto, adjunto=part)
+            await client.send_message(
+                chat_id=user_id,
+                text=f"Parte {os.path.basename(part)} enviada automáticamente.",
+                protect_content=True
+            )
+            os.remove(part)
+            await asyncio.sleep(delay)
+        except Exception as e:
+            await client.send_message(
+                chat_id=user_id,
+                text=f"Error al enviar la parte {os.path.basename(part)}: {e}",
+                protect_content=True
+            )
+    del part_queue[user_id]
+    await client.send_message(
+        chat_id=user_id,
+        text="📬 Envío automático de partes completado.",
+        protect_content=True
+    )
+    
 async def mail_query(client, callback_query):
     user_id = callback_query.from_user.id
     data = callback_query.data
