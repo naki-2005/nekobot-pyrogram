@@ -32,6 +32,53 @@ def usar_github():
 def obtener_usuario(data, user_id):
     return data.setdefault("usuarios", {}).setdefault(user_id, {})
 
+def cargar_datos():
+    if usar_github():
+        url = f'https://raw.githubusercontent.com/{GIT_REPO}/{GITHUB_BRANCH}/{GITHUB_PATH}'
+        try:
+            response = requests.get(url, headers={'Authorization': f'token {GIT_API}'})
+            if response.status_code == 200:
+                return json.loads(response.text)
+        except Exception as e:
+            print(f"[GitHub] Error de lectura: {e}")
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"[Local] Error al leer datos: {e}")
+    return {}
+
+def guardar_datos(user_id, campo, valor):
+    data = cargar_datos()
+    usuario = data.setdefault("usuarios", {}).setdefault(str(user_id), {})
+    usuario[campo] = valor
+    contenido = json.dumps(data, indent=2)
+    headers = {'Authorization': f'token {GIT_API}'}
+    if usar_github():
+        try:
+            url = f'https://api.github.com/repos/{GIT_REPO}/contents/{GITHUB_PATH}'
+            get_resp = requests.get(url, headers=headers)
+            sha_actual = get_resp.json().get('sha', None)
+            payload = {
+                "message": f"Actualización de usuario {user_id}: campo {campo}",
+                "content": base64.b64encode(contenido.encode()).decode(),
+                "branch": GITHUB_BRANCH
+            }
+            if sha_actual:
+                payload["sha"] = sha_actual
+            put_resp = requests.put(url, headers=headers, json=payload)
+            if put_resp.status_code not in [200, 201]:
+                print(f"[GitHub] Error al guardar: {put_resp.status_code}")
+        except Exception as e:
+            print(f"[GitHub] Error: {e}")
+    else:
+        try:
+            with open(DATA_FILE, 'w', encoding='utf-8') as f:
+                f.write(contenido)
+        except Exception as e:
+            print(f"[Local] Error al guardar: {e}")
+            
 async def set_mail_limit(client, message):
     user_id = str(message.from_user.id)
     data = cargar_datos()
