@@ -82,6 +82,26 @@ def guardar_datos(user_id, campo, valor):
         except Exception as e:
             print(f"[Local] Error al guardar: {e}")
 
+def mostrar_preferencias(user_id):
+    data = cargar_datos()
+    usuario = obtener_usuario(data, user_id)
+
+    correo = usuario.get("email", None) or "No está definido"
+    delay = usuario.get("delay", "manual")
+    limite = usuario.get("limit_mb", 10)
+
+    multi_email = usuario.get("multi_email", None)
+    if multi_email:
+        otros = "\n".join([f"{e}: {c['size_limit']}MB*{c['msg_limit']} mensajes" for e, c in multi_email.items()])
+    else:
+        otros = "No existen otros correos"
+
+    return (f"Preferencias actualizadas:\n"
+            f"Correo: {correo}\n"
+            f"Delay: {delay}\n"
+            f"Límite: {limite} MB\n"
+            f"Otros correos:\n{otros}")
+
 async def set_mail_limit(client, message):
     user_id = str(message.from_user.id)
     try:
@@ -96,13 +116,13 @@ async def set_mail_limit(client, message):
                 await message.reply("¿Qué haces pendejo? 20 es el límite.")
                 return
             data["exceeded_users"].append(user_id)
-            guardar_datos(user_id, "exceeded_users", data["exceeded_users"])
+            with open(DATA_FILE, 'w', encoding='utf-8') as f:
+                f.write(json.dumps(data, indent=2))
             new_limit = 20
         guardar_datos(user_id, "limit_mb", new_limit)
-        await message.reply(f"Límite personal actualizado a {new_limit} MB.")
+        await message.reply(mostrar_preferencias(user_id))
     except ValueError:
         await message.reply("Por favor, proporciona un número válido como límite.")
-
 
 async def set_mail_delay(client, message):
     user_id = str(message.from_user.id)
@@ -110,7 +130,7 @@ async def set_mail_delay(client, message):
         raw_input = message.text.split(' ', 1)[1].strip().lower()
         if raw_input == "manual":
             guardar_datos(user_id, "delay", "manual")
-            await message.reply("Modo manual activado.")
+            await message.reply(mostrar_preferencias(user_id))
             return
         new_delay = int(raw_input)
         if new_delay < 1 or new_delay > 300:
@@ -119,27 +139,27 @@ async def set_mail_delay(client, message):
                 await message.reply("¿Qué haces pendejo? Ese tiempo no es válido.")
                 return
             data["exceeded_users"].append(user_id)
-            guardar_datos(user_id, "exceeded_users", data["exceeded_users"])
+            with open(DATA_FILE, 'w', encoding='utf-8') as f:
+                f.write(json.dumps(data, indent=2))
             new_delay = max(1, min(new_delay, 300))
         guardar_datos(user_id, "delay", new_delay)
-        await message.reply(f"Tiempo de espera actualizado a {new_delay} segundos.")
+        await message.reply(mostrar_preferencias(user_id))
     except (IndexError, ValueError):
         await message.reply("Proporciona un número válido o escribe 'manual'.")
-
 
 async def set_mail(client, message):
     user_id = str(message.from_user.id)
     email = message.text.split(' ', 1)[1]
     if int(user_id) in admin_users:
         guardar_datos(user_id, "email", email)
-        await message.reply("Correo registrado automáticamente como administrador.")
+        await message.reply(mostrar_preferencias(user_id))
         return
     mail_conf = os.getenv('MAIL_CONFIRMED')
     if mail_conf:
         confirmed_users = {item.split('=')[0]: item.split('=')[1].split(';') for item in mail_conf.split(',') if '=' in item}
         if user_id in confirmed_users and email in confirmed_users[user_id]:
             guardar_datos(user_id, "email", email)
-            await message.reply("Correo confirmado automáticamente.")
+            await message.reply(mostrar_preferencias(user_id))
             return
     code = generate_verification_code()
     try:
@@ -149,22 +169,21 @@ async def set_mail(client, message):
     except Exception as e:
         await message.reply(f"Error al enviar correo: {e}")
 
-
 async def verify_mail(client, message):
     user_id = str(message.from_user.id)
     code = message.text.split(' ', 1)[1]
     data = cargar_datos()
     usuario = obtener_usuario(data, user_id)
-    if "verificacion" not in usuario:
+    verif = usuario.get("verificacion")
+    if not verif:
         await message.reply("No hay código pendiente. Usa /setmail.")
         return
-    if code == usuario["verificacion"]["code"]:
-        guardar_datos(user_id, "email", usuario["verificacion"]["email"])
-        guardar_datos(user_id, "verificacion", None)  # Elimina el campo
-        await message.reply("Correo verificado correctamente.")
+    if code == verif.get("code"):
+        guardar_datos(user_id, "email", verif.get("email"))
+        guardar_datos(user_id, "verificacion", None)
+        await message.reply(mostrar_preferencias(user_id))
     else:
         await message.reply("Código incorrecto.")
-
 
 async def multisetmail(client, message):
     user_id = str(message.from_user.id)
@@ -186,11 +205,11 @@ async def multisetmail(client, message):
                 return
             config[email] = {"size_limit": size_limit, "msg_limit": msg_limit}
         guardar_datos(user_id, "multi_email", config)
-        resumen = "\n".join([f"{e}: {c['size_limit']}MB*{c['msg_limit']} mensajes" for e, c in config.items()])
-        await message.reply(f"✅ Múltiples correos configurados:\n{resumen}")
+        await message.reply(mostrar_preferencias(user_id))
     except Exception as e:
         await message.reply(f"❌ Error: {str(e)}")
         
+
 async def copy_manager(user):
     if user not in copy_users:
         copy_users.append(user)
