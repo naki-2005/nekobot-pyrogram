@@ -4,12 +4,15 @@ import asyncio
 async def lista_cmd(app):
     await app.set_bot_commands([
         BotCommand("start", "Comprobar actividad"),
+        BotCommand("help", "Tutorial de comandos"),
         BotCommand("setsize", "Defina el tamaño en Mb para /compress"),
         BotCommand("compress", "Comprimir un archivo en partes"),
         BotCommand("rename", "Cambia el nombre de un archivo"),
         BotCommand("convert", "Convierte un video"),
         BotCommand("calidad", "Ajusta la calidad de /convert"),
         BotCommand("setmail", "Configure su correo para usar /send"),
+        BotCommand("setdelay", "Configure el delay del correo"),
+        BotCommand("setmb", "Configure el peso de las partes"),
         BotCommand("sendmail", "Envía un archivo a su correo"),
         BotCommand("verify", "Verifica tu correo con un código"),
         BotCommand("setfile", "Define su preferencia de descarga de Hentai"),
@@ -19,6 +22,7 @@ async def lista_cmd(app):
         BotCommand("cover3h", "Obtener info de un manga hentai de 3Hentai"),
         BotCommand("scan", "Escanea los links dentro de un link indicando"),
         BotCommand("resumecodes", "Extrae codigos Hentai de archivos txt del scan"),
+        BotCommand("resumetxtcodes", "Extrae codigos Hentai y los envia en txt"),
         BotCommand("imgchest", "Publica una imagen en Imgchest"),
         BotCommand("access", "Obten acceso al bot mediante una contraseña"),
         BotCommand("adduser", "Permite a un usuario usar el bot (admin)"),
