@@ -72,6 +72,127 @@ def guardar_datos(data):
                 f.write(contenido)
         except Exception as e:
             print(f"[Local] Error al guardar: {e}")
+async def set_mail_limit(client, message):
+    user_id = str(message.from_user.id)
+    data = cargar_datos()
+
+    try:
+        new_limit = int(message.text.split(' ', 1)[1])
+        if new_limit < 1:
+            await client.send_sticker(chat_id=message.chat.id, sticker="CAACAgIAAxkBAAIF0...")
+            await message.reply("¿Qué haces pendejo?")
+            return
+        if new_limit > 20:
+            if user_id in data.get("exceeded_users", []):
+                await message.reply("¿Qué haces pendejo? 20 es el límite.")
+                return
+            data.setdefault("exceeded_users", []).append(user_id)
+            new_limit = 20
+
+        usuario = data.setdefault("usuarios", {}).setdefault(user_id, {})
+        usuario["limit_mb"] = new_limit
+        guardar_datos(data)
+        await message.reply(f"Límite personal actualizado a {new_limit} MB.")
+
+    except ValueError:
+        await message.reply("Por favor, proporciona un número válido como límite.")
+
+async def set_mail_delay(client, message):
+    user_id = str(message.from_user.id)
+    data = cargar_datos()
+
+    try:
+        raw_input = message.text.split(' ', 1)[1].strip().lower()
+        usuario = data.setdefault("usuarios", {}).setdefault(user_id, {})
+
+        if raw_input == "manual":
+            usuario["delay"] = "manual"
+            guardar_datos(data)
+            await message.reply("Modo manual activado.")
+            return
+
+        new_delay = int(raw_input)
+        if new_delay < 1 or new_delay > 300:
+            if user_id in data.get("exceeded_users", []):
+                await message.reply("¿Qué haces pendejo? Ese tiempo no es válido.")
+                return
+            data.setdefault("exceeded_users", []).append(user_id)
+            new_delay = min(max(new_delay, 1), 300)
+
+        usuario["delay"] = new_delay
+        guardar_datos(data)
+        await message.reply(f"Tiempo de espera actualizado a {new_delay} segundos.")
+
+    except (IndexError, ValueError):
+        await message.reply("Proporciona un número válido o escribe 'manual'.")
+
+async def set_mail(client, message):
+    user_id = str(message.from_user.id)
+    email = message.text.split(' ', 1)[1]
+    data = cargar_datos()
+    usuario = data.setdefault("usuarios", {}).setdefault(user_id, {})
+
+    if int(user_id) in admin_users:
+        usuario["email"] = email
+        guardar_datos(data)
+        await message.reply("Correo registrado automáticamente como administrador.")
+        return
+
+    mail_conf = os.getenv('MAIL_CONFIRMED')
+    if mail_conf:
+        confirmed_users = {item.split('=')[0]: item.split('=')[1].split(';') 
+                           for item in mail_conf.split(',') if '=' in item}
+        if user_id in confirmed_users and email in confirmed_users[user_id]:
+            usuario["email"] = email
+            guardar_datos(data)
+            await message.reply("Correo confirmado automáticamente.")
+            return
+
+    code = generate_verification_code()
+    try:
+        send_email(email, "Código de Verificación", contenido=f"Tu código es: {code}")
+        usuario["verificacion"] = {"email": email, "code": code}
+        guardar_datos(data)
+        await message.reply("Código enviado. Usa /verify para confirmarlo.")
+    except Exception as e:
+        await message.reply(f"Error al enviar correo: {e}")
+
+
+async def multisetmail(client, message):
+    user_id = str(message.from_user.id)
+    if int(user_id) not in admin_users:
+        await message.reply("Solo disponible para administradores.")
+        return
+
+    data = cargar_datos()
+    usuario = data.setdefault("usuarios", {}).setdefault(user_id, {})
+    try:
+        emails_raw = message.text.split(' ', 1)[1]
+        entries = [e.strip() for e in emails_raw.split(',') if e.strip()]
+        config = {}
+
+        for entry in entries:
+            if ':' not in entry or '*' not in entry:
+                await message.reply(f"Formato inválido en: {entry}")
+                return
+
+            email, limits = entry.split(':')
+            size_limit, msg_limit = map(int, limits.split('*'))
+
+            if not (1 <= size_limit <= 100) or not (1 <= msg_limit <= 100):
+                await message.reply(f"Límites inválidos en {email}.")
+                return
+
+            config[email] = {"size_limit": size_limit, "msg_limit": msg_limit}
+
+        usuario["multi_email"] = config
+        guardar_datos(data)
+
+        resumen = "\n".join([f"{e}: {c['size_limit']}MB*{c['msg_limit']} mensajes" for e, c in config.items()])
+        await message.reply(f"✅ Múltiples correos configurados:\n{resumen}")
+
+    except Exception as e:
+        await message.reply(f"❌ Error: {str(e)}")
 
 async def copy_manager(user):
     if user not in copy_users:
@@ -179,66 +300,6 @@ async def mail_query(client, callback_query):
 def generate_verification_code():
     return f"{random.randint(100000, 999999)}"
 
-async def set_mail_limit(client, message):
-    user_id = str(message.from_user.id)
-    protect_content = await verify_protect(message.from_user.id)
-    data = cargar_datos()
-    try:
-        new_limit = int(message.text.split(' ', 1)[1])
-        if new_limit < 1:
-            await client.send_sticker(chat_id=message.chat.id, sticker="CAACAgIAAxkBAAIF0...")
-            await asyncio.sleep(3)
-            await message.reply("¿Qué haces pendejo?")
-            return
-        if new_limit > 20:
-            if user_id in data.get("exceeded_users", []):
-                await client.send_sticker(chat_id=message.chat.id, sticker="CAACAgIAAxkBAAIF0...")
-                await asyncio.sleep(3)
-                await message.reply("¿Qué haces pendejo? 20 es el límite.")
-                return
-            else:
-                data.setdefault("exceeded_users", []).append(user_id)
-                new_limit = 20
-        data.setdefault("user_limits", {})[user_id] = new_limit
-        guardar_datos(data)
-        await message.reply(f"El límite personal ha sido cambiado a {new_limit} MB.")
-    except ValueError:
-        await message.reply("Por favor, proporciona un número válido como límite.")
-
-async def set_mail_delay(client, message):
-    user_id = str(message.from_user.id)
-    protect_content = await verify_protect(message.from_user.id)
-    data = cargar_datos()
-    try:
-        raw_input = message.text.split(' ', 1)[1].strip().lower()
-        if raw_input == "manual":
-            data.setdefault("user_delays", {})[user_id] = "manual"
-            guardar_datos(data)
-            await message.reply("Modo manual activado.")
-            return
-
-        new_limit = int(raw_input)
-        if new_limit < 1:
-            await client.send_sticker(chat_id=message.chat.id, sticker="CAACAgIAAxkBAAIF0...")
-            await asyncio.sleep(3)
-            await message.reply("¿Qué haces pendejo?")
-            return
-        if new_limit > 300:
-            if user_id in data.get("exceeded_users", []):
-                await client.send_sticker(chat_id=message.chat.id, sticker="CAACAgIAAxkBAAIF0...")
-                await asyncio.sleep(3)
-                await message.reply("¿Qué haces pendejo? Eso no llegaría nunca.")
-                return
-            else:
-                data.setdefault("exceeded_users", []).append(user_id)
-                new_limit = 300
-        data.setdefault("user_delays", {})[user_id] = new_limit
-        guardar_datos(data)
-        await asyncio.sleep(4)
-        await message.reply(f"Tiempo de espera cambiado a {new_limit} segundos.")
-    except (IndexError, ValueError):
-        await message.reply("Proporciona un número válido o escribe 'manual'.")
-
 def send_email(destino, asunto, contenido=None, adjunto=False):
     import os
     import smtplib
@@ -271,65 +332,6 @@ def send_email(destino, asunto, contenido=None, adjunto=False):
         server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
         server.send_message(msg)
         
-async def set_mail(client, message):
-    email = message.text.split(' ', 1)[1]
-    user_id = str(message.from_user.id)
-    protect_content = await verify_protect(message.from_user.id)
-    data = cargar_datos()
-    mail_confirmed = os.getenv('MAIL_CONFIRMED')
-
-    if int(user_id) in admin_users:
-        data.setdefault('user_emails', {})[user_id] = email
-        guardar_datos(data)
-        await message.reply("Correo electrónico registrado automáticamente porque eres el administrador del bot.")
-        return
-
-    if mail_confirmed:
-        confirmed_users = {
-            item.split('=')[0]: item.split('=')[1].split(';') 
-            for item in mail_confirmed.split(',') if '=' in item
-        }
-        if user_id in confirmed_users and email in confirmed_users[user_id]:
-            data.setdefault('user_emails', {})[user_id] = email
-            guardar_datos(data)
-            await message.reply("Correo electrónico registrado automáticamente porque el administrador del bot reconoce tu dirección.")
-            return
-
-    verification_code = generate_verification_code()
-    try:
-        contenido = (
-            f"Tu código de verificación de correo es: {verification_code}\n"
-            "Si no solicitaste este código, simplemente ignóralo."
-        )
-        send_email(email, 'Código de Verificación', contenido=contenido)
-        data.setdefault('verification_storage', {})[user_id] = {
-            'email': email,
-            'code': verification_code
-        }
-        guardar_datos(data)
-        await message.reply("Código de verificación enviado a tu correo. Introduce el código usando /verify.")
-    except Exception as e:
-        await message.reply(f"Error al enviar el correo de verificación: {e}")
-
-async def verify_mail(client, message):
-    user_id = str(message.from_user.id)
-    protect_content = await verify_protect(message.from_user.id)
-    code = message.text.split(' ', 1)[1]
-    data = cargar_datos()
-
-    if user_id in data.get('verification_storage', {}):
-        stored_email = data['verification_storage'][user_id]['email']
-        stored_code = data['verification_storage'][user_id]['code']
-        if code == stored_code:
-            data.setdefault('user_emails', {})[user_id] = stored_email
-            del data['verification_storage'][user_id]
-            guardar_datos(data)
-            await message.reply("Correo electrónico verificado y registrado correctamente.")
-        else:
-            await message.reply("El código de verificación es incorrecto. Intenta de nuevo.")
-    else:
-        await message.reply("No hay un código de verificación pendiente. Usa /setmail para iniciar el proceso.")
-
 # Función original de compresión y división de archivo
 def compressfile(file_path, part_size):
     parts = []
@@ -354,8 +356,9 @@ async def send_mail(client, message):
     user_id = str(message.from_user.id)
     protect_content = await verify_protect(message.from_user.id)
     data = cargar_datos()
+    usuario = data.get("usuarios", {}).get(user_id, {})
 
-    email = data.get("user_emails", {}).get(user_id)
+    email = usuario.get("correo")
     if not email:
         await message.reply("No has registrado ningún correo, usa /setmail para hacerlo.", protect_content=True)
         return
@@ -369,8 +372,8 @@ async def send_mail(client, message):
         await message.reply("No puedes enviar este contenido debido a restricciones.", protect_content=protect_content)
         return
 
-    mail_mb = data.get("user_limits", {}).get(user_id, 10)  # Default 10 MB
-    mail_delay = data.get("user_delays", {}).get(user_id, "manual")
+    mail_mb = usuario.get("limite", 10)
+    mail_delay = usuario.get("delay", "manual")
 
     if reply_message.text:
         try:
@@ -415,75 +418,25 @@ async def send_mail(client, message):
                         if user_id in data.get("copy_users", []):
                             with open(part, "rb") as f:
                                 await client.send_document(chat_id=message.chat.id, document=f, caption=asunto, protect_content=protect_content)
-                        await message.reply(
-                            f"Parte {os.path.basename(part)} enviada correctamente.",
-                            protect_content=protect_content
-                        )
+                        await message.reply(f"Parte {os.path.basename(part)} enviada correctamente.", protect_content=protect_content)
                         os.remove(part)
                         time.sleep(float(mail_delay) if isinstance(mail_delay, (float, int)) else 0)
                     except Exception as e:
                         await message.reply(f"Error al enviar la parte {os.path.basename(part)}: {e}", protect_content=protect_content)
-                        
-async def multisetmail(client, message):
-    user_id = str(message.from_user.id)
-    protect_content = await verify_protect(message.from_user.id)
-    data = cargar_datos()
-
-    if int(user_id) not in admin_users:
-        await message.reply("Esta función es solo para administradores.", protect_content=True)
-        return
-
-    try:
-        emails_data = message.text.split(' ', 1)[1]
-        email_entries = [entry.strip() for entry in emails_data.split(',') if entry.strip()]
-        email_config = {}
-
-        for entry in email_entries:
-            if ':' not in entry:
-                await message.reply(f"Formato incorrecto en: {entry}. Usa correo:limite_mb*limite_mensajes")
-                return
-
-            email, limits = entry.rsplit(':', 1)
-            if '*' not in limits:
-                await message.reply(f"Formato incorrecto en: {entry}. Falta límite de mensajes (ej: 20*4)")
-                return
-
-            try:
-                limit_mb, limit_msgs = map(int, limits.split('*'))
-                if not (1 <= limit_mb <= 100):
-                    await message.reply(f"Límite de tamaño inválido para {email}. Debe ser entre 1 y 100 MB.")
-                    return
-                if not (1 <= limit_msgs <= 100):
-                    await message.reply(f"Límite de mensajes inválido para {email}. Debe ser entre 1 y 100.")
-                    return
-                email_config[email] = {'size_limit': limit_mb, 'msg_limit': limit_msgs}
-            except ValueError:
-                await message.reply(f"Límites inválidos para {email}. Deben ser números.")
-                return
-
-        data.setdefault("multi_user_emails", {})[user_id] = email_config
-        guardar_datos(data)
-
-        response = "✅ Configuración de múltiples correos actualizada:\n" + "\n".join([
-            f"{email}: {config['size_limit']}MB*{config['msg_limit']} mensajes" for email, config in email_config.items()
-        ])
-        await message.reply(response)
-
-    except Exception as e:
-        await message.reply(f"❌ Error al procesar la configuración: {str(e)}")
 
 async def multisendmail(client, message):
     user_id = str(message.from_user.id)
     protect_content = await verify_protect(message.from_user.id)
     data = cargar_datos()
+    usuario = data.get("usuarios", {}).get(user_id, {})
 
     if int(user_id) not in admin_users:
         await message.reply("Esta función es solo para administradores.", protect_content=True)
         return
 
-    email_config = data.get("multi_user_emails", {}).get(user_id)
+    email_config = usuario.get("multi_email")
     if not email_config:
-        await message.reply("Primero configura los correos con /multisetmail correo1:limite*msgs,correo2:limite*msgs,...")
+        await message.reply("Primero configura los correos con /multisetmail correo1:limite*msgs,...")
         return
 
     if not message.reply_to_message:
@@ -600,3 +553,4 @@ async def multisendmail(client, message):
         if 'archive_path' in locals() and os.path.exists(archive_path):
             os.remove(archive_path)
         await processing_msg.edit_text(f"❌ Error procesando {original_filename}: {str(e)}")
+    
