@@ -50,16 +50,25 @@ def cargar_datos():
     return {}
 
 def guardar_datos(user_id, campo, valor):
-    data = cargar_datos()
-    usuario = data.setdefault("usuarios", {}).setdefault(str(user_id), {})
-    if valor is None and campo in usuario:
-        del usuario[campo]  # Limpieza segura del campo
-    else:
-        usuario[campo] = valor
-    contenido = json.dumps(data, indent=2)
-    headers = {'Authorization': f'token {GIT_API}'}
-    if usar_github():
-        try:
+    try:
+        data = cargar_datos()
+        usuarios = data.setdefault("usuarios", {})
+
+        # Conserva el bloque completo del usuario
+        usuario_actual = usuarios.get(str(user_id), {})
+        if valor is None:
+            usuario_actual.pop(campo, None)
+        else:
+            usuario_actual[campo] = valor
+
+        usuarios[str(user_id)] = usuario_actual  # ← sobrescribe el usuario completo con merge
+        data["usuarios"] = usuarios
+
+        # Guardar
+        contenido = json.dumps(data, indent=2)
+        headers = {'Authorization': f'token {GIT_API}'}
+
+        if usar_github():
             url = f'https://api.github.com/repos/{GIT_REPO}/contents/{GITHUB_PATH}'
             get_resp = requests.get(url, headers=headers)
             sha_actual = get_resp.json().get('sha', None)
@@ -73,14 +82,11 @@ def guardar_datos(user_id, campo, valor):
             put_resp = requests.put(url, headers=headers, json=payload)
             if put_resp.status_code not in [200, 201]:
                 print(f"[GitHub] Error al guardar: {put_resp.status_code}")
-        except Exception as e:
-            print(f"[GitHub] Error: {e}")
-    else:
-        try:
+        else:
             with open(DATA_FILE, 'w', encoding='utf-8') as f:
                 f.write(contenido)
-        except Exception as e:
-            print(f"[Local] Error al guardar: {e}")
+    except Exception as e:
+        print(f"[Guardar] Error general: {e}")
 
 def mostrar_preferencias(user_id):
     data = cargar_datos()
