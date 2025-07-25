@@ -26,12 +26,8 @@ async def descargarimagen_async(session, url, path):
         async with session.get(url, timeout=10) as resp:
             resp.raise_for_status()
             content = await resp.read()
-            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-                temp_file.write(content)
-                temp_path = temp_file.name
-            with Image.open(temp_path) as img:
-                img.convert("RGB").save(path, format="PNG")
-            os.remove(temp_path)
+            with open(path, 'wb') as f:
+                f.write(content)
     except Exception:
         pass
 
@@ -125,7 +121,9 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             async with aiohttp.ClientSession() as session:
                 tasks = []
                 for idx, url in enumerate(imagenes):
-                    path = os.path.join(tmpdir, f"{idx+1:03d}.png")
+                    ext = os.path.splitext(url)[1].lower()
+                    if ext not in [".jpg", ".jpeg", ".png", ".webp"]: ext = ".jpg"
+                    path = os.path.join(tmpdir, f"{idx+1:03d}{ext}")
                     tasks.append(descargarimagen_async(session, url, path))
                     paths.append(path)
                     if (idx + 1) % 5 == 0 or (idx + 1) == len(imagenes):
@@ -179,3 +177,4 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             await progresomsg.delete()
         except Exception:
             pass
+                
