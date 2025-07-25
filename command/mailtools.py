@@ -157,7 +157,24 @@ async def set_mail(client, message):
     except Exception as e:
         await message.reply(f"Error al enviar correo: {e}")
 
+async def verify_mail(client, message):
+    user_id = str(message.from_user.id)
+    code = message.text.split(' ', 1)[1]
+    data = cargar_datos()
+    usuario = data.setdefault("usuarios", {}).get(user_id)
 
+    if not usuario or "verificacion" not in usuario:
+        await message.reply("No hay código pendiente. Usa /setmail.")
+        return
+
+    if code == usuario["verificacion"]["code"]:
+        usuario["email"] = usuario["verificacion"]["email"]
+        del usuario["verificacion"]
+        guardar_datos(data)
+        await message.reply("Correo verificado correctamente.")
+    else:
+        await message.reply("Código incorrecto.")
+        
 async def multisetmail(client, message):
     user_id = str(message.from_user.id)
     if int(user_id) not in admin_users:
