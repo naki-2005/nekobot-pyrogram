@@ -3,8 +3,9 @@ import re
 import tempfile
 import shutil
 import requests
-import threading
 import subprocess
+import aiohttp
+import asyncio
 from PIL import Image
 
 defaultselectionmap = {}
@@ -18,15 +19,19 @@ def cambiar_default_selection(userid, nuevaseleccion):
     defaultselectionmap[userid] = nuevaseleccion
 
 def limpiarnombre(nombre):
-    # Solo letras, números y espacios
     return re.sub(r'[^a-zA-Z0-9 ]', '', nombre.replace('\n', ' ')).strip()
 
-def descargarimagen(url, path):
+async def descargarimagen_async(session, url, path):
     try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        with open(path, 'wb') as f:
-            f.write(resp.content)
+        async with session.get(url, timeout=10) as resp:
+            resp.raise_for_status()
+            content = await resp.read()
+            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+                temp_file.write(content)
+                temp_path = temp_file.name
+            with Image.open(temp_path) as img:
+                img.convert("RGB").save(path, format="PNG")
+            os.remove(temp_path)
     except Exception:
         pass
 
@@ -42,7 +47,6 @@ def obtenerporcli(codigo, tipo, cover):
         salida = result.stdout.splitlines()
         texto = ""
         imagenes = []
-
         modotexto = False
         for linea in salida:
             if linea.strip().startswith("📄"):
@@ -53,7 +57,6 @@ def obtenerporcli(codigo, tipo, cover):
                 texto += linea.strip() + " "
             elif linea.strip().startswith("http"):
                 imagenes.append(linea.strip())
-
         return {"texto": texto.strip(), "imagenes": imagenes}
     except Exception as e:
         print("❌ Error ejecutando script externo:", e)
@@ -71,13 +74,10 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             await message.reply(f"❌ No se encontraron imágenes para {codigo}")
             continue
 
-        # 🖼️ Enviar preview con múltiples intentos
         try:
-            previewurl = imagenes[0]
-            ext = os.path.splitext(previewurl)[1].lower()
-            safeext = ext if ext in [".jpg", ".jpeg", ".png"] else ".jpg"
-            previewpath = f"{nombrebase} preview{safeext}"
-            descargarimagen(previewurl, previewpath)
+            previewpath = f"{nombrebase} preview.png"
+            async with aiohttp.ClientSession() as session:
+                await descargarimagen_async(session, imagenes[0], previewpath)
 
             await client.send_photo(
                 chat_id=message.chat.id,
@@ -92,7 +92,6 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             try:
                 with Image.open(previewpath) as img:
                     img.convert("RGB").save(fallbackpath)
-
                 await client.send_photo(
                     chat_id=message.chat.id,
                     photo=fallbackpath,
@@ -123,28 +122,25 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
 
         with tempfile.TemporaryDirectory() as tmpdir:
             paths = []
-            threads = []
+            async with aiohttp.ClientSession() as session:
+                tasks = []
+                for idx, url in enumerate(imagenes):
+                    path = os.path.join(tmpdir, f"{idx+1:03d}.png")
+                    tasks.append(descargarimagen_async(session, url, path))
+                    paths.append(path)
+                    if (idx + 1) % 5 == 0 or (idx + 1) == len(imagenes):
+                        try:
+                            await progresomsg.edit_text(
+                                f"📦 Generando archivo para {nombrebase} ({len(imagenes)} páginas)...\nProgreso {idx + 1}/{len(imagenes)}"
+                            )
+                        except Exception:
+                            pass
+                await asyncio.gather(*tasks)
 
-            for idx, url in enumerate(imagenes):
-                ext = os.path.splitext(url)[1].lower()
-                ext = ext if ext in [".jpg", ".jpeg", ".png", ".webp"] else ".jpg"
-                path = os.path.join(tmpdir, f"{idx+1:03d}{ext}")
-                t = threading.Thread(target=descargarimagen, args=(url, path))
-                threads.append(t)
-                paths.append(path)
-
-                if (idx + 1) % 5 == 0 or (idx + 1) == len(imagenes):
-                    try:
-                        await progresomsg.edit_text(
-                            f"📦 Generando archivo para {nombrebase} ({len(imagenes)} páginas)...\nProgreso {idx + 1}/{len(imagenes)}"
-                        )
-                    except Exception:
-                        pass
-
-            for t in threads:
-                t.start()
-            for t in threads:
-                t.join()
+            finalimage_path = os.path.join("command", "spam.png")
+            finalpage_path = os.path.join(tmpdir, f"{len(paths)+1:03d}.png")
+            shutil.copyfile(finalimage_path, finalpage_path)
+            paths.append(finalpage_path)
 
             archivos = []
 
@@ -163,12 +159,7 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                             with Image.open(path) as im:
                                 mainimages.append(im.convert("RGB"))
                         except Exception:
-                            try:
-                                with Image.open(path) as badimg:
-                                    fixed = badimg.convert("RGB")
-                                    mainimages.append(fixed)
-                            except Exception:
-                                continue
+                            continue
                     if mainimages:
                         mainimages[0].save(pdfpath, save_all=True, append_images=mainimages[1:])
                         archivos.append(pdfpath)
