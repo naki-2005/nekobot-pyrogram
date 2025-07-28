@@ -1,8 +1,11 @@
 import os
+import time
 import asyncio
 import nest_asyncio
+import threading
 import logging
 import random
+from flask import Flask, send_from_directory, request, render_template_string
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from process_command import process_command
@@ -16,6 +19,7 @@ from data.vars import (
     BOT_IS_PUBLIC, PROTECT_CONTENT, allowed_ids, allowed_users
 )
 
+# -------- Bot de Telegram --------
 nest_asyncio.apply()
 app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
 
@@ -126,11 +130,65 @@ async def callback_handler(client, callback_query):
     else:
         await callback_query.answer("No se ha encontrado una respuesta Query correcta.", show_alert=True)
 
+# -------- Servidor Flask --------
+explorer = Flask("file_explorer")
+BASE_DIR = "/"
+
+TEMPLATE = """
+<!doctype html>
+<html>
+<head><title>Explorador de Archivos</title></head>
+<body>
+    <h2>Navegando en: {{ current_path }}</h2>
+    <ul>
+    {% for item in items %}
+        <li>
+            {% if item['is_dir'] %}
+                <a href="/browse?path={{ item['full_path'] }}">{{ item['name'] }}/</a>
+            {% else %}
+                <a href="/download?path={{ item['full_path'] }}">{{ item['name'] }}</a>
+            {% endif %}
+        </li>
+    {% endfor %}
+    </ul>
+</body>
+</html>
+"""
+
+@explorer.route("/")
+@explorer.route("/browse")
+def browse():
+    path = request.args.get("path", BASE_DIR)
+    try:
+        items = []
+        for name in os.listdir(path):
+            full_path = os.path.join(path, name)
+            items.append({
+                "name": name,
+                "full_path": full_path,
+                "is_dir": os.path.isdir(full_path)
+            })
+        return render_template_string(TEMPLATE, current_path=path, items=items)
+    except Exception as e:
+        return f"<h3>Error al acceder a {path}: {e}</h3>"
+
+@explorer.route("/download")
+def download():
+    path = request.args.get("path")
+    if os.path.isfile(path):
+        return send_from_directory(os.path.dirname(path), os.path.basename(path), as_attachment=True)
+    return "<h3>Archivo no válido para descarga.</h3>"
+
+def run_flask():
+    explorer.run(host="0.0.0.0", port=10000)
+
+# -------- Inicio principal --------
 async def main():
+    threading.Thread(target=run_flask, daemon=True).start()
     await app.start()
     if MAIN_ADMIN:
         await notify_main_admin()
-    print("Bot iniciado y operativo.")
+    print("Bot iniciado y servidor Flask corriendo en puerto 5000.")
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
