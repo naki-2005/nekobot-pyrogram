@@ -13,3 +13,4 @@ Pillow
 nest_asyncio
 fpdf
 wget
+flask
