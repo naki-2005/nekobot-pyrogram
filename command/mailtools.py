@@ -137,7 +137,7 @@ async def set_mail_limit(client, message):
             time.sleep(3)
             await message.reply("¿Qué haces pendejo?")
             return
-        if new_limit > 20:
+        if new_limit > 20 and user_id not in admin_users:
             if user_id in exceeded_users:
                 await client.send_sticker(
                     chat_id=message.chat.id,
