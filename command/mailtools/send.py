@@ -8,7 +8,8 @@ import random
 from data.vars import admin_users, vip_users, video_limit, PROTECT_CONTENT, correo_manual
 import asyncio
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from command.mailtools.set_values import verify_protect, get_mail_limit, get_user_delay, multi_user_emails, copy_users, exceeded_users, user_emails
+from command.mailtools.set_values import verify_protect, get_mail_limit, get_user_delay, multi_user_emails, copy_users, exceeded_users, user_emails, user_delays, user_limits
+
 from command.mailtools.db import load_mail
 part_queue = {}
 
