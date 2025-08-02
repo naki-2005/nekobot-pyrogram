@@ -111,6 +111,38 @@ def get_mail_limit(user_id):
     return user_limits.get(user_id, int(os.getenv('MAIL_MB', 20)))
 def get_user_delay(user_id):
     return user_delays.get(user_id, int(os.getenv('MAIL_DELAY', 30)))
+
+def send_ver(destino, asunto, contenido=None, adjunto=False):
+    import os
+    import smtplib
+    from email.message import EmailMessage
+
+    msg = EmailMessage()
+    msg['Subject'] = asunto
+    msg['From'] = f"Neko Bot <{os.getenv('MAILDIR')}>"
+    msg['To'] = destino
+
+    if adjunto:
+        with open(adjunto, 'rb') as f:
+            msg.add_attachment(
+                f.read(),
+                maintype='application',
+                subtype='octet-stream',
+                filename=os.path.basename(adjunto)
+            )
+    else:
+        msg.set_content(contenido if contenido else asunto)
+
+    server_details = os.getenv('MAIL_SERVER').split(':')
+    smtp_host = server_details[0]
+    smtp_port = int(server_details[1])
+    security_enabled = len(server_details) > 2 and server_details[2].lower() == 'tls'
+
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        if security_enabled:
+            server.starttls()
+        server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
+        server.send_message(msg)
         
 async def set_mail(client, message):
     email = message.text.split(' ', 1)[1]
@@ -137,7 +169,7 @@ async def set_mail(client, message):
 Tu código de verificación de correo es: {verification_code}
 Si no solicitaste este código simplemente ignóralo.
 """
-        send_email(email, 'Código de Verificación', contenido=contenido)
+        send_ver(email, 'Código de Verificación', contenido=contenido)
         verification_storage[user_id] = {'email': email, 'code': verification_code}
         await message.reply("Código de verificación enviado a tu correo. Introduce el código usando /verify.")
     except Exception as e:
