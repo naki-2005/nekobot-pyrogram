@@ -159,12 +159,10 @@ async def send_mail(client, message):
     protect_content = await verify_protect(user_id)
     if user_id not in user_emails:
         emails, delays, limits = load_mail()
-        user_emails.update(emails)
-        user_delays.update(delays)
-        user_limits.update(limits)
-
-        await asyncio.sleep(1) 
-
+        email = emails[user_id]
+        mail_mb = limits.get(user_id, default_mb)
+        mail_delay = delays.get(user_id, "manual")
+        
     if user_id not in user_emails:  # 🔁 Verifica de nuevo
         protect_content = await verify_protect(user_id)
         await message.reply(
