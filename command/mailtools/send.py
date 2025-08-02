@@ -160,7 +160,7 @@ async def send_mail(client, message):
     if user_id not in user_emails:
         emails, delays, limits = load_mail()
         email = emails[user_id]
-        mail_mb = limits.get(user_id, default_mb)
+        mail_mb = limits.get(user_id, 10)
         mail_delay = delays.get(user_id, "manual")
         
     if user_id not in user_emails:  # 🔁 Verifica de nuevo
