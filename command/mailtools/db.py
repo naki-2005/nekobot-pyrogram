@@ -82,12 +82,21 @@ def load_mail():
             config = json.loads(
                 requests.get(content['download_url'], headers=headers).text
             )
+
+            emails, delays, limits = {}, {}, {}
+
             for uid, data in config.items():
                 uid = int(uid)
-                user_emails[uid] = data['email']
-                user_delays[uid] = data['delay']
-                user_limits[uid] = data['limit_mb']
+                emails[uid] = data['email']
+                delays[uid] = data['delay']
+                limits[uid] = data['limit_mb']
+
+            return emails, delays, limits
+
         else:
             print("No se encontró configuración previa.")
+            return {}, {}, {}
+
     except Exception as e:
         print(f"Error al cargar configuración: {str(e)}")
+        return {}, {}, {}
