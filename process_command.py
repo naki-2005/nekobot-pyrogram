@@ -9,7 +9,8 @@ from command.htools import nh_combined_operation, cambiar_default_selection
 from command.admintools import add_user, remove_user, add_chat, remove_chat, ban_user, deban_user, handle_start
 from command.imgtools import create_imgchest_post
 from command.webtools import handle_scan, handle_multiscan, summarize_lines
-from command.mailtools import send_mail, set_mail, verify_mail, set_mail_limit, set_mail_delay, multisetmail, multisendmail, copy_manager
+from command.mailtools.send import send_mail, multisendmail
+from command.mailtools.set_values import set_mail, verify_mail, set_mail_limit, set_mail_delay, multisetmail, copy_manager
 from command.videotools import update_video_settings, compress_video, cancelar_tarea, listar_tareas, cambiar_miniatura
 from command.filetools import handle_compress, rename, set_size, caption
 from command.telegramtools import get_file_id, send_file_by_id

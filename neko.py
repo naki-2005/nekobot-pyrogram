@@ -10,7 +10,7 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from process_command import process_command
 from command.help import handle_help_callback
-from command.mailtools import mail_query
+from command.mailtools.send import mail_query
 from cmd_list import lista_cmd
 from data.stickers import saludos, STICKER_SALUDO, STICKER_DESCANSO, STICKER_REACTIVADO
 from data.vars import (
