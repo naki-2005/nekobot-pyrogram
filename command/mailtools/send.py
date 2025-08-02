@@ -9,6 +9,7 @@ from data.vars import admin_users, vip_users, video_limit, PROTECT_CONTENT, corr
 import asyncio
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from command.mailtools.set_values import verify_protect, get_mail_limit, get_user_delay, multi_user_emails, copy_users, exceeded_users, user_emails
+from command.mailtools.db import load_mail
 part_queue = {}
 
 async def start_auto_send(client, user_id):
@@ -156,7 +157,14 @@ async def send_mail(client, message):
     user_id = message.from_user.id
     protect_content = await verify_protect(user_id)
     if user_id not in user_emails:
-        await message.reply("No has registrado ningún correo, usa /setmail para hacerlo.", protect_content=True)
+        load_mail()
+
+    if user_id not in user_emails:  # 🔁 Verifica de nuevo
+        protect_content = await verify_protect(user_id)
+        await message.reply(
+            "No has registrado ningún correo, usa /setmail para hacerlo.",
+            protect_content=True
+        )
         return
     email = user_emails[user_id]
     if not message.reply_to_message:
