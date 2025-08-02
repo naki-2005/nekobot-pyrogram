@@ -8,7 +8,7 @@ import random
 from data.vars import admin_users, vip_users, video_limit, PROTECT_CONTENT, correo_manual
 import asyncio
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from command.mailtools.utils import send_email
+from command.mailtools.send import send_email
 user_emails = {}
 verification_storage = {}
 user_limits = {}
