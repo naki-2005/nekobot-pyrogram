@@ -157,7 +157,11 @@ async def send_mail(client, message):
     user_id = message.from_user.id
     protect_content = await verify_protect(user_id)
     if user_id not in user_emails:
-        load_mail()
+        emails, delays, limits = load_mail()
+        user_emails.update(emails)
+        user_delays.update(delays)
+        user_limits.update(limits)
+
         await asyncio.sleep(1) 
 
     if user_id not in user_emails:  # 🔁 Verifica de nuevo
