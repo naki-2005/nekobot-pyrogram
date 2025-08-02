@@ -4,8 +4,9 @@ import requests
 admin_users = list(map(int, os.getenv('ADMINS', '').split(','))) if os.getenv('ADMINS') else []
 async def save_mail(client, message):
     user_id = str(message.from_user.id)
+    user_id_int = int(message.from_user.id)
     admin_users = list(map(int, os.getenv('ADMINS', '').split(','))) if os.getenv('ADMINS') else []
-    if user_id not in admin_users:
+    if user_id_int not in admin_users:
         return
 
     try:
