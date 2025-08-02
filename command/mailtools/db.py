@@ -1,7 +1,8 @@
 import os
 import json
 import requests
-admin_users = list(map(int, os.getenv('ADMINS', '').split(','))) if os.getenv('ADMINS') else []
+import base64
+
 async def save_mail(client, message):
     user_id = str(message.from_user.id)
     user_id_int = int(message.from_user.id)
@@ -21,18 +22,16 @@ async def save_mail(client, message):
             "limit_mb": int(payload[3].strip())
         }
 
-        GIT_REPO = os.getenv("GIT_REPO")  # ej. nakigeplayer/data-base
-        GIT_API = os.getenv("GIT_API")    # token de acceso
-        FILE_PATH = "config.json"        # nombre del archivo dentro del repo
+        GIT_REPO = os.getenv("GIT_REPO")
+        GIT_API = os.getenv("GIT_API")
+        FILE_PATH = "config.json"
 
-        # Construye la URL para obtener el contenido del archivo
         url = f"https://api.github.com/repos/{GIT_REPO}/contents/{FILE_PATH}"
         headers = {
             "Authorization": f"token {GIT_API}",
             "Accept": "application/vnd.github.v3+json"
         }
 
-        # Revisa si el archivo ya existe
         response = requests.get(url, headers=headers)
 
         if response.status_code == 200:
@@ -45,13 +44,12 @@ async def save_mail(client, message):
             existing_data = {}
             sha = None
 
-        # Actualiza el JSON
         existing_data[user_id] = user_data
         updated_content = json.dumps(existing_data, indent=4)
 
         commit_data = {
             "message": f"Update config for user {user_id}",
-            "content": updated_content.encode("utf-8").decode("utf-8"),
+            "content": base64.b64encode(updated_content.encode("utf-8")).decode("utf-8"),
             "branch": "main"
         }
         if sha:
