@@ -73,6 +73,7 @@ async def save_mail(client, message):
     except Exception as e:
         await message.reply(f"🚨 Error inesperado: {str(e)}")
 
+
 def load_mail():
     try:
         GIT_REPO = os.getenv("GIT_REPO")
@@ -95,17 +96,26 @@ def load_mail():
             emails, delays, limits = {}, {}, {}
 
             for uid, data in config.items():
-                uid = int(uid)
-                emails[uid] = data['email']
-                delays[uid] = data['delay']
-                limits[uid] = data['limit_mb']
+                try:
+                    uid_int = int(uid)
+                    emails[uid_int] = data['email']
+                    delays[uid_int] = data['delay']
+                    limits[uid_int] = data['limit_mb']
+                    
+                    print("Emails:", emails)
+                    print("Delays:", delays)
+                    print("Limits:", limits)
+
+                except Exception as e:
+                    print(f"⚠️ Error al procesar entrada {uid}: {str(e)}")
 
             return emails, delays, limits
 
         else:
-            print("No se encontró configuración previa.")
+            print(f"❌ Error al acceder al archivo: {response.status_code}")
             return {}, {}, {}
 
     except Exception as e:
-        print(f"Error al cargar configuración: {str(e)}")
+        print(f"🚨 Error al cargar configuración: {str(e)}")
         return {}, {}, {}
+            
