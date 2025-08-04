@@ -153,6 +153,23 @@ def compressfile(file_path, part_size):
             part_num += 1
     return parts
 
+def splitfile(file_path, part_size_mb):
+    part_size = part_size_mb * 1024 * 1024
+    parts = []
+    with open(file_path, 'rb') as f:
+        part_num = 1
+        while True:
+            chunk = f.read(part_size)
+            if not chunk:
+                break
+            part_name = f"{file_path}.{part_num:03d}"
+            with open(part_name, 'wb') as part_file:
+                part_file.write(chunk)
+            parts.append(part_name)
+            part_num += 1
+    return parts
+    
+
 
 async def send_mail(client, message):
     user_id = message.from_user.id
@@ -200,7 +217,7 @@ async def send_mail(client, message):
                 await message.reply(f"Error al enviar el archivo: {e}", protect_content=protect_content)
         else:
             await message.reply(f"El archivo supera el límite de {mail_mb} MB, se iniciará la autocompresión.", protect_content=protect_content)
-            parts = compressfile(media, mail_mb)
+            parts = splitfile(media, mail_mb)
             cantidad_de_parts = len(parts)
             if mail_delay == "manual":
                 part_queue[user_id] = {
