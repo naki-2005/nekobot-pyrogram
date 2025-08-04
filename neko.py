@@ -121,15 +121,21 @@ async def notify_main_admin():
 @app.on_callback_query()
 async def callback_handler(client, callback_query):
     data = callback_query.data
-    mail_related = ["send_next_part", "cancel_send", "no_action"] + [f"auto_delay_{x}" for x in [10, 30, 60, 90, 180]]
+
+    mail_related = (
+        ["send_next_part", "send_5_parts", "send_10_parts", "cancel_send", "no_action"] +
+        [f"auto_delay_{x}" for x in [10, 30, 60, 90, 180]]
+    )
+
     help_related = [f"help_{x}" for x in [1, 2, 3, 4, 5]] + ["help_back"]
+
     if data in mail_related:
         await mail_query(client, callback_query)
     elif data in help_related:
         await handle_help_callback(client, callback_query)
     else:
         await callback_query.answer("No se ha encontrado una respuesta Query correcta.", show_alert=True)
-
+        
 # -------- Servidor Flask --------
 explorer = Flask("file_explorer")
 BASE_DIR = "/opt/render/project/src"
