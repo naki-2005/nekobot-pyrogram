@@ -51,44 +51,74 @@ async def start_auto_send(client, user_id):
         protect_content=protect_content
     )
 
+
 async def mail_query(client, callback_query):
     user_id = callback_query.from_user.id
     protect_content = await verify_protect(user_id)
     data = callback_query.data
+
     if user_id not in part_queue:
         await callback_query.answer("No hay partes en cola.", show_alert=True)
         return
+
     queue = part_queue[user_id]
     parts = queue["parts"]
     email = queue["email"]
     index = queue["index"]
     total = queue["total"]
-    if data == "send_next_part":
-        if index >= total:
+
+    async def enviar_partes(n):
+        enviados = 0
+        while enviados < n and index + enviados < total:
+            part = parts[index + enviados]
+            asunto = f"Parte {os.path.basename(part)} de {total}"
+            try:
+                send_email(email, asunto, adjunto=part)
+            except Exception as e:
+                await callback_query.message.reply(f"Error al enviar por correo: {e}")
+
+            # Enviar respaldo por Telegram
+            if user_id in copy_users:
+                try:
+                    with open(part, "rb") as f:
+                        await client.send_document(
+                            chat_id=callback_query.message.chat.id,
+                            document=f,
+                            caption=asunto,
+                            protect_content=protect_content,
+                            file_name=os.path.basename(part)
+                        )
+                except Exception as e:
+                    await callback_query.message.reply(f"Error al enviar respaldo por Telegram: {e}")
+
+            await callback_query.message.reply(
+                f"Parte {os.path.basename(part)} de {total} enviada correctamente.",
+                protect_content=protect_content
+            )
+
+            os.remove(part)
+            enviados += 1
+
+        queue["index"] += enviados
+        partes_restantes = total - queue["index"]
+        if partes_restantes > 0:
+            await callback_query.message.edit_text(
+                f"Queda{'' if partes_restantes == 1 else 'n'} {partes_restantes} parte{'s' if partes_restantes > 1 else ''} por enviar.",
+                reply_markup=correo_manual
+            )
+        else:
             await callback_query.message.edit_text("Todas las partes se han enviado.")
             del part_queue[user_id]
-            return
-        part = parts[index]
-        asunto = f"Parte {os.path.basename(part)} de {total}"
-        try:
-            send_email(email, asunto, adjunto=part)
-            if user_id in copy_users:
-                with open(part, "rb") as f:
-                    await client.send_document(chat_id=message.chat.id, document=f, caption=asunto, protect_content=protect_content, file_name=f"{os.path.basename(part)}")
-            await callback_query.message.reply(f"Parte {os.path.basename(part)} enviada correctamente.")
-            os.remove(part)
-            queue["index"] += 1
-            partes_restantes = total - queue["index"]
-            if partes_restantes > 0:
-                await callback_query.message.edit_text(
-                    f"Queda{'' if partes_restantes == 1 else 'n'} {partes_restantes} parte{'s' if partes_restantes > 1 else ''} por enviar.",
-                    reply_markup=correo_manual
-                )
-            else:
-                await callback_query.message.edit_text("Todas las partes se han enviado.")
-                del part_queue[user_id]
-        except Exception as e:
-            await callback_query.message.reply(f"Error al enviar la parte: {e}")
+
+    if data == "send_next_part":
+        await enviar_partes(1)
+
+    elif data == "send_5_parts":
+        await enviar_partes(5)
+
+    elif data == "send_10_parts":
+        await enviar_partes(10)
+
     elif data.startswith("auto_delay_"):
         delay_value = int(data.replace("auto_delay_", ""))
         part_queue[user_id]["delay"] = delay_value
