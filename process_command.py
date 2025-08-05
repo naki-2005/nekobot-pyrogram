@@ -165,19 +165,6 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
 
             elif text.startswith("/multisendmail"):
                 await asyncio.create_task(multisendmail(client, message))
-                
-
-            elif text.startswith("/sendmail"):
-                try:
-                    parts = text.split()
-                    repeats = int(parts[1]) if len(parts) > 1 else 1
-                    repeats = min(repeats, 99999)
-
-                    for i in range(repeats):
-                        await asyncio.create_task(send_mail(client, message))
-                        await asyncio.sleep(1)
-                except Exception as e:
-                    await message.reply(f"Error en /sendmail: {e}")
 
             elif text.startswith("/sendmailb"):
                 try:
@@ -191,6 +178,19 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                 except Exception as e:
                     await message.reply(f"Error en /sendmail: {e}")
 
+            elif text.startswith("/sendmail") and not text.startswith("/sendmailb"):
+                try:
+                    parts = text.split()
+                    repeats = int(parts[1]) if len(parts) > 1 else 1
+                    repeats = min(repeats, 99999)
+
+                    for i in range(repeats):
+                        await asyncio.create_task(send_mail(client, message))
+                        await asyncio.sleep(1)
+                except Exception as e:
+                    await message.reply(f"Error en /sendmail: {e}")
+
+            
             elif text.startswith("/setmb"):
                 await asyncio.create_task(set_mail_limit(client, message))
 
