@@ -10,7 +10,7 @@ from command.admintools import add_user, remove_user, add_chat, remove_chat, ban
 from command.imgtools import create_imgchest_post
 from command.webtools import handle_scan, handle_multiscan, summarize_lines
 from command.mailtools.set_values import set_mail, verify_mail, set_mail_limit, set_mail_delay, multisetmail, copy_manager
-from command.mailtools.send import send_mail, multisendmail, send_email_bytes
+from command.mailtools.send import send_mail, multisendmail
 from command.mailtools.db import save_mail
 from command.videotools import update_video_settings, compress_video, cancelar_tarea, listar_tareas, cambiar_miniatura
 from command.filetools import handle_compress, rename, set_size, caption
@@ -167,25 +167,27 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                 await asyncio.create_task(multisendmail(client, message))
 
             elif text.startswith("/sendmailb"):
+                type = "bites"
                 try:
                     parts = text.split()
                     repeats = int(parts[1]) if len(parts) > 1 else 1
                     repeats = min(repeats, 99999)
 
                     for i in range(repeats):
-                        await asyncio.create_task(send_email_bytes(client, message))
+                        await asyncio.create_task(send_mail(client, message, type))
                         await asyncio.sleep(1)
                 except Exception as e:
                     await message.reply(f"Error en /sendmail: {e}")
 
             elif text.startswith("/sendmail") and not text.startswith("/sendmailb"):
+                type = "7z"
                 try:
                     parts = text.split()
                     repeats = int(parts[1]) if len(parts) > 1 else 1
                     repeats = min(repeats, 99999)
 
                     for i in range(repeats):
-                        await asyncio.create_task(send_mail(client, message))
+                        await asyncio.create_task(send_mail(client, message, type))
                         await asyncio.sleep(1)
                 except Exception as e:
                     await message.reply(f"Error en /sendmail: {e}")
