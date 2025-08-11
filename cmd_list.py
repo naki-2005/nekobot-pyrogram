@@ -7,6 +7,7 @@ async def lista_cmd(app):
         BotCommand("help", "Tutorial de comandos"),
         BotCommand("setsize", "Defina el tamaño en Mb para /compress"),
         BotCommand("compress", "Comprimir un archivo en partes"),
+        BotCommand("split", "Dividir un archivo en partes"),
         BotCommand("rename", "Cambia el nombre de un archivo"),
         BotCommand("convert", "Convierte un video"),
         BotCommand("calidad", "Ajusta la calidad de /convert"),
