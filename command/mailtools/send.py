@@ -68,9 +68,6 @@ async def start_auto_send(client, user_id):
 
     await status_msg.edit_text("\n".join(progreso) + "\n\n📬 Envío automático de partes completado.")
                 
-
-import os
-
 async def mail_query(client, callback_query):
     user_id = callback_query.from_user.id
     protect_content = await verify_protect(user_id)
@@ -88,11 +85,17 @@ async def mail_query(client, callback_query):
 
     async def enviar_partes(n):
         enviados = 0
-        progreso = []
+        errores = []
+
+        # Eliminar el mensaje del botón que activó el envío
+        try:
+            await callback_query.message.delete()
+        except Exception:
+            pass  # Por si ya fue eliminado
 
         # Crear mensaje inicial de estado
         status_msg = await callback_query.message.reply(
-            "Enviando partes...",
+            f"📤 Enviando {n} parte{'s' if n > 1 else ''}...",
             protect_content=protect_content
         )
 
@@ -103,10 +106,9 @@ async def mail_query(client, callback_query):
             try:
                 send_email(email, asunto, adjunto=part)
             except Exception as e:
-                await status_msg.edit_text(f"❌ Error al enviar por correo: {e}")
-                return
+                errores.append(f"❌ Error al enviar {os.path.basename(part)}: {e}")
+                break
 
-            # Enviar respaldo por Telegram si corresponde
             if user_id in copy_users:
                 try:
                     with open(part, "rb") as f:
@@ -118,26 +120,25 @@ async def mail_query(client, callback_query):
                             file_name=os.path.basename(part)
                         )
                 except Exception as e:
-                    await status_msg.edit_text(f"❌ Error al enviar respaldo por Telegram: {e}")
-                    return
+                    errores.append(f"❌ Error al enviar respaldo de {os.path.basename(part)}: {e}")
+                    break
 
-            progreso.append(f"✅ {os.path.basename(part)} enviada correctamente.")
-            await status_msg.edit_text("\n".join(progreso))
             os.remove(part)
             enviados += 1
 
         queue["index"] += enviados
         partes_restantes = total - queue["index"]
 
+        resumen = f"✅ Se enviaron {enviados} parte{'s' if enviados != 1 else ''} correctamente."
+        if errores:
+            resumen += "\n\n" + "\n".join(errores)
+
         if partes_restantes > 0:
-            await status_msg.edit_text(
-                "\n".join(progreso) + f"\n\n📦 Quedan {partes_restantes} parte{'s' if partes_restantes > 1 else ''} por enviar.",
-                reply_markup=correo_manual
-            )
+            resumen += f"\n\n📦 Quedan {partes_restantes} parte{'s' if partes_restantes > 1 else ''} por enviar."
+            await status_msg.edit_text(resumen, reply_markup=correo_manual)
         else:
-            await status_msg.edit_text(
-                "\n".join(progreso) + "\n\n✅ Todas las partes se han enviado."
-            )
+            resumen += "\n\n✅ Todas las partes se han enviado."
+            await status_msg.edit_text(resumen)
             del part_queue[user_id]
 
     # Opciones del botón
@@ -162,7 +163,8 @@ async def mail_query(client, callback_query):
 
     elif data == "no_action":
         await callback_query.answer("Este botón es decorativo 😎", show_alert=False)
-        
+            
+
 
 async def send_mail(client, message, division="7z"):
     user_id = message.from_user.id
