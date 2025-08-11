@@ -9,41 +9,62 @@ from pyrogram import Client, filters
 user_comp = {} 
 compression_size = 10  
 
-def compressfile(file_path, part_size):
+
+def compressfile(file_path, part_size, type):
     parts = []
     part_size *= 1024 * 1024  # Convertir el tamaño de parte a bytes
-    archive_path = f"{file_path}.7z"
 
-    # Crear el archivo comprimido
-    with py7zr.SevenZipFile(archive_path, 'w') as archive:
-        archive.write(file_path, os.path.basename(file_path))
+    if type == "7z":
+        archive_path = f"{file_path}.7z"
+
+        # Crear el archivo comprimido
+        with py7zr.SevenZipFile(archive_path, 'w') as archive:
+            archive.write(file_path, os.path.basename(file_path))
         os.remove(file_path)  # Eliminar el archivo original
 
-    # Comprobar el tamaño del archivo comprimido
-    archive_size = os.path.getsize(archive_path)
-    if archive_size < part_size:
-        return [archive_path]  # Retornar el archivo comprimido
+        # Comprobar el tamaño del archivo comprimido
+        archive_size = os.path.getsize(archive_path)
+        if archive_size < part_size:
+            return [archive_path]
 
-    # Dividir el archivo comprimido en partes si excede el tamaño de parte
-    with open(archive_path, 'rb') as archive:
-        part_num = 1
-        while True:
-            part_data = archive.read(part_size)
-            if not part_data:
-                break
-            part_file = f"{archive_path}.{part_num:03d}"
-            with open(part_file, 'wb') as part:
-                part.write(part_data)
-            parts.append(part_file)
-            part_num += 1
+        # Dividir el archivo comprimido en partes
+        with open(archive_path, 'rb') as archive:
+            part_num = 1
+            while True:
+                part_data = archive.read(part_size)
+                if not part_data:
+                    break
+                part_file = f"{archive_path}.{part_num:03d}"
+                with open(part_file, 'wb') as part:
+                    part.write(part_data)
+                parts.append(part_file)
+                part_num += 1
 
-    os.remove(archive_path)  # Eliminar el archivo comprimido original
-    return parts
+        os.remove(archive_path)
+        return parts
+
+    elif type == "bites":
+        # Dividir directamente el archivo original en partes
+        with open(file_path, 'rb') as original:
+            part_num = 1
+            while True:
+                part_data = original.read(part_size)
+                if not part_data:
+                    break
+                part_file = f"{file_path}.part{part_num:03d}"
+                with open(part_file, 'wb') as part:
+                    part.write(part_data)
+                parts.append(part_file)
+                part_num += 1
+
+        os.remove(file_path)
+        return parts
+
+    else:
+        raise ValueError("Tipo de compresión no soportado: usa '7z' o 'bites'")
 
 
-
-
-async def handle_compress(client, message, username):
+async def handle_compress(client, message, username, type):
     reply_message = message.reply_to_message
 
     # Crear la carpeta 'server' si no existe
@@ -55,7 +76,8 @@ async def handle_compress(client, message, username):
         return
 
     try:
-        os.system("rm -rf ./server/*")
+        shutil.rmtree('./server', ignore_errors=True)
+        os.mkdir('server')
         progress_msg = await message.reply("Descargando el archivo para comprimirlo...")
 
         def get_file_name(message):
@@ -71,23 +93,22 @@ async def handle_compress(client, message, username):
                 return ''.join(random.choices(string.ascii_letters + string.digits, k=20)) + ".webp"
             else:
                 return ''.join(random.choices(string.ascii_letters + string.digits, k=20))
-        
+
         file_name = get_file_name(message)
         file_path = await client.download_media(
             message.reply_to_message,
             file_name=file_name
         )
-        await client.edit_message_text(chat_id=message.chat.id, message_id=progress_msg.id, text="Comprimiendo el archivo...")
-        
+        await client.edit_message_text(chat_id=message.chat.id, message_id=progress_msg.id, text="Procesando el archivo...")
+
         sizd = user_comp.get(username, 10)
-        parts = compressfile(file_path, sizd)
-        
-        # Añadir la cantidad de partes al mensaje
+        parts = compressfile(file_path, sizd, type)
+
         num_parts = len(parts)
         await client.edit_message_text(
             chat_id=message.chat.id,
             message_id=progress_msg.id,
-            text=f"Se ha comprimido el archivo en {num_parts} partes, ahora se enviarán las partes"
+            text=f"El archivo se ha dividido en {num_parts} partes. Enviando..."
         )
 
         for part in parts:
@@ -98,21 +119,16 @@ async def handle_compress(client, message, username):
                 print(f"Error al enviar la parte {part}: {e}")
                 await message.reply(f"Error al enviar la parte {part}: {e}")
                 os.remove(part)
-        
-        # Eliminar el mensaje de progreso
+
         await client.delete_messages(chat_id=message.chat.id, message_ids=[progress_msg.id])
-
-        # Enviar el mensaje final de "Esas son todas las partes"
         await message.reply("Esas son todas las partes")
-        
 
-        # Eliminar la carpeta 'server' y recrearla
-        shutil.rmtree('server')
+        shutil.rmtree('server', ignore_errors=True)
         os.mkdir('server')
-    
+
     except Exception as e:
         await message.reply(f'Error: {str(e)}')
-
+            
 async def rename(client, message):
     reply_message = message.reply_to_message
 
