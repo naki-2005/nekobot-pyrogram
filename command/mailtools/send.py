@@ -164,27 +164,20 @@ async def mail_query(client, callback_query):
         await callback_query.answer("Este botón es decorativo 😎", show_alert=False)
         
 
-import os
-import time
-
 async def send_mail(client, message, division="7z"):
     user_id = message.from_user.id
     protect_content = await verify_protect(user_id)
 
-    if user_id not in user_emails:
-        emails, delays, limits = load_mail()
-        email = emails.get(user_id)
-        mail_mb = limits.get(user_id, 10)
-        mail_delay = delays.get(user_id, "manual")
-
-    if user_id not in user_emails or not email:
+    email = user_emails.get(user_id)
+    if not email:
         await message.reply(
             "No has registrado ningún correo, usa /setmail para hacerlo.",
             protect_content=True
         )
         return
 
-    email = user_emails[user_id]
+    mail_mb = get_mail_limit(user_id)
+    mail_delay = get_user_delay(user_id)
 
     if not message.reply_to_message:
         await message.reply("Por favor, responde a un mensaje.", protect_content=True)
@@ -195,9 +188,6 @@ async def send_mail(client, message, division="7z"):
     if reply_message.caption and reply_message.caption.startswith("Look Here") and reply_message.from_user.is_self:
         await message.reply("No puedes enviar este contenido debido a restricciones.", protect_content=protect_content)
         return
-
-    mail_mb = get_mail_limit(user_id)
-    mail_delay = get_user_delay(user_id)
 
     # Envío de texto directo
     if reply_message.text:
@@ -271,8 +261,6 @@ async def send_mail(client, message, division="7z"):
 
                 await status_msg.edit_text("\n".join(progreso) + "\n\n✅ Todas las partes se han enviado.")
 
-import os
-import py7zr
 
 def compressfile(file_path, part_size):
     parts = []
