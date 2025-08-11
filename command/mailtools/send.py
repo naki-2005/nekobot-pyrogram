@@ -264,17 +264,13 @@ async def send_mail(client, message, division="7z"):
                 await status_msg.edit_text("\n".join(progreso) + "\n\n✅ Todas las partes se han enviado.")
 
 
+
 def compressfile(file_path, part_size):
     parts = []
     part_size *= 1024 * 1024
     archive_path = f"{file_path}.7z"
-
-    # Crear archivo 7z sin compresión
-    with py7zr.SevenZipFile(archive_path, 'w', filters=[{"id": "Copy"}]) as archive:
+    with py7zr.SevenZipFile(archive_path, 'w') as archive:
         archive.write(file_path, os.path.basename(file_path))
-
-
-    # Dividir el archivo 7z en partes
     with open(archive_path, 'rb') as archive:
         part_num = 1
         while True:
@@ -286,6 +282,7 @@ def compressfile(file_path, part_size):
                 part.write(part_data)
             parts.append(part_file)
             part_num += 1
+    return parts
 
     # Eliminar archivo original y el .7z
     
