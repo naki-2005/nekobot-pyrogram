@@ -218,10 +218,16 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
             await asyncio.create_task(send_file_by_id(client, message))
             return
             
-    elif text.startswith(("/compress", "/setsize", "/rename", "/caption")):
+    elif text.startswith(("/compress", "/split" "/setsize", "/rename", "/caption")):
         if cmd("filetools", user_id in admin_users, user_id in vip_users):
             if text.startswith("/compress"):
-                await asyncio.create_task(handle_compress(client, message, username))
+                type = "7z"
+                await asyncio.create_task(handle_compress(client, message, username, type))
+
+            elif text.startswith("/split"):
+                type = "bites"
+                await asyncio.create_task(handle_compress(client, message, username, type))
+            
             elif text.startswith("/setsize"):
                 await asyncio.create_task(set_size(client, message))
             elif text.startswith("/rename"):
