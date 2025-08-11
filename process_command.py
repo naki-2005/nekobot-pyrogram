@@ -202,10 +202,12 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
         elif command == "/sendid":
             await asyncio.create_task(send_file_by_id(client, message))
         return
-                    
-    elif text.startswith(("/compress", "/split", "/setsize", "/rename", "/caption")):
+                        
+    elif command in ("/compress", "/split", "/setsize", "/rename", "/caption"):
         if cmd("filetools", user_id in admin_users, user_id in vip_users):
-            command = text.split()[0]
+            parts = text.split(maxsplit=1)
+            arg = parts[1] if len(parts) > 1 else ""
+            reply = message.reply_to_message
 
             if command == "/compress":
                 await handle_compress(client, message, username, type="7z")
@@ -220,29 +222,30 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                 await rename(client, message)
 
             elif command == "/caption":
-                if not message.reply_to_message:
+                if not reply:
                     await message.reply("Responda a un mensaje con archivo para usarlo")
                     return
 
-                original_caption = message.reply_to_message.caption or ""
+                original_caption = reply.caption or ""
                 if original_caption.startswith("Look Here"):
                     await message.reply("No puedo realizar esa acción")
                     return
 
                 file_id = None
-                media = message.reply_to_message
                 for attr in ("document", "photo", "video", "audio", "voice", "animation"):
-                    if getattr(media, attr, None):
-                        file_id = getattr(media, attr).file_id
+                    media = getattr(reply, attr, None)
+                    if media:
+                        file_id = media.file_id
                         break
 
                 if not file_id:
                     await message.reply("Responda a un mensaje con archivo multimedia válido para usarlo")
                     return
 
-                caption_text = text.split(maxsplit=1)[1] if len(text.split(maxsplit=1)) > 1 else "Archivo reenviado"
+                caption_text = arg if arg else "Archivo reenviado"
                 await caption(client, message.chat.id, file_id, caption_text)
         return
+
 
     elif command in ("/convert", "/calidad", "/autoconvert", "/cancel", "/list", "/miniatura") or \
          ((message.video is not None) or (message.document and message.document.mime_type and message.document.mime_type.startswith("video/"))) or \
