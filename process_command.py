@@ -35,12 +35,15 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
     global allowed_ids
     text = message.text.strip().lower() if message.text else ""
     if message.from_user is None:
-        return 
+        return
+
     user_id = message.from_user.id
-    if not is_protect_content_enabled and user_id not in allowed_ids:
-        allowed_ids = allowed_ids.union({user_id})
     auto = auto_users.get(user_id, False)
-    
+    protect_content = user_id not in allowed_ids
+
+    if not is_protect_content_enabled and protect_content:
+        allowed_ids = allowed_ids.union({user_id})
+
     def cmd(command_env, is_admin=False, is_vip=False):
         return (
             active_cmd == "all" or 
@@ -48,176 +51,158 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
             ((is_admin or is_vip) and (admin_cmd == "all" or command_env in admin_cmd))
         )
 
-    if text.startswith("/start"):
+    command = text.split()[0] if text else ""
+
+    if command == "/start":
         await asyncio.create_task(handle_start(client, message))
-    
-    elif text.startswith("/help"):  # Manejo del comando /help
+
+    elif command == "/help":
         await asyncio.create_task(handle_help(client, message))
         return
-    
-    elif text.startswith(("/nh", "/3h", "/cover", "/covernh", "/setfile")):
+
+    elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile"):
         if cmd("htools", user_id in admin_users, user_id in vip_users):
-            # Comando /setfile
-            global link_type
-            if text.startswith("/setfile"):
-                parts = text.split(maxsplit=1)
-                if len(parts) > 1:
-                    new_selection = parts[1].strip().lower()
-                    if new_selection in ["none", "cbz", "pdf", "both"]:
-                        if new_selection == "none":
-                            new_selection = None
-                        else:
-                            new_selection = new_selection.upper()  # Convertimos CBZ y PDF a mayúsculas
-                        cambiar_default_selection(user_id, new_selection)
-                        await message.reply(f"¡Selección predeterminada cambiada a '{new_selection if new_selection else 'None'}'!")
-                    else:
-                        await message.reply("Opción inválida. Usa: '/setfile cbz', '/setfile pdf', '/setfile both' o '/setfile none'.")
+            parts = text.split(maxsplit=1)
+            arg_text = parts[1] if len(parts) > 1 else ""
+            codes = arg_text.split(',') if ',' in arg_text else [arg_text] if arg_text else []
+            codes_limpiados = [re.sub(r"https://nhentai\.net|https://[a-z]{2}\.3hentai\.net|https://3hentai\.net|/d/|/g/|/", "", code).strip() for code in codes]
+
+            if codes_limpiados != codes:
+                codes = codes_limpiados
+                await message.reply("Solo son necesarios los números pero ok")
+
+            if command == "/setfile":
+                new_selection = arg_text.strip().lower()
+                valid_options = ["none", "cbz", "pdf", "both"]
+                if new_selection in valid_options:
+                    selection = None if new_selection == "none" else new_selection.upper()
+                    cambiar_default_selection(user_id, selection)
+                    await message.reply(f"¡Selección predeterminada cambiada a '{selection if selection else 'None'}'!")
                 else:
                     await message.reply(
-                        "Usa uno de los siguientes comandos para cambiar la selección predeterminada:\n\n"
-                        "`/setfile cbz` - Configurar como CBZ\n"
-                        "`/setfile pdf` - Configurar como PDF\n"
-                        "`/setfile both` - Configurar como ambos\n"
-                        "`/setfile none` - Eliminar la selección predeterminada"
+                        "Opción inválida. Usa: '/setfile cbz', '/setfile pdf', '/setfile both' o '/setfile none'."
                     )
                 return
 
-            # Comando /nh
-            elif text.startswith("/nh"):
-                parts = text.split(maxsplit=1)
-                codes = parts[1].split(',') if len(parts) > 1 and ',' in parts[1] else [parts[1]] if len(parts) > 1 else []
-                codes_limpiados = [re.sub(r"https://nhentai\.net|https://[a-z]{2}\.3hentai\.net|https://3hentai\.net|/d/|/g/|/", "", code).strip() for code in codes]
-                if codes_limpiados != codes:
-                    codes = codes_limpiados
-                    await message.reply("Solo son necesarios los números pero ok")
-                
-                #global link_type
-                link_type = "nh"
-                operation_type = "download"
-                protect_content = user_id not in allowed_ids
-                await asyncio.create_task(nh_combined_operation(client, message, codes, link_type, protect_content, user_id, operation_type))
+            elif command == "/nh":
+                await asyncio.create_task(nh_combined_operation(client, message, codes, "nh", protect_content, user_id, "download"))
                 return
 
-            # Comando /3h
-            elif text.startswith("/3h"):
-                parts = text.split(maxsplit=1)
-                codes = parts[1].split(',') if len(parts) > 1 and ',' in parts[1] else [parts[1]] if len(parts) > 1 else []
-                codes_limpiados = [re.sub(r"https://nhentai\.net|https://[a-z]{2}\.3hentai\.net|https://3hentai\.net|/d/|/g/|/", "", code).strip() for code in codes]
-                if codes_limpiados != codes:
-                    codes = codes_limpiados
-                    await message.reply("Solo son necesarios los números pero ok")
-                    
-                #global link_type
-                link_type = "3h"
-                operation_type = "download"
-                protect_content = user_id not in allowed_ids
-                await asyncio.create_task(nh_combined_operation(client, message, codes, link_type, protect_content, user_id, operation_type))
+            elif command == "/3h":
+                await asyncio.create_task(nh_combined_operation(client, message, codes, "3h", protect_content, user_id, "download"))
                 return
 
-            # Comando /cover3h
-            elif text.startswith(("/cover3h")):
-                parts = text.split(maxsplit=1)
-                codes = parts[1].split(',') if len(parts) > 1 and ',' in parts[1] else [parts[1]] if len(parts) > 1 else []
-                codes_limpiados = [re.sub(r"https://nhentai\.net|https://[a-z]{2}\.3hentai\.net|https://3hentai\.net|/d/|/g/|/", "", code).strip() for code in codes]
-                if codes_limpiados != codes:
-                    codes = codes_limpiados
-                    await message.reply("Solo son necesarios los números pero ok")
-                    
-                #global link_type
-                link_type = "3h"
-                operation_type = "cover"
-                protect_content = user_id not in allowed_ids
-                await asyncio.create_task(nh_combined_operation(client, message, codes, link_type, protect_content, user_id, operation_type))
+            elif command == "/cover3h":
+                await asyncio.create_task(nh_combined_operation(client, message, codes, "3h", protect_content, user_id, "cover"))
                 return
 
-            # Comando /covernh
-            elif text.startswith("/covernh"):
-                parts = text.split(maxsplit=1)
-                codes = parts[1].split(',') if len(parts) > 1 and ',' in parts[1] else [parts[1]] if len(parts) > 1 else []
-                codes_limpiados = [re.sub(r"https://nhentai\.net|https://[a-z]{2}\.3hentai\.net|https://3hentai\.net|/d/|/g/|/", "", code).strip() for code in codes]
-                if codes_limpiados != codes:
-                    codes = codes_limpiados
-                    await message.reply("Solo son necesarios los números pero ok")
-                    
-                #global link_type
-                link_type = "nh"
-                operation_type = "cover"
-                protect_content = user_id not in allowed_ids
-                await asyncio.create_task(nh_combined_operation(client, message, codes, link_type, protect_content, user_id, operation_type))
+            elif command == "/covernh":
+                await asyncio.create_task(nh_combined_operation(client, message, codes, "nh", protect_content, user_id, "cover"))
                 return
 
-    elif text.startswith("/imgchest"):
+    elif command == "/imgchest":
         if cmd("imgtools", user_id in admin_users, user_id in vip_users):
-            if message.reply_to_message and (message.reply_to_message.photo or message.reply_to_message.document or message.reply_to_message.video):
+            reply = message.reply_to_message
+            if reply and (reply.photo or reply.document or reply.video):
                 await asyncio.create_task(create_imgchest_post(client, message))
             else:
                 await message.reply("Por favor, usa el comando respondiendo a una foto.")
         return
 
-    
-    elif text.startswith(("/setmail", "/sendmail", "/sendmailb", "/verify", "/setmb", "/setdelay", "/multisetmail", "/multisendmail", "/savemail", "/mailcopy")):
+    elif command in ("/compress", "/split", "/setsize", "/rename", "/caption"):
+        if cmd("filetools", user_id in admin_users, user_id in vip_users):
+            if command == "/compress":
+                await handle_compress(client, message, username, type="7z")
+
+            elif command == "/split":
+                await handle_compress(client, message, username, type="bites")
+
+            elif command == "/setsize":
+                await set_size(client, message)
+
+            elif command == "/rename":
+                await rename(client, message)
+
+            elif command == "/caption":
+                reply = message.reply_to_message
+                if not reply:
+                    await message.reply("Responda a un mensaje con archivo para usarlo")
+                    return
+
+                original_caption = reply.caption or ""
+                if original_caption.startswith("Look Here"):
+                    await message.reply("No puedo realizar esa acción")
+                    return
+
+                file_id = None
+                for attr in ("document", "photo", "video", "audio", "voice", "animation"):
+                    media = getattr(reply, attr, None)
+                    if media:
+                        file_id = media.file_id
+                        break
+
+                if not file_id:
+                    await message.reply("Responda a un mensaje con archivo multimedia válido para usarlo")
+                    return
+
+                caption_text = text.split(maxsplit=1)[1] if len(text.split(maxsplit=1)) > 1 else "Archivo reenviado"
+                await caption(client, chat_id, file_id, caption_text)
+        return
+    elif command in ("/setmail", "/sendmail", "/sendmailb", "/verify", "/setmb", "/setdelay", "/multisetmail", "/multisendmail", "/savemail", "/mailcopy"):
         if cmd("mailtools", user_id in admin_users, user_id in vip_users):
-            if text.startswith("/setmail"):
+            parts = text.split()
+            arg = parts[1] if len(parts) > 1 else ""
+            repeats = min(int(arg), 99999) if arg.isdigit() else 1
+
+            if command == "/setmail":
                 await asyncio.create_task(set_mail(client, message))
 
-            elif text.startswith("/multisetmail"):
+            elif command == "/multisetmail":
                 await asyncio.create_task(multisetmail(client, message))
 
-            elif text.startswith("/multisendmail"):
+            elif command == "/multisendmail":
                 await asyncio.create_task(multisendmail(client, message))
 
-            elif text.startswith("/sendmailb"):
-                type = "bites"
+            elif command == "/sendmailb":
                 try:
-                    parts = text.split()
-                    repeats = int(parts[1]) if len(parts) > 1 else 1
-                    repeats = min(repeats, 99999)
+                    for _ in range(repeats):
+                        await asyncio.create_task(send_mail(client, message, type="bites"))
+                        await asyncio.sleep(1)
+                except Exception as e:
+                    await message.reply(f"Error en /sendmailb: {e}")
 
-                    for i in range(repeats):
-                        await asyncio.create_task(send_mail(client, message, type))
+            elif command == "/sendmail":
+                try:
+                    for _ in range(repeats):
+                        await asyncio.create_task(send_mail(client, message, type="7z"))
                         await asyncio.sleep(1)
                 except Exception as e:
                     await message.reply(f"Error en /sendmail: {e}")
 
-            elif text.startswith("/sendmail") and not text.startswith("/sendmailb"):
-                type = "7z"
-                try:
-                    parts = text.split()
-                    repeats = int(parts[1]) if len(parts) > 1 else 1
-                    repeats = min(repeats, 99999)
-
-                    for i in range(repeats):
-                        await asyncio.create_task(send_mail(client, message, type))
-                        await asyncio.sleep(1)
-                except Exception as e:
-                    await message.reply(f"Error en /sendmail: {e}")
-
-            
-            elif text.startswith("/setmb"):
+            elif command == "/setmb":
                 await asyncio.create_task(set_mail_limit(client, message))
 
-            elif text.startswith("/setdelay"):
+            elif command == "/setdelay":
                 await asyncio.create_task(set_mail_delay(client, message))
-                
-            elif text.startswith("/verify"):
+
+            elif command == "/verify":
                 await asyncio.create_task(verify_mail(client, message))
 
-            elif text.startswith("/savemail"):
+            elif command == "/savemail":
                 await asyncio.create_task(save_mail(client, message))
 
-            elif text.startswith("/mailcopy"):
+            elif command == "/mailcopy":
                 respuesta = await asyncio.create_task(copy_manager(user_id))
                 await message.reply(respuesta)
         return
 
-    elif text.startswith(("/id", "/sendid")):
-        if text.startswith("/id"):
+    elif command in ("/id", "/sendid"):
+        if command == "/id":
             await asyncio.create_task(get_file_id(client, message))
-            return
-        elif text.startswith("/sendid"):
+        elif command == "/sendid":
             await asyncio.create_task(send_file_by_id(client, message))
-            return
-
+        return
+                    
     elif text.startswith(("/compress", "/split", "/setsize", "/rename", "/caption")):
         if cmd("filetools", user_id in admin_users, user_id in vip_users):
             command = text.split()[0]
@@ -259,38 +244,29 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                 await caption(client, message.chat.id, file_id, caption_text)
         return
 
-
-    elif text.startswith(("/convert", "/calidad", "/autoconvert", "/cancel", "/list", "/miniatura")) or \
-       ((message.video is not None) or (message.document and message.document.mime_type and message.document.mime_type.startswith("video/"))) or \
-       (message.photo and message.caption and message.caption.startswith("/miniatura")):
+    elif command in ("/convert", "/calidad", "/autoconvert", "/cancel", "/list", "/miniatura") or \
+         ((message.video is not None) or (message.document and message.document.mime_type and message.document.mime_type.startswith("video/"))) or \
+         (message.photo and message.caption and message.caption.startswith("/miniatura")):
         if cmd("videotools", user_id in admin_users, user_id in vip_users):
-            if text.startswith("/convert"):
-                if message.reply_to_message and (message.reply_to_message.video or (message.reply_to_message.document and message.reply_to_message.mime_type.startswith("video/"))):
+            parts = text.split(maxsplit=1)
+            arg = parts[1] if len(parts) > 1 else ""
+
+            if command == "/convert":
+                reply = message.reply_to_message
+                if reply and (reply.video or (reply.document and reply.document.mime_type.startswith("video/"))):
                     await asyncio.create_task(compress_video(admin_users, client, message, allowed_ids))
 
-            elif text.startswith("/autoconvert"):
-                # Activar/desactivar "auto" para este usuario
-                if user_id in auto_users and auto_users[user_id]:
-                    auto_users[user_id] = False
-                    await client.send_message(
-                        chat_id=message.chat.id,
-                        text="🛑 Modo automático desactivado.",
-                        protect_content=False
-                    )
-                else:
-                    auto_users[user_id] = True
-                    await client.send_message(
-                        chat_id=message.chat.id,
-                        text="✅ Modo automático activado.",
-                        protect_content=False
-                    )
+            elif command == "/autoconvert":
+                auto_users[user_id] = not auto_users.get(user_id, False)
+                status = "✅ Modo automático activado." if auto_users[user_id] else "🛑 Modo automático desactivado."
+                await client.send_message(chat_id=message.chat.id, text=status, protect_content=False)
 
-            elif text.startswith("/calidad"):
+            elif command == "/calidad":
                 await asyncio.create_task(update_video_settings(client, message, allowed_ids))
 
-            elif text.startswith("/cancel"):
+            elif command == "/cancel":
                 try:
-                    task_id = text.split(" ", 1)[1].strip()
+                    task_id = arg.strip()
                     await cancelar_tarea(admin_users, client, task_id, message.chat.id, message, allowed_ids)
                 except IndexError:
                     await client.send_message(
@@ -299,10 +275,10 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                         protect_content=True
                     )
 
-            elif text.startswith("/miniatura") or (message.photo and message.caption and message.caption.startswith("/miniatura")):
+            elif command == "/miniatura" or (message.photo and message.caption and message.caption.startswith("/miniatura")):
                 await cambiar_miniatura(client, message)
 
-            elif text.startswith("/list"):
+            elif command == "/list":
                 if user_id in admin_users or user_id in vip_users:
                     await listar_tareas(client, chat_id, allowed_ids, message)
                 else:
@@ -310,17 +286,19 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
 
             elif auto and (message.video or (message.document and message.document.mime_type.startswith("video/"))):
                 await asyncio.create_task(compress_video(admin_users, client, message, allowed_ids))
+        return
 
-
-
-    elif text.startswith(("/scan", "/multiscan", "/resumecodes", "/resumetxtcodes")):
+    elif command in ("/scan", "/multiscan", "/resumecodes", "/resumetxtcodes"):
         if cmd("webtools", user_id in admin_users, user_id in vip_users):
-            if text.startswith("/scan"):
+            reply = message.reply_to_message
+            if command == "/scan":
                 await asyncio.create_task(handle_scan(client, message))
-            elif text.startswith("/multiscan"):
+
+            elif command == "/multiscan":
                 await asyncio.create_task(handle_multiscan(client, message))
-            elif text.startswith("/resumecodes") and message.reply_to_message and message.reply_to_message.document:
-                file_path = await client.download_media(message.reply_to_message.document)
+
+            elif command == "/resumecodes" and reply and reply.document:
+                file_path = await client.download_media(reply.document)
                 if not file_path.endswith(".txt"):
                     os.remove(file_path)
                     await message.reply("Solo usar con TXT.")
@@ -335,8 +313,9 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                 else:
                     await message.reply("No se encontraron códigos en el archivo.")
                 os.remove(file_path)
-            elif text.startswith("/resumetxtcodes") and message.reply_to_message and message.reply_to_message.document:
-                file_path = await client.download_media(message.reply_to_message.document)
+
+            elif command == "/resumetxtcodes" and reply and reply.document:
+                file_path = await client.download_media(reply.document)
                 if not file_path.endswith(".txt"):
                     os.remove(file_path)
                     await message.reply("Solo usar con TXT.")
@@ -354,20 +333,19 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                     await message.reply("No se encontraron códigos en el archivo.")
                 os.remove(file_path)
         return
-    
-    elif text.startswith(("/adduser", "/remuser", "/addchat", "/remchat", "/ban", "/unban")) and user_id in admin_users:
-        if text.startswith("/adduser"):
+
+    elif command in ("/adduser", "/remuser", "/addchat", "/remchat", "/ban", "/unban") and user_id in admin_users:
+        if command == "/adduser":
             await asyncio.create_task(add_user(client, message, user_id, chat_id))
-        elif text.startswith("/remuser"):
+        elif command == "/remuser":
             await asyncio.create_task(remove_user(client, message, user_id, chat_id))
-        elif text.startswith("/addchat"):
+        elif command == "/addchat":
             await asyncio.create_task(add_chat(client, message, user_id, chat_id))
-        elif text.startswith("/remchat"):
+        elif command == "/remchat":
             await asyncio.create_task(remove_chat(client, message, user_id, chat_id))
-        elif text.startswith("/ban"):
+        elif command == "/ban":
             await asyncio.create_task(ban_user(client, message, user_id, chat_id))
-        elif text.startswith("/unban"):
+        elif command == "/unban":
             await asyncio.create_task(deban_user(client, message, user_id, chat_id))
         return
-
-        
+            
