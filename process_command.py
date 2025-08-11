@@ -218,7 +218,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
             await asyncio.create_task(send_file_by_id(client, message))
             return
             
-    elif text.startswith(("/compress", "/split" "/setsize", "/rename", "/caption")):
+    elif text.startswith(("/compress", "/split", "/setsize", "/rename", "/caption")):
         if cmd("filetools", user_id in admin_users, user_id in vip_users):
             if text.startswith("/compress"):
                 type = "7z"
