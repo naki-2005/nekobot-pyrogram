@@ -217,51 +217,45 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
         elif text.startswith("/sendid"):
             await asyncio.create_task(send_file_by_id(client, message))
             return
-            
+
     elif text.startswith(("/compress", "/split", "/setsize", "/rename", "/caption")):
         if cmd("filetools", user_id in admin_users, user_id in vip_users):
-            if text.startswith("/compress"):
-                type = "7z"
-                await asyncio.create_task(handle_compress(client, message, username, type))
+            command = text.split()[0]
 
-            elif text.startswith("/split"):
-                type = "bites"
-                await asyncio.create_task(handle_compress(client, message, username, type))
-            
-            elif text.startswith("/setsize"):
-                await asyncio.create_task(set_size(client, message))
-            elif text.startswith("/rename"):
-                await asyncio.create_task(rename(client, message))
-            elif text.startswith(("/caption")):
+            if command == "/compress":
+                await handle_compress(client, message, username, type="7z")
+
+            elif command == "/split":
+                await handle_compress(client, message, username, type="bites")
+
+            elif command == "/setsize":
+                await set_size(client, message)
+
+            elif command == "/rename":
+                await rename(client, message)
+
+            elif command == "/caption":
                 if not message.reply_to_message:
                     await message.reply("Responda a un mensaje con archivo para usarlo")
                     return
-                original_caption = message.reply_to_message.caption if message.reply_to_message.caption else ""
+
+                original_caption = message.reply_to_message.caption or ""
                 if original_caption.startswith("Look Here"):
                     await message.reply("No puedo realizar esa acción")
                     return
+
                 file_id = None
-                if message.reply_to_message.document:
-                    file_id = message.reply_to_message.document.file_id
-                elif message.reply_to_message.photo:
-                    file_id = message.reply_to_message.photo.file_id
-                elif message.reply_to_message.video:
-                    file_id = message.reply_to_message.video.file_id
-                elif message.reply_to_message.audio:
-                    file_id = message.reply_to_message.audio.file_id
-                elif message.reply_to_message.voice:
-                    file_id = message.reply_to_message.voice.file_id
-                elif message.reply_to_message.animation:
-                    file_id = message.reply_to_message.animation.file_id
-                
+                media = message.reply_to_message
+                for attr in ("document", "photo", "video", "audio", "voice", "animation"):
+                    if getattr(media, attr, None):
+                        file_id = getattr(media, attr).file_id
+                        break
+
                 if not file_id:
                     await message.reply("Responda a un mensaje con archivo multimedia válido para usarlo")
                     return
-                
-                # Captura el texto después del comando como subtítulo
+
                 caption_text = text.split(maxsplit=1)[1] if len(text.split(maxsplit=1)) > 1 else "Archivo reenviado"
-                
-                # Reenviar el archivo según su tipo con el caption
                 await caption(client, message.chat.id, file_id, caption_text)
         return
 
@@ -375,4 +369,5 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
         elif text.startswith("/unban"):
             await asyncio.create_task(deban_user(client, message, user_id, chat_id))
         return
-            
+
+        
