@@ -273,7 +273,6 @@ def compressfile(file_path, part_size):
     with py7zr.SevenZipFile(archive_path, 'w', filters=[{"id": "Copy"}]) as archive:
         archive.write(file_path, os.path.basename(file_path))
 
-    os.remove(file_path)
 
     # Dividir el archivo 7z en partes
     with open(archive_path, 'rb') as archive:
@@ -290,6 +289,7 @@ def compressfile(file_path, part_size):
 
     # Eliminar archivo original y el .7z
     
+    os.remove(file_path)
     os.remove(archive_path)
 
     return parts
