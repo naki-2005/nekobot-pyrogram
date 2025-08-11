@@ -184,6 +184,8 @@ async def send_mail(client, message, division="7z"):
         )
         return
 
+    email = user_emails[user_id]
+
     if not message.reply_to_message:
         await message.reply("Por favor, responde a un mensaje.", protect_content=True)
         return
