@@ -158,7 +158,7 @@ async def send_mail(client, message, division="7z"):
 
     # Manejo de grupo de imágenes
     if reply_message.media_group_id:
-        messages = await client.get_media_group(message.chat.id, reply_message.message_id)
+        messages = await client.get_media_group(message.chat.id, reply_message.id)
         attachments = []
         total_size = 0
         for msg in messages:
