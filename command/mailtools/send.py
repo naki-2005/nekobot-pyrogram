@@ -11,173 +11,130 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from command.mailtools.set_values import verify_protect, get_mail_limit, get_user_delay, multi_user_emails, copy_users, exceeded_users, user_emails, user_delays, user_limits
 
 from command.mailtools.db import load_mail
+
 part_queue = {}
 
-import os
-import asyncio
+def generate_task_id():
+    from uuid import uuid4
+    return str(uuid4())
 
-async def start_auto_send(client, user_id):
+async def start_auto_send(client, user_id, task_id):
     protect_content = await verify_protect(user_id)
-
-    if user_id not in part_queue:
+    if user_id not in part_queue or task_id not in part_queue[user_id]:
         return
 
-    queue = part_queue[user_id]
-    parts = queue.get("parts", [])
-    email = queue.get("email")
-    index = queue.get("index", 0)
-    total = queue.get("total", len(parts))
-    delay = queue.get("delay", 10)
-
+    queue = part_queue[user_id][task_id]
+    parts = queue["parts"]
+    email = queue["email"]
+    index = queue["index"]
+    delay = queue["delay"]
     progreso = []
 
-    # Crear mensaje inicial
-    status_msg = await client.send_message(
-        chat_id=user_id,
-        text="📤 Envío automático iniciado...",
-        protect_content=protect_content
-    )
+    status_msg = await client.send_message(chat_id=user_id, text="📤 Envío automático iniciado...", protect_content=protect_content)
 
-    for i in range(index, total):
-        part = parts[i]
-        asunto = f"Parte {os.path.basename(part)} de {total}"
-
+    while index < len(parts):
+        part = parts[index]
+        asunto = f"Parte {os.path.basename(part)} de {len(parts)}"
         try:
             send_email(email, asunto, adjunto=part)
-
             if user_id in copy_users:
                 with open(part, "rb") as f:
-                    await client.send_document(
-                        chat_id=user_id,
-                        document=f,
-                        caption=asunto,
-                        protect_content=protect_content,
-                        file_name=os.path.basename(part)
-                    )
-
+                    await client.send_document(chat_id=user_id, document=f, caption=asunto, protect_content=protect_content, file_name=os.path.basename(part))
             progreso.append(f"✅ {os.path.basename(part)} enviada automáticamente.")
             await status_msg.edit_text("\n".join(progreso))
             os.remove(part)
+            index += 1
+            queue["index"] = index
             await asyncio.sleep(delay)
-
         except Exception as e:
             progreso.append(f"❌ Error al enviar {os.path.basename(part)}: {e}")
             await status_msg.edit_text("\n".join(progreso))
+            break
 
-    del part_queue[user_id]
-
+    del part_queue[user_id][task_id]
+    if not part_queue[user_id]:
+        del part_queue[user_id]
     await status_msg.edit_text("\n".join(progreso) + "\n\n📬 Envío automático de partes completado.")
-                
+
 async def mail_query(client, callback_query):
     user_id = callback_query.from_user.id
     protect_content = await verify_protect(user_id)
     data = callback_query.data
-
-    if user_id not in part_queue:
+    if user_id not in part_queue or not part_queue[user_id]:
         await callback_query.answer("No hay partes en cola.", show_alert=True)
         return
 
-    queue = part_queue[user_id]
+    task_id = next(iter(part_queue[user_id]))
+    queue = part_queue[user_id][task_id]
     parts = queue["parts"]
     email = queue["email"]
     index = queue["index"]
-    total = queue["total"]
 
     async def enviar_partes(n):
         enviados = 0
         errores = []
-
-        # Eliminar el mensaje del botón que activó el envío
         try:
             await callback_query.message.delete()
-        except Exception:
-            pass  # Por si ya fue eliminado
+        except:
+            pass
+        status_msg = await callback_query.message.reply(f"📤 Enviando {n} parte{'s' if n > 1 else ''}...", protect_content=protect_content)
 
-        # Crear mensaje inicial de estado
-        status_msg = await callback_query.message.reply(
-            f"📤 Enviando {n} parte{'s' if n > 1 else ''}...",
-            protect_content=protect_content
-        )
-
-        while enviados < n and queue["index"] + enviados < total:
-            part = parts[queue["index"] + enviados]
-            asunto = f"Parte {os.path.basename(part)} de {total}"
-
+        while enviados < n and index + enviados < len(parts):
+            part = parts[index + enviados]
+            asunto = f"Parte {os.path.basename(part)} de {len(parts)}"
             try:
                 send_email(email, asunto, adjunto=part)
             except Exception as e:
                 errores.append(f"❌ Error al enviar {os.path.basename(part)}: {e}")
                 break
-
             if user_id in copy_users:
                 try:
                     with open(part, "rb") as f:
-                        await client.send_document(
-                            chat_id=callback_query.message.chat.id,
-                            document=f,
-                            caption=asunto,
-                            protect_content=protect_content,
-                            file_name=os.path.basename(part)
-                        )
+                        await client.send_document(chat_id=callback_query.message.chat.id, document=f, caption=asunto, protect_content=protect_content, file_name=os.path.basename(part))
                 except Exception as e:
                     errores.append(f"❌ Error al enviar respaldo de {os.path.basename(part)}: {e}")
                     break
-
             os.remove(part)
             enviados += 1
 
         queue["index"] += enviados
-        partes_restantes = total - queue["index"]
-
+        partes_restantes = len(parts) - queue["index"]
         resumen = f"✅ Se enviaron {enviados} parte{'s' if enviados != 1 else ''} correctamente."
         if errores:
             resumen += "\n\n" + "\n".join(errores)
-
         if partes_restantes > 0:
             resumen += f"\n\n📦 Quedan {partes_restantes} parte{'s' if partes_restantes > 1 else ''} por enviar."
             await status_msg.edit_text(resumen, reply_markup=correo_manual)
         else:
             resumen += "\n\n✅ Todas las partes se han enviado."
             await status_msg.edit_text(resumen)
-            del part_queue[user_id]
+            del part_queue[user_id][task_id]
+            if not part_queue[user_id]:
+                del part_queue[user_id]
 
-    # Opciones del botón
     if data == "send_next_part":
         await enviar_partes(1)
-
     elif data == "send_5_parts":
         await enviar_partes(5)
-
     elif data == "send_10_parts":
         await enviar_partes(10)
-
     elif data.startswith("auto_delay_"):
         delay_value = int(data.replace("auto_delay_", ""))
-        part_queue[user_id]["delay"] = delay_value
+        queue["delay"] = delay_value
         await callback_query.message.edit_text(f"⏱️ Envío automático activado con {delay_value} segundos de espera.")
-        await start_auto_send(client, user_id)
-
+        await start_auto_send(client, user_id, task_id)
     elif data == "cancel_send":
-        del part_queue[user_id]
+        del part_queue[user_id][task_id]
+        if not part_queue[user_id]:
+            del part_queue[user_id]
         await callback_query.message.edit_text("🚫 Envío cancelado por el usuario.")
-
     elif data == "no_action":
         await callback_query.answer("Este botón es decorativo 😎", show_alert=False)
-            
-
 
 async def send_mail(client, message, division="7z"):
     user_id = message.from_user.id
     protect_content = await verify_protect(user_id)
-
-    email = user_emails.get(user_id)
-    if not email:
-        await message.reply(
-            "No has registrado ningún correo, usa /setmail para hacerlo.",
-            protect_content=True
-        )
-        return
-
+    email = user_emails[user_id]
     mail_mb = get_mail_limit(user_id)
     mail_delay = get_user_delay(user_id)
 
@@ -186,12 +143,10 @@ async def send_mail(client, message, division="7z"):
         return
 
     reply_message = message.reply_to_message
-
     if reply_message.caption and reply_message.caption.startswith("Look Here") and reply_message.from_user.is_self:
         await message.reply("No puedes enviar este contenido debido a restricciones.", protect_content=protect_content)
         return
 
-    # Envío de texto directo
     if reply_message.text:
         try:
             send_email(email, 'Mensaje de texto', contenido=reply_message.text)
@@ -200,70 +155,52 @@ async def send_mail(client, message, division="7z"):
             await message.reply(f"Error al enviar el mensaje: {e}", protect_content=protect_content)
         return
 
-    # Archivos multimedia
-    if reply_message.document or reply_message.photo or reply_message.video or reply_message.sticker:
-        media = await client.download_media(reply_message, file_name='mailtemp/')
-        if os.path.getsize(media) <= mail_mb * 1024 * 1024:
-            try:
-                send_email(email, 'Archivo', adjunto=media)
-                await message.reply("Archivo enviado correctamente sin compresión.", protect_content=protect_content)
-                os.remove(media)
-            except Exception as e:
-                await message.reply(f"Error al enviar el archivo: {e}", protect_content=protect_content)
+    media = await client.download_media(reply_message, file_name='mailtemp/')
+    if os.path.getsize(media) <= mail_mb * 1024 * 1024:
+        try:
+            send_email(email, 'Archivo', adjunto=media)
+            await message.reply("Archivo enviado correctamente sin compresión.", protect_content=protect_content)
+            os.remove(media)
+        except Exception as e:
+            await message.reply(f"Error al enviar el archivo: {e}", protect_content=protect_content)
+    else:
+        await message.reply(f"El archivo supera el límite de {mail_mb} MB, se iniciará la autocompresión.", protect_content=protect_content)
+        parts = splitfile(media, mail_mb) if division == "bites" else compressfile(media, mail_mb)
+        cantidad_de_parts = len(parts)
+        task_id = generate_task_id()
+        if user_id not in part_queue:
+            part_queue[user_id] = {}
+        part_queue[user_id][task_id] = {
+            "parts": parts,
+            "email": email,
+            "index": 0,
+            "delay": float(mail_delay) if mail_delay != "manual" else 10
+        }
+
+        if mail_delay == "manual":
+            await message.reply(f"Tienes {cantidad_de_parts} partes listas para enviar.", reply_markup=correo_manual, protect_content=protect_content)
         else:
-            await message.reply(f"El archivo supera el límite de {mail_mb} MB, se iniciará la autocompresión.", protect_content=protect_content)
-
-            # División según el parámetro
-            if division == "bites":
-                parts = splitfile(media, mail_mb)
-            else:
-                parts = compressfile(media, mail_mb)
-
-            cantidad_de_parts = len(parts)
-
-            if mail_delay == "manual":
-                part_queue[user_id] = {
-                    "parts": parts,
-                    "email": email,
-                    "index": 0,
-                    "total": cantidad_de_parts
-                }
-                await message.reply(
-                    f"Tienes {cantidad_de_parts} partes listas para enviar.",
-                    reply_markup=correo_manual,
-                    protect_content=protect_content
-                )
-            else:
-                progreso = []
-                status_msg = await message.reply("Enviando partes...", protect_content=protect_content)
-
-                for i, part in enumerate(parts):
-                    try:
-                        asunto = f"Parte {os.path.basename(part)} de {cantidad_de_parts}"
-                        send_email(email, asunto, adjunto=part)
-
-                        if user_id in copy_users:
-                            with open(part, "rb") as f:
-                                await client.send_document(
-                                    chat_id=message.chat.id,
-                                    document=f,
-                                    caption=asunto,
-                                    protect_content=protect_content,
-                                    file_name=os.path.basename(part)
-                                )
-
-                        progreso.append(f"✅ {os.path.basename(part)} enviada correctamente.")
-                        await status_msg.edit_text("\n".join(progreso))
-                        os.remove(part)
-                        time.sleep(float(mail_delay) if mail_delay else 0)
-
-                    except Exception as e:
-                        progreso.append(f"❌ Error al enviar {os.path.basename(part)}: {e}")
-                        await status_msg.edit_text("\n".join(progreso))
-
-                await status_msg.edit_text("\n".join(progreso) + "\n\n✅ Todas las partes se han enviado.")
-
-
+            progreso = []
+            status_msg = await message.reply("Enviando partes...", protect_content=protect_content)
+            for i, part in enumerate(parts):
+                try:
+                    asunto = f"Parte {os.path.basename(part)} de {cantidad_de_parts}"
+                    send_email(email, asunto, adjunto=part)
+                    if user_id in copy_users:
+                        with open(part, "rb") as f:
+                            await client.send_document(chat_id=message.chat.id, document=f, caption=asunto, protect_content=protect_content, file_name=os.path.basename(part))
+                    progreso.append(f"✅ {os.path.basename(part)} enviada correctamente.")
+                    await status_msg.edit_text("\n".join(progreso))
+                    os.remove(part)
+                    time.sleep(float(mail_delay) if mail_delay else 0)
+                except Exception as e:
+                    progreso.append(f"❌ Error al enviar {os.path.basename(part)}: {e}")
+                    await status_msg.edit_text("\n".join(progreso))
+            await status_msg.edit_text("\n".join(progreso) + "\n\n✅ Todas las partes se han enviado.")
+            del part_queue[user_id][task_id]
+            if not part_queue[user_id]:
+                del part_queue[user_id]
+            
 
 def compressfile(file_path, part_size):
     parts = []
