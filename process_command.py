@@ -166,7 +166,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
             elif command == "/sendmailb":
                 try:
                     for _ in range(repeats):
-                        await asyncio.create_task(send_mail(client, message, type="bites"))
+                        await asyncio.create_task(send_mail(client, message, division="bites"))
                         await asyncio.sleep(1)
                 except Exception as e:
                     await message.reply(f"Error en /sendmailb: {e}")
@@ -174,7 +174,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
             elif command == "/sendmail":
                 try:
                     for _ in range(repeats):
-                        await asyncio.create_task(send_mail(client, message, type="7z"))
+                        await asyncio.create_task(send_mail(client, message, division="7z"))
                         await asyncio.sleep(1)
                 except Exception as e:
                     await message.reply(f"Error en /sendmail: {e}")
