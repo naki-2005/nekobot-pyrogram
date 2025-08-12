@@ -131,7 +131,6 @@ async def mail_query(client, callback_query):
     elif data == "no_action":
         await callback_query.answer("Este botón es decorativo 😎", show_alert=False)
 
-
 async def send_mail(client, message, division="7z"):
     user_id = message.from_user.id
     protect_content = await verify_protect(user_id)
@@ -169,7 +168,46 @@ async def send_mail(client, message, division="7z"):
 
         if total_size <= mail_mb * 1024 * 1024:
             try:
-                send_email(email, 'Grupo de imágenes', adjuntos=attachments)
+                from email.message import EmailMessage
+                from email.utils import make_msgid
+                from mimetypes import guess_type
+
+                msg = EmailMessage()
+                msg['Subject'] = 'Grupo de imágenes'
+                msg['To'] = email
+                msg['From'] = 'noreply@example.com'
+
+                html_body = "<html><body><h3>Grupo de imágenes</h3>"
+                cids = []
+
+                for file_path in attachments:
+                    cid = make_msgid(domain="neko.local")[1:-1]
+                    cids.append(cid)
+                    mime_type, _ = guess_type(file_path)
+                    maintype, subtype = mime_type.split('/') if mime_type else ('application', 'octet-stream')
+
+                    with open(file_path, 'rb') as f:
+                        msg.add_attachment(
+                            f.read(),
+                            maintype=maintype,
+                            subtype=subtype,
+                            filename=os.path.basename(file_path),
+                            cid=cid
+                        )
+
+                    html_body += f'<p><img src="cid:{cid}" alt="{os.path.basename(file_path)}" style="max-width:600px;"></p>'
+
+                html_body += "</body></html>"
+
+                # ✅ Primero el texto plano
+                msg.set_content("Grupo de imágenes adjunto.")
+
+                # ✅ Luego el HTML
+                msg.add_alternative(html_body, subtype='html')
+
+                # Envío
+                smtp_send(msg)  # Asumiendo que tienes una función smtp_send(msg)
+
                 await message.reply("Grupo de imágenes enviado correctamente.", protect_content=protect_content)
                 for file in attachments:
                     os.remove(file)
@@ -225,6 +263,7 @@ async def send_mail(client, message, division="7z"):
             del part_queue[user_id][task_id]
             if not part_queue[user_id]:
                 del part_queue[user_id]
+        
                     
 
 def compressfile(file_path, part_size):
