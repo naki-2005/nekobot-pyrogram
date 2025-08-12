@@ -2,7 +2,6 @@ import os
 import re
 import tempfile
 import shutil
-import requests
 import subprocess
 import aiohttp
 import asyncio
@@ -16,11 +15,16 @@ def cambiar_default_selection(userid, nuevaseleccion):
     if nuevaseleccion is not None:
         nuevaseleccion = nuevaseleccion.lower()
     if nuevaseleccion not in opcionesvalidas:
-        raise ValueError("Seleccion invalida Debe ser None pdf cbz o both")
+        raise ValueError("Seleccion invalida: debe ser None, pdf, cbz o both")
     defaultselectionmap[userid] = nuevaseleccion
 
+import unicodedata
+
 def limpiarnombre(nombre):
-    return re.sub(r'[^a-zA-Z0-9 ]', '', nombre.replace('\n', ' ')).strip()
+    nombre = nombre.replace('\n', ' ').strip()
+    nombre = unicodedata.normalize('NFC', nombre)
+    return re.sub(r'[^a-zA-Z0-9ñÑáéíóúÁÉÍÓÚ ]', '', nombre)
+
 
 async def descargarimagen_async(session, url, path):
     try:
@@ -31,24 +35,6 @@ async def descargarimagen_async(session, url, path):
                 f.write(content)
     except Exception:
         pass
-
-async def convertir_a_webp(raw_path, final_path):
-    try:
-        with Image.open(raw_path) as img:
-            img.convert("RGB").save(final_path, "WEBP", quality=90, method=6)
-        os.remove(raw_path)
-    except Exception:
-        shutil.copyfile(raw_path, final_path)
-        os.remove(raw_path)
-
-async def convertir_a_jpeg(raw_path, final_path):
-    try:
-        with Image.open(raw_path) as img:
-            img.convert("RGB").save(final_path, "JPEG", quality=85, optimize=True)
-        os.remove(raw_path)
-    except Exception:
-        shutil.copyfile(raw_path, final_path)
-        os.remove(raw_path)
 
 def obtenerporcli(codigo, tipo, cover):
     script = "nh_links.py" if tipo == "nh" else "h3_links.py"
@@ -90,43 +76,20 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             continue
 
         try:
-            previewpath = f"{nombrebase} preview.png"
+            previewpath = f"{nombrebase} preview.jpg"
             async with aiohttp.ClientSession() as session:
                 await descargarimagen_async(session, imagenes[0], previewpath)
 
             await client.send_photo(
                 chat_id=message.chat.id,
                 photo=previewpath,
-                caption=f"{nombrebase} Número de páginas {len(imagenes)}",
+                caption=f"{nombrebase} Número de páginas: {len(imagenes)}",
                 protect_content=proteger
             )
             os.remove(previewpath)
 
         except Exception:
-            fallbackpath = f"{nombrebase} fallback.png"
-            try:
-                with Image.open(previewpath) as img:
-                    img.convert("RGB").save(fallbackpath)
-                await client.send_photo(
-                    chat_id=message.chat.id,
-                    photo=fallbackpath,
-                    caption=f"{nombrebase} Número de páginas {len(imagenes)}",
-                    protect_content=proteger
-                )
-                os.remove(fallbackpath)
-                os.remove(previewpath)
-
-            except Exception:
-                try:
-                    await client.send_document(
-                        chat_id=message.chat.id,
-                        document=previewpath,
-                        caption=f"{nombrebase} Número de páginas {len(imagenes)}",
-                        protect_content=proteger
-                    )
-                    os.remove(previewpath)
-                except Exception as e:
-                    await message.reply(f"❌ No pude enviar la portada. {type(e).__name__}: {e}")
+            await message.reply(f"❌ No pude enviar la portada para {nombrebase}")
 
         if operacion == "cover":
             continue
@@ -136,16 +99,15 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            raw_paths = []
-            final_paths = []
+            paths = []
             async with aiohttp.ClientSession() as session:
                 tasks = []
                 for idx, url in enumerate(imagenes):
                     ext = os.path.splitext(url)[1].lower()
-                    if ext not in [".jpg", ".jpeg", ".png", ".webp"]: ext = ".jpg"
-                    raw_path = os.path.join(tmpdir, f"{idx+1:03d}_raw{ext}")
-                    raw_paths.append(raw_path)
-                    tasks.append(descargarimagen_async(session, url, raw_path))
+                    if ext not in [".jpg", ".jpeg", ".png"]: ext = ".jpg"
+                    path = os.path.join(tmpdir, f"{idx+1:03d}{ext}")
+                    tasks.append(descargarimagen_async(session, url, path))
+                    paths.append(path)
                     if (idx + 1) % 5 == 0 or (idx + 1) == len(imagenes):
                         try:
                             await progresomsg.edit_text(
@@ -156,15 +118,9 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                 await asyncio.gather(*tasks)
 
             if seleccion is None:
-                # Convertir a JPEG para enviar como fotos
-                for idx, raw in enumerate(raw_paths):
-                    final_path = os.path.join(tmpdir, f"{idx+1:03d}.jpg")
-                    await convertir_a_jpeg(raw, final_path)
-                    final_paths.append(final_path)
-
-                # Enviar en grupos de 10
-                for i in range(0, len(final_paths), 10):
-                    grupo = final_paths[i:i+10]
+                # Enviar como grupos de fotos
+                for i in range(0, len(paths), 10):
+                    grupo = paths[i:i+10]
                     media_group = [InputMediaPhoto(media=path) for path in grupo]
                     try:
                         await client.send_media_group(
@@ -174,16 +130,11 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                     except Exception as e:
                         await message.reply(f"❌ Error al enviar grupo de imágenes: {type(e).__name__}: {e}")
             else:
-                # Convertir a WebP para cbz/pdf
-                for idx, raw in enumerate(raw_paths):
-                    final_path = os.path.join(tmpdir, f"{idx+1:03d}.webp")
-                    await convertir_a_webp(raw, final_path)
-                    final_paths.append(final_path)
-
+                # Añadir página final
                 finalimage_path = os.path.join("command", "spam.png")
-                finalpage_path = os.path.join(tmpdir, f"{len(final_paths)+1:03d}.webp")
+                finalpage_path = os.path.join(tmpdir, f"{len(paths)+1:03d}.png")
                 shutil.copyfile(finalimage_path, finalpage_path)
-                final_paths.append(finalpage_path)
+                paths.append(finalpage_path)
 
                 archivos = []
 
@@ -197,7 +148,7 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                     pdfpath = f"{nombrebase}.pdf"
                     try:
                         mainimages = []
-                        for path in final_paths:
+                        for path in paths:
                             try:
                                 with Image.open(path) as im:
                                     mainimages.append(im.convert("RGB"))
