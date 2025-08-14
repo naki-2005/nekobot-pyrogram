@@ -155,69 +155,6 @@ async def send_mail(client, message, division="7z"):
             await message.reply(f"Error al enviar el mensaje: {e}", protect_content=protect_content)
         return
 
-    # Manejo de grupo de imágenes
-    if reply_message.media_group_id:
-        messages = await client.get_media_group(message.chat.id, reply_message.id)
-        attachments = []
-        total_size = 0
-        for msg in messages:
-            media = await client.download_media(msg, file_name='mailtemp/')
-            size = os.path.getsize(media)
-            total_size += size
-            attachments.append(media)
-
-        if total_size <= mail_mb * 1024 * 1024:
-            try:
-                from email.message import EmailMessage
-                from email.utils import make_msgid
-                from mimetypes import guess_type
-
-                msg = EmailMessage()
-                msg['Subject'] = 'Grupo de imágenes'
-                msg['To'] = email
-                msg['From'] = 'noreply@example.com'
-
-                html_body = "<html><body><h3>Grupo de imágenes</h3>"
-                cids = []
-
-                for file_path in attachments:
-                    cid = make_msgid(domain="neko.local")[1:-1]
-                    cids.append(cid)
-                    mime_type, _ = guess_type(file_path)
-                    maintype, subtype = mime_type.split('/') if mime_type else ('application', 'octet-stream')
-
-                    with open(file_path, 'rb') as f:
-                        msg.add_attachment(
-                            f.read(),
-                            maintype=maintype,
-                            subtype=subtype,
-                            filename=os.path.basename(file_path),
-                            cid=cid
-                        )
-
-                    html_body += f'<p><img src="cid:{cid}" alt="{os.path.basename(file_path)}" style="max-width:600px;"></p>'
-
-                html_body += "</body></html>"
-
-                # ✅ Primero el texto plano
-                msg.set_content("Grupo de imágenes adjunto.")
-
-                # ✅ Luego el HTML
-                msg.add_alternative(html_body, subtype='html')
-
-                # Envío
-                smtp_send(msg)  # Asumiendo que tienes una función smtp_send(msg)
-
-                await message.reply("Grupo de imágenes enviado correctamente.", protect_content=protect_content)
-                for file in attachments:
-                    os.remove(file)
-            except Exception as e:
-                await message.reply(f"Error al enviar el grupo de imágenes: {e}", protect_content=protect_content)
-        else:
-            await message.reply(f"El grupo de imágenes supera el límite de {mail_mb} MB, no se puede enviar sin compresión.", protect_content=protect_content)
-        return
-
-    # Manejo de archivo único
     media = await client.download_media(reply_message, file_name='mailtemp/')
     if os.path.getsize(media) <= mail_mb * 1024 * 1024:
         try:
@@ -263,8 +200,7 @@ async def send_mail(client, message, division="7z"):
             del part_queue[user_id][task_id]
             if not part_queue[user_id]:
                 del part_queue[user_id]
-        
-                    
+            
 
 def compressfile(file_path, part_size):
     parts = []
@@ -316,46 +252,18 @@ def splitfile(file_path, part_size_mb):
     return parts
     
     
-def send_email(destino, asunto, contenido=None, adjunto=False, adjuntos=None):
+
+def send_email(destino, asunto, contenido=None, adjunto=False):
     import os
     import smtplib
     from email.message import EmailMessage
-    from email.utils import make_msgid
-    from mimetypes import guess_type
 
     msg = EmailMessage()
     msg['Subject'] = asunto
     msg['From'] = f"Neko Bot <{os.getenv('MAILDIR')}>"
     msg['To'] = destino
 
-    # Si hay múltiples imágenes, construir HTML con <img>
-    if adjuntos:
-        html_body = f"<html><body><h3>{contenido if contenido else asunto}</h3>"
-        cids = []
-
-        for i, file_path in enumerate(adjuntos):
-            cid = make_msgid(domain="neko.local")[1:-1]  # remove angle brackets
-            cids.append(cid)
-            mime_type, _ = guess_type(file_path)
-            maintype, subtype = mime_type.split('/') if mime_type else ('application', 'octet-stream')
-
-            with open(file_path, 'rb') as f:
-                msg.add_attachment(
-                    f.read(),
-                    maintype=maintype,
-                    subtype=subtype,
-                    filename=os.path.basename(file_path),
-                    cid=cid
-                )
-
-            html_body += f'<p><img src="cid:{cid}" alt="{os.path.basename(file_path)}" style="max-width:600px;"></p>'
-
-        html_body += "</body></html>"
-        msg.set_content(contenido if contenido else asunto)
-        msg.add_alternative(html_body, subtype='html')
-
-    # Si solo hay un adjunto, mantener comportamiento anterior
-    elif adjunto:
+    if adjunto:
         with open(adjunto, 'rb') as f:
             msg.add_attachment(
                 f.read(),
@@ -363,9 +271,6 @@ def send_email(destino, asunto, contenido=None, adjunto=False, adjuntos=None):
                 subtype='octet-stream',
                 filename=os.path.basename(adjunto)
             )
-        msg.set_content(contenido if contenido else asunto)
-
-    # Si solo hay texto
     else:
         msg.set_content(contenido if contenido else asunto)
 
@@ -379,7 +284,6 @@ def send_email(destino, asunto, contenido=None, adjunto=False, adjuntos=None):
             server.starttls()
         server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
         server.send_message(msg)
-
         
 async def multisendmail(client, message):
     user_id = message.from_user.id
