@@ -36,31 +36,23 @@ async def descargarimagen_async(session, url, path):
     except Exception:
         pass
 
-def obtenerporcli(codigo, tipo, cover):
-    script = "nh_links.py" if tipo == "nh" else "h3_links.py"
-    path = os.path.join("command", "get_files", script)
-    comando = ["python3", path, "-C", codigo]
-    if cover:
-        comando.append("--cover")
+from command.get_files.nh_links import obtener_info_y_links
+from command.get_files.h3_links import obtener_info_y_links as obtener_info_y_links_h3
 
+def obtenerporcli(codigo, tipo, cover):
     try:
-        result = subprocess.run(comando, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1200)
-        salida = result.stdout.splitlines()
-        texto = ""
-        imagenes = []
-        modotexto = False
-        for linea in salida:
-            if linea.strip().startswith("📄"):
-                modotexto = True
-            elif linea.strip().startswith("🖼️"):
-                modotexto = False
-            elif modotexto:
-                texto += linea.strip() + " "
-            elif linea.strip().startswith("http"):
-                imagenes.append(linea.strip())
-        return {"texto": texto.strip(), "imagenes": imagenes}
+        if tipo == "nh":
+            datos = obtener_info_y_links(codigo, cover=cover)
+        else:
+            datos = obtener_info_y_links_h3(codigo, cover=cover)
+
+        texto = datos.get("texto", "").strip()
+        imagenes = datos.get("imagenes", [])
+
+        return {"texto": texto, "imagenes": imagenes}
+
     except Exception as e:
-        print("❌ Error ejecutando script externo:", e)
+        print(f"❌ Error ejecutando función de extracción para {codigo}:", e)
         return {"texto": "", "imagenes": []}
 
 async def nh_combined_operation(client, message, codigos, tipo, proteger, userid, operacion):
