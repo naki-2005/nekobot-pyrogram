@@ -8,7 +8,7 @@ import random
 from data.vars import admin_users, vip_users, video_limit, PROTECT_CONTENT, correo_manual
 import asyncio
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from command.mailtools.db import save_user_data_to_db
+from command.mailtools.db import save_user_data_to_db, load_user_config
 user_emails = {}
 verification_storage = {}
 user_limits = {}
@@ -16,6 +16,22 @@ user_delays = {}
 exceeded_users = []
 copy_users = []
 
+async def mydata(client, message):
+    user_id = message.from_user.id
+
+    try:
+        email, mail_mb, mail_delay = load_user_config(user_id)
+    except Exception as e:
+        await message.reply(f"⚠️ Error al cargar datos: {e}")
+        return
+
+    text = (
+        f"📧 Email: `{email}`\n"
+        f"📦 Límite: `{mail_mb} MB`\n"
+        f"⏱️ Delay: `{mail_delay}`"
+    )
+    await message.reply(text)
+    
 async def copy_manager(user):
     if user not in copy_users:
         copy_users.append(user)
