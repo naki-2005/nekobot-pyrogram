@@ -2,6 +2,8 @@ import os
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import urllib.error
 import urllib.request
+import sqlite3
+import json
 
 api_id = os.getenv('API_ID')
 api_hash = os.getenv('API_HASH')
