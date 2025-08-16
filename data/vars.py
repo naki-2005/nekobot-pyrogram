@@ -18,11 +18,56 @@ GIT_API = os.getenv("GIT_API")
 FILE_PATH = "access_data.db"
 url = f"https://api.github.com/repos/{GIT_REPO}/data/{FILE_PATH}"
 
+def read_db(query, params=()):
+    headers = {
+        "Authorization": f"Bearer {GIT_API}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "python-urllib"
+    }
+
+    # 📥 Intentar descargar base remota
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req) as response:
+            existing = json.loads(response.read())
+            content = base64.b64decode(existing["content"])
+            with open(FILE_PATH, "wb") as f:
+                f.write(content)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            print("[WARN] Base remota no encontrada. Usando base local vacía.")
+            # Crear base vacía si no existe
+            if not os.path.exists(FILE_PATH):
+                conn = sqlite3.connect(FILE_PATH)
+                cursor = conn.cursor()
+                cursor.execute("CREATE TABLE IF NOT EXISTS admins (user_id INTEGER PRIMARY KEY)")
+                cursor.execute("CREATE TABLE IF NOT EXISTS temp_users (user_id INTEGER PRIMARY KEY)")
+                cursor.execute("CREATE TABLE IF NOT EXISTS allowed_users (user_id INTEGER PRIMARY KEY)")
+                conn.commit()
+                conn.close()
+        else:
+            raise RuntimeError(f"Error al leer la base: {e}")
+    except Exception as e:
+        raise RuntimeError(f"Error inesperado: {e}")
+
+    # 📤 Leer datos
+    conn = sqlite3.connect(FILE_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+    except sqlite3.Error as e:
+        print(f"[ERROR] Consulta fallida: {e}")
+        rows = []
+    conn.close()
+    return [row[0] for row in rows]
+
 def start_data():
     global admin_users
     global users
-    admin_users = read_db("SELECT user_id FROM admins")
-    users = read_db("SELECT user_id FROM temp_users")
+
+    admin_users = read_db("SELECT user_id FROM admins") or []
+    users = read_db("SELECT user_id FROM temp_users") or []
 
     if not admin_users and os.getenv('ADMINS'):
         admin_users = list(map(int, os.getenv('ADMINS').split(',')))
@@ -36,33 +81,7 @@ def start_data():
     for uid in users:
         modify_db("INSERT OR IGNORE INTO temp_users (user_id) VALUES (?)", (uid,))
         modify_db("INSERT OR IGNORE INTO allowed_users (user_id) VALUES (?)", (uid,))
-        
-def read_db(query, params=()):
-    headers = {
-        "Authorization": f"Bearer {GIT_API}",
-        "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "python-urllib"
-    }
-
-    # 📥 Descargar base
-    try:
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req) as response:
-            existing = json.loads(response.read())
-            content = base64.b64decode(existing["content"])
-            with open(FILE_PATH, "wb") as f:
-                f.write(content)
-    except Exception as e:
-        raise RuntimeError(f"Error al leer la base: {e}")
-
-    # 📤 Leer datos
-    conn = sqlite3.connect(FILE_PATH)
-    cursor = conn.cursor()
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
-    conn.close()
-    return [row[0] for row in rows]
-    
+                                     
 MAIN_ADMIN = os.getenv("MAIN_ADMIN")
 CODEWORD = os.getenv('CODEWORD', '')
 BOT_IS_PUBLIC = os.getenv('BOT_IS_PUBLIC', 'false').strip().lower() == "true"
