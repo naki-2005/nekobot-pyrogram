@@ -11,7 +11,6 @@ from command.imgtools import create_imgchest_post
 from command.webtools import handle_scan, handle_multiscan, summarize_lines
 from command.mailtools.set_values import set_mail, verify_mail, set_mail_limit, set_mail_delay, multisetmail, copy_manager
 from command.mailtools.send import send_mail, multisendmail
-from command.mailtools.db import save_mail
 from command.videotools import update_video_settings, compress_video, cancelar_tarea, listar_tareas, cambiar_miniatura
 from command.filetools import handle_compress, rename, set_size, caption
 from command.telegramtools import get_file_id, send_file_by_id
@@ -187,9 +186,6 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
 
             elif command == "/verify":
                 await asyncio.create_task(verify_mail(client, message))
-
-            elif command == "/savemail":
-                await asyncio.create_task(save_mail(client, message))
 
             elif command == "/mailcopy":
                 respuesta = await asyncio.create_task(copy_manager(user_id))
