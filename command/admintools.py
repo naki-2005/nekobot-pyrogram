@@ -1,72 +1,85 @@
 import os
+import random
 from pyrogram import Client
 from pyrogram.types import Message
-import asyncio
 from data.stickers import saludos
-import random 
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from command.help import handle_help_callback, handle_help
-from data.vars import api_id, api_hash, bot_token, admin_users, users, temp_users, temp_chats, vip_users, ban_users, MAIN_ADMIN, CODEWORD, BOT_IS_PUBLIC, PROTECT_CONTENT, allowed_ids, allowed_users
+from data.vars import MAIN_ADMIN, CODEWORD, BOT_IS_PUBLIC, PROTECT_CONTENT
 
+from access_db import modify_db  # Función separada para editar la base
 
+def is_env_admin(user_id):
+    return str(user_id) in os.getenv("ADMINS", "").split(',')
+
+# 🎉 Inicio
 async def handle_start(client, message):
     first_name = message.from_user.first_name
     last_name = message.from_user.last_name or ""
-    name = f"{first_name} {last_name}".strip()  # Combina nombres y elimina espacios extra
+    name = f"{first_name} {last_name}".strip()
     username = message.from_user.username or "Usuario"
 
     await client.send_sticker(message.chat.id, sticker=random.choice(saludos))
     response = (
-        f"Bienvenido [{name}](https://t.me/{username}) a Nekobot. "  # Enlace al perfil
-        "Para conocer los comandos escriba /help o visite la [página oficial](https://nakigeplayer.github.io/nekobot-pyrogram/)."  # Enlace funcional
+        f"Bienvenido [{name}](https://t.me/{username}) a Nekobot. "
+        "Para conocer los comandos escriba /help o visite la [página oficial](https://nakigeplayer.github.io/nekobot-pyrogram/)."
     )
-
-    # Evita la vista previa de enlaces en el mensaje
     await message.reply(response, disable_web_page_preview=True)
-    
 
-    
+# 👤 Añadir usuario temporal
 async def add_user(client, message, user_id, chat_id):
     new_user_id = int(message.text.split()[1])
-    temp_users.append(new_user_id)
-    allowed_users.append(new_user_id)
+    modify_db("INSERT OR IGNORE INTO temp_users (user_id) VALUES (?)", (new_user_id,))
+    modify_db("INSERT OR IGNORE INTO allowed_users (user_id) VALUES (?)", (new_user_id,))
     await message.reply(f"Usuario {new_user_id} añadido temporalmente.")
 
+# 👤 Eliminar usuario temporal
 async def remove_user(client, message, user_id, chat_id):
     rem_user_id = int(message.text.split()[1])
-    if rem_user_id in temp_users:
-        temp_users.remove(rem_user_id)
-        allowed_users.remove(rem_user_id)
-        await message.reply(f"Usuario {rem_user_id} eliminado temporalmente.")
-    else:
-        await message.reply("Usuario no encontrado en la lista temporal.")
+    modify_db("DELETE FROM temp_users WHERE user_id = ?", (rem_user_id,))
+    modify_db("DELETE FROM allowed_users WHERE user_id = ?", (rem_user_id,))
+    await message.reply(f"Usuario {rem_user_id} eliminado temporalmente.")
 
+# 💬 Añadir chat temporal
 async def add_chat(client, message, user_id, chat_id):
-    chat_id = message.chat.id
-    temp_chats.append(chat_id)
-    allowed_users.append(chat_id)
+    modify_db("INSERT OR IGNORE INTO temp_chats (chat_id) VALUES (?)", (chat_id,))
+    modify_db("INSERT OR IGNORE INTO allowed_users (user_id) VALUES (?)", (chat_id,))
     await message.reply(f"Chat {chat_id} añadido temporalmente.")
 
+# 💬 Eliminar chat temporal
 async def remove_chat(client, message, user_id, chat_id):
-    chat_id = message.chat.id
-    if chat_id in temp_chats:
-        temp_chats.remove(chat_id)
-        allowed_users.remove(chat_id)
-        await message.reply(f"Chat {chat_id} eliminado temporalmente.")
-    else:
-        await message.reply("Chat no encontrado en la lista temporal.")
+    modify_db("DELETE FROM temp_chats WHERE chat_id = ?", (chat_id,))
+    modify_db("DELETE FROM allowed_users WHERE user_id = ?", (chat_id,))
+    await message.reply(f"Chat {chat_id} eliminado temporalmente.")
 
+# 🚫 Banear usuario
 async def ban_user(client, message, user_id, chat_id):
     ban_user_id = int(message.text.split()[1])
-    if ban_user_id not in admin_users:
-        ban_users.append(ban_user_id)
-        await message.reply(f"Usuario {ban_user_id} baneado.")
+    if is_env_admin(ban_user_id):
+        await message.reply("No puedes banear a un administrador de entorno.")
+        return
+    modify_db("INSERT OR IGNORE INTO ban_users (user_id) VALUES (?)", (ban_user_id,))
+    await message.reply(f"Usuario {ban_user_id} baneado.")
 
-async def deban_user(client, message, user_id,chat_id):
+# ✅ Desbanear usuario
+async def deban_user(client, message, user_id, chat_id):
     deban_user_id = int(message.text.split()[1])
-    if deban_user_id in ban_users:
-        ban_users.remove(deban_user_id)
-        await message.reply(f"Usuario {deban_user_id} desbaneado.")
-    else:
-        await message.reply("Usuario no encontrado en la lista de baneados.")
-        
+    modify_db("DELETE FROM ban_users WHERE user_id = ?", (deban_user_id,))
+    await message.reply(f"Usuario {deban_user_id} desbaneado.")
+
+# 🛡️ Añadir admin (solo si es admin de entorno)
+async def add_admin(client, message, user_id, chat_id):
+    if not is_env_admin(user_id):
+        await message.reply("No tienes permiso para añadir administradores.")
+        return
+    new_admin_id = int(message.text.split()[1])
+    modify_db("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (new_admin_id,))
+    await message.reply(f"Administrador {new_admin_id} añadido.")
+
+# 🧹 Eliminar admin (solo si es admin de entorno)
+async def remove_admin(client, message, user_id, chat_id):
+    if not is_env_admin(user_id):
+        await message.reply("No tienes permiso para eliminar administradores.")
+        return
+    rem_admin_id = int(message.text.split()[1])
+    modify_db("DELETE FROM admins WHERE user_id = ?", (rem_admin_id,))
+    await message.reply(f"Administrador {rem_admin_id} eliminado.")
