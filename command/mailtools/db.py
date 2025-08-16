@@ -5,6 +5,11 @@ import json
 import urllib.request
 from datetime import datetime
 
+RESERVED_SQL = {"limit", "group", "order", "select"}
+
+def escape_sql_key(key):
+    return f'"{key}"' if key.lower() in RESERVED_SQL else key
+
 def save_user_data_to_db(user_id, key, value):
     db_path = "user_data.db"
     GIT_REPO = os.getenv("GIT_REPO")
@@ -46,14 +51,14 @@ def save_user_data_to_db(user_id, key, value):
     cursor.execute("PRAGMA table_info(user_data)")
     columns = [col[1] for col in cursor.fetchall()]
     if key not in columns:
-        cursor.execute(f"ALTER TABLE user_data ADD COLUMN {key} TEXT")
+        cursor.execute(f'ALTER TABLE user_data ADD COLUMN {escape_sql_key(key)} TEXT')
 
     # 🔁 3. Insertar o actualizar datos
-    cursor.execute(f"""
-        INSERT INTO user_data (user_id, {key}, timestamp)
+    cursor.execute(f'''
+        INSERT INTO user_data (user_id, {escape_sql_key(key)}, timestamp)
         VALUES (?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET {key} = excluded.{key}, timestamp = excluded.timestamp
-    """, (user_id, value, datetime.utcnow().isoformat()))
+        ON CONFLICT(user_id) DO UPDATE SET {escape_sql_key(key)} = excluded.{escape_sql_key(key)}, timestamp = excluded.timestamp
+    ''', (user_id, value, datetime.utcnow().isoformat()))
     conn.commit()
     conn.close()
 
@@ -79,7 +84,6 @@ def save_user_data_to_db(user_id, key, value):
     with urllib.request.urlopen(req) as response:
         result = json.loads(response.read())
         return result.get("content", {}).get("download_url", "Subido sin URL")
-
 
 
 def load_user_config(user_id):
@@ -109,7 +113,7 @@ def load_user_config(user_id):
     # 🔍 Leer datos del usuario
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute("SELECT email, limit, delay FROM user_data WHERE user_id = ?", (user_id,))
+    cursor.execute('SELECT email, "limit", delay FROM user_data WHERE user_id = ?', (user_id,))
     row = cursor.fetchone()
     conn.close()
 
@@ -121,4 +125,3 @@ def load_user_config(user_id):
     mail_delay = row[2] if row[2] else "manual"
 
     return email, mail_mb, mail_delay
-    
