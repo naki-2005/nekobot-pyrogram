@@ -10,7 +10,7 @@ import asyncio
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from command.mailtools.set_values import verify_protect, get_mail_limit, get_user_delay, multi_user_emails, copy_users, exceeded_users, user_emails, user_delays, user_limits
 
-from command.mailtools.db import load_mail
+from command.mailtools.db import load_user_config
 
 part_queue = {}
 
@@ -134,10 +134,13 @@ async def mail_query(client, callback_query):
 async def send_mail(client, message, division="7z"):
     user_id = message.from_user.id
     protect_content = await verify_protect(user_id)
-    email = user_emails[user_id]
-    mail_mb = get_mail_limit(user_id)
-    mail_delay = get_user_delay(user_id)
 
+    try:
+        email, mail_mb, mail_delay = load_user_config(user_id)
+    except Exception as e:
+        await message.reply(str(e))
+        return
+    
     if not message.reply_to_message:
         await message.reply("Por favor, responde a un mensaje.", protect_content=True)
         return
