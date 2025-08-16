@@ -30,7 +30,32 @@ def start_data():
         modify_db("INSERT OR IGNORE INTO temp_users (user_id) VALUES (?)", (uid,))
         modify_db("INSERT OR IGNORE INTO allowed_users (user_id) VALUES (?)", (uid,))
         
+def read_db(query, params=()):
+    headers = {
+        "Authorization": f"Bearer {GIT_API}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "python-urllib"
+    }
 
+    # 📥 Descargar base
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req) as response:
+            existing = json.loads(response.read())
+            content = base64.b64decode(existing["content"])
+            with open(FILE_PATH, "wb") as f:
+                f.write(content)
+    except Exception as e:
+        raise RuntimeError(f"Error al leer la base: {e}")
+
+    # 📤 Leer datos
+    conn = sqlite3.connect(FILE_PATH)
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    conn.close()
+    return [row[0] for row in rows]
+    
 MAIN_ADMIN = os.getenv("MAIN_ADMIN")
 CODEWORD = os.getenv('CODEWORD', '')
 BOT_IS_PUBLIC = os.getenv('BOT_IS_PUBLIC', 'false').strip().lower() == "true"
