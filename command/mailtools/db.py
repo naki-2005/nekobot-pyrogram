@@ -87,6 +87,8 @@ def save_user_data_to_db(user_id, key, value):
 
 
 def load_user_config(user_id):
+    import os, json, base64, urllib.request, sqlite3
+
     db_path = "user_data.db"
     GIT_REPO = os.getenv("GIT_REPO")
     GIT_API = os.getenv("GIT_API")
@@ -113,6 +115,15 @@ def load_user_config(user_id):
     # 🔍 Leer datos del usuario
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
+
+    # 🧱 Asegurar columnas necesarias
+    cursor.execute("PRAGMA table_info(user_data)")
+    existing_cols = [col[1] for col in cursor.fetchall()]
+    for col in ["email", "limit", "delay"]:
+        if col not in existing_cols:
+            cursor.execute(f'ALTER TABLE user_data ADD COLUMN "{col}" TEXT')
+
+    # 📤 Obtener datos
     cursor.execute('SELECT email, "limit", delay FROM user_data WHERE user_id = ?', (user_id,))
     row = cursor.fetchone()
     conn.close()
