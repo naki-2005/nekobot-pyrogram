@@ -16,7 +16,7 @@ from data.stickers import saludos, STICKER_SALUDO, STICKER_DESCANSO, STICKER_REA
 from data.vars import (
     api_id, api_hash, bot_token, admin_users, users, temp_users,
     temp_chats, vip_users, ban_users, MAIN_ADMIN, CODEWORD,
-    BOT_IS_PUBLIC, PROTECT_CONTENT, allowed_ids, allowed_users
+    BOT_IS_PUBLIC, PROTECT_CONTENT, allowed_ids, allowed_users, start_data
 )
 
 # -------- Bot de Telegram --------
@@ -190,6 +190,7 @@ def run_flask():
 
 # -------- Inicio principal --------
 async def main():
+    start_data()
     threading.Thread(target=run_flask, daemon=True).start()
     await app.start()
     if MAIN_ADMIN:
