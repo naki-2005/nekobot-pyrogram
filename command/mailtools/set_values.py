@@ -182,21 +182,31 @@ Si no solicitaste este código simplemente ignóralo.
     except Exception as e:
         await message.reply(f"Error al enviar el correo de verificación: {e}")
 
+
 async def verify_mail(client, message):
     user_id = message.from_user.id
     protect_content = await verify_protect(user_id)
-    code = message.text.split(' ', 1)[1]
-    if user_id in verification_storage:
-        stored_email = verification_storage[user_id]['email']
-        stored_code = verification_storage[user_id]['code']
-        if code == stored_code:
-            user_emails[user_id] = stored_email
-            del verification_storage[user_id]
-            await message.reply("Correo electrónico verificado y registrado correctamente.")
-        else:
-            await message.reply("El código de verificación es incorrecto. Intenta de nuevo.")
-    else:
+
+    try:
+        code = message.text.split(' ', 1)[1]
+    except IndexError:
+        await message.reply("Formato incorrecto. Usa: /verify código_de_verificación")
+        return
+
+    if user_id not in verification_storage:
         await message.reply("No hay un código de verificación pendiente. Usa /setmail para iniciar el proceso.")
+        return
+
+    stored_email = verification_storage[user_id]['email']
+    stored_code = verification_storage[user_id]['code']
+
+    if code == stored_code:
+        user_emails[user_id] = stored_email
+        save_user_data_to_db(user_id, "email", stored_email)
+        del verification_storage[user_id]
+        await message.reply("✅ Correo electrónico verificado y registrado correctamente.")
+    else:
+        await message.reply("❌ El código de verificación es incorrecto. Intenta de nuevo.")
 
 multi_user_emails = {}
 
