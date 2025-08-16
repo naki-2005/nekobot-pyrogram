@@ -11,6 +11,11 @@ temp_users, temp_chats, ban_users = [], [], []
 video_limit = os.getenv('VIDEO_LIMIT')
 video_limit = int(video_limit) if video_limit else None
 
+GIT_REPO = os.getenv("GIT_REPO")
+GIT_API = os.getenv("GIT_API")
+FILE_PATH = "access_data.db"
+url = f"https://api.github.com/repos/{GIT_REPO}/data/{FILE_PATH}"
+
 def start_data():
     global admin_users
     global users
