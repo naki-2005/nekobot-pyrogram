@@ -11,6 +11,26 @@ temp_users, temp_chats, ban_users = [], [], []
 video_limit = os.getenv('VIDEO_LIMIT')
 video_limit = int(video_limit) if video_limit else None
 
+def start_data():
+    global admin_users
+    global users
+    admin_users = read_db("SELECT user_id FROM admins")
+    users = read_db("SELECT user_id FROM temp_users")
+
+    if not admin_users and os.getenv('ADMINS'):
+        admin_users = list(map(int, os.getenv('ADMINS').split(',')))
+    if not users and os.getenv('USERS'):
+        users = list(map(int, os.getenv('USERS').split(',')))
+
+    for uid in admin_users:
+        modify_db("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (uid,))
+        modify_db("INSERT OR IGNORE INTO allowed_users (user_id) VALUES (?)", (uid,))
+
+    for uid in users:
+        modify_db("INSERT OR IGNORE INTO temp_users (user_id) VALUES (?)", (uid,))
+        modify_db("INSERT OR IGNORE INTO allowed_users (user_id) VALUES (?)", (uid,))
+        
+
 MAIN_ADMIN = os.getenv("MAIN_ADMIN")
 CODEWORD = os.getenv('CODEWORD', '')
 BOT_IS_PUBLIC = os.getenv('BOT_IS_PUBLIC', 'false').strip().lower() == "true"
