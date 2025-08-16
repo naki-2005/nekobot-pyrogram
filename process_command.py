@@ -156,7 +156,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
             if command == "/setmail":
                 await asyncio.create_task(set_mail(client, message))
 
-            elif command == "/me":
+            elif command == "/mydata":
                 await asyncio.create_task(mydata(client, message))
 
             elif command == "/multisetmail":
