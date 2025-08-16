@@ -9,7 +9,7 @@ from command.htools import nh_combined_operation, cambiar_default_selection
 from command.admintools import add_user, remove_user, add_chat, remove_chat, ban_user, deban_user, handle_start
 from command.imgtools import create_imgchest_post
 from command.webtools import handle_scan, handle_multiscan, summarize_lines
-from command.mailtools.set_values import set_mail, verify_mail, set_mail_limit, set_mail_delay, multisetmail, copy_manager
+from command.mailtools.set_values import set_mail, verify_mail, set_mail_limit, set_mail_delay, multisetmail, copy_manager, mydata
 from command.mailtools.send import send_mail, multisendmail
 from command.videotools import update_video_settings, compress_video, cancelar_tarea, listar_tareas, cambiar_miniatura
 from command.filetools import handle_compress, rename, set_size, caption
@@ -147,7 +147,7 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                 caption_text = text.split(maxsplit=1)[1] if len(text.split(maxsplit=1)) > 1 else "Archivo reenviado"
                 await caption(client, chat_id, file_id, caption_text)
         return
-    elif command in ("/setmail", "/sendmail", "/sendmailb", "/verify", "/setmb", "/setdelay", "/multisetmail", "/multisendmail", "/savemail", "/mailcopy"):
+    elif command in ("/mydata", "/setmail", "/sendmail", "/sendmailb", "/verify", "/setmb", "/setdelay", "/multisetmail", "/multisendmail", "/savemail", "/mailcopy"):
         if cmd("mailtools", user_id in admin_users, user_id in vip_users):
             parts = text.split()
             arg = parts[1] if len(parts) > 1 else ""
@@ -155,6 +155,9 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
 
             if command == "/setmail":
                 await asyncio.create_task(set_mail(client, message))
+
+            elif command == "/me":
+                await asyncio.create_task(mydata(client, message))
 
             elif command == "/multisetmail":
                 await asyncio.create_task(multisetmail(client, message))
