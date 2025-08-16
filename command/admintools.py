@@ -7,8 +7,6 @@ from command.help import handle_help_callback, handle_help
 from data.vars import MAIN_ADMIN, CODEWORD, BOT_IS_PUBLIC, PROTECT_CONTENT
 from data.data import modify_db
 
-from access_db import modify_db  # Función separada para editar la base
-
 def is_env_admin(user_id):
     return str(user_id) in os.getenv("ADMINS", "").split(',')
 
