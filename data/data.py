@@ -7,7 +7,7 @@ import urllib.request
 GIT_REPO = os.getenv("GIT_REPO")
 GIT_API = os.getenv("GIT_API")
 FILE_PATH = "access_data.db"
-url = f"https://api.github.com/repos/{GIT_REPO}/contents/data/{FILE_PATH}"
+url = f"https://api.github.com/repos/{GIT_REPO}/data/{FILE_PATH}"
 
 def modify_db(query, params=()):
     headers = {
