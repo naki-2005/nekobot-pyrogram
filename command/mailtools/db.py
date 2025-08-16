@@ -1,102 +1,80 @@
 import os
-import json
-import requests
+import sqlite3
 import base64
+import json
+import urllib.request
+from datetime import datetime
 
-async def save_mail(client, message):
-    user_id = str(message.from_user.id)
-    user_id_int = int(message.from_user.id)
-    admin_users = list(map(int, os.getenv('ADMINS', '').split(','))) if os.getenv('ADMINS') else []
-    if user_id_int not in admin_users:
-        return
+def save_user_data_to_db(user_id, key, value):
+    db_path = "user_data.db"
+    GIT_REPO = os.getenv("GIT_REPO")
+    GIT_API = os.getenv("GIT_API")
+    GIT_TOKEN = os.getenv("GIT_TOKEN")
+    FILE_PATH = "data/user_data.db"
+    url = f"https://api.github.com/repos/{GIT_REPO}/contents/{FILE_PATH}"
 
+    # 📥 1. Descargar la base de datos desde GitHub si existe
+    sha = None
     try:
-        payload = message.text.split(',', 3)
-        if len(payload) != 4:
-            await message.reply("Formato inválido. Usa: user_id,email,delay,limit_mb")
-            return
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {GIT_TOKEN}"})
+        with urllib.request.urlopen(req) as response:
+            existing = json.loads(response.read())
+            sha = existing.get("sha")
+            content = base64.b64decode(existing["content"])
+            with open(db_path, "wb") as f:
+                f.write(content)
+    except:
+        # Si no existe, se creará localmente
+        pass
 
-        user_data = {
-            "email": payload[1].strip(),
-            "delay": int(payload[2].strip()),
-            "limit_mb": int(payload[3].strip())
-        }
+    # 🧱 2. Crear base si no existe y asegurar columnas
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
 
-        GIT_REPO = os.getenv("GIT_REPO")
-        GIT_API = os.getenv("GIT_API")
-        FILE_PATH = "config.json"
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_data (
+            user_id INTEGER PRIMARY KEY,
+            timestamp TEXT
+        )
+    """)
 
-        url = f"https://api.github.com/repos/{GIT_REPO}/contents/{FILE_PATH}"
-        headers = {
-            "Authorization": f"token {GIT_API}",
-            "Accept": "application/vnd.github.v3+json"
-        }
+    cursor.execute("PRAGMA table_info(user_data)")
+    columns = [col[1] for col in cursor.fetchall()]
+    if key not in columns:
+        cursor.execute(f"ALTER TABLE user_data ADD COLUMN {key} TEXT")
 
-        response = requests.get(url, headers=headers)
+    # 🔁 3. Insertar o actualizar datos
+    cursor.execute(f"""
+        INSERT INTO user_data (user_id, {key}, timestamp)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET {key} = excluded.{key}, timestamp = excluded.timestamp
+    """, (user_id, value, datetime.utcnow().isoformat()))
 
-        if response.status_code == 200:
-            content = response.json()
-            sha = content['sha']
-            existing_data = json.loads(
-                requests.get(content['download_url'], headers=headers).text
-            )
-        else:
-            existing_data = {}
-            sha = None
+    conn.commit()
+    conn.close()
 
-        existing_data[user_id] = user_data
-        updated_content = json.dumps(existing_data, indent=4)
+    # 🚀 4. Subir la base modificada a GitHub
+    with open(db_path, "rb") as f:
+        new_content = base64.b64encode(f.read()).decode("utf-8")
 
-        commit_data = {
-            "message": f"Update config for user {user_id}",
-            "content": base64.b64encode(updated_content.encode("utf-8")).decode("utf-8"),
-            "branch": "main"
-        }
-        if sha:
-            commit_data["sha"] = sha
+    payload = {
+        "message": f"Actualización de datos para user_id {user_id}",
+        "content": new_content,
+        "branch": "main"
+    }
+    if sha:
+        payload["sha"] = sha
 
-        put_response = requests.put(url, headers=headers, json=commit_data)
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {GIT_TOKEN}",
+            "Content-Type": "application/json"
+        },
+        method="PUT"
+    )
 
-        if put_response.status_code in [200, 201]:
-            await message.reply("✅ Configuración guardada exitosamente en GitHub.")
-        else:
-            await message.reply(f"❌ Error al guardar: {put_response.status_code}")
-    except Exception as e:
-        await message.reply(f"Error inesperado: {str(e)}")
-
-def load_mail():
-    try:
-        GIT_REPO = os.getenv("GIT_REPO")
-        GIT_API = os.getenv("GIT_API")
-        FILE_PATH = "config.json"
-
-        url = f"https://api.github.com/repos/{GIT_REPO}/contents/{FILE_PATH}"
-        headers = {
-            "Authorization": f"token {GIT_API}",
-            "Accept": "application/vnd.github.v3+json"
-        }
-
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            content = response.json()
-            config = json.loads(
-                requests.get(content['download_url'], headers=headers).text
-            )
-
-            emails, delays, limits = {}, {}, {}
-
-            for uid, data in config.items():
-                uid = int(uid)
-                emails[uid] = data['email']
-                delays[uid] = data['delay']
-                limits[uid] = data['limit_mb']
-
-            return emails, delays, limits
-
-        else:
-            print("No se encontró configuración previa.")
-            return {}, {}, {}
-
-    except Exception as e:
-        print(f"Error al cargar configuración: {str(e)}")
-        return {}, {}, {}
+    with urllib.request.urlopen(req) as response:
+        result = json.loads(response.read())
+        return result.get("content", {}).get("download_url", "Subido sin URL")
