@@ -8,6 +8,7 @@ import random
 from data.vars import admin_users, vip_users, video_limit, PROTECT_CONTENT, correo_manual
 import asyncio
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from command.mailtools.db import save_user_data_to_db
 user_emails = {}
 verification_storage = {}
 user_limits = {}
@@ -143,15 +144,21 @@ def send_ver(destino, asunto, contenido=None, adjunto=False):
             server.starttls()
         server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
         server.send_message(msg)
-        
+
 async def set_mail(client, message):
-    email = message.text.split(' ', 1)[1]
+    try:
+        email = message.text.split(' ', 1)[1]
+    except IndexError:
+        await message.reply("Formato incorrecto. Usa: /setmail tu_correo@example.com")
+        return
+
     user_id = message.from_user.id
     protect_content = await verify_protect(user_id)
     mail_confirmed = os.getenv('MAIL_CONFIRMED')
     if user_id in admin_users:
         user_emails[user_id] = email
-        await message.reply("Correo electrónico registrado automáticamente porque eres el administrador de bot")
+        save_user_data_to_db(user_id, "email", email)
+        await message.reply("Correo electrónico registrado automáticamente porque eres el administrador del bot.")
         return
     if mail_confirmed:
         confirmed_users = {
@@ -160,9 +167,9 @@ async def set_mail(client, message):
         }
         if str(user_id) in confirmed_users and email in confirmed_users[str(user_id)]:
             user_emails[user_id] = email
-            await message.reply("Correo electrónico registrado automáticamente porque el administrador de bot reconoce tu dirección.")
+            save_user_data_to_db(user_id, "email", email)
+            await message.reply("Correo electrónico registrado automáticamente porque el administrador del bot reconoce tu dirección.")
             return
-
     verification_code = generate_verification_code()
     try:
         contenido = f"""
@@ -174,8 +181,7 @@ Si no solicitaste este código simplemente ignóralo.
         await message.reply("Código de verificación enviado a tu correo. Introduce el código usando /verify.")
     except Exception as e:
         await message.reply(f"Error al enviar el correo de verificación: {e}")
-        
-# Función para verificar el código y registrar el correo
+
 async def verify_mail(client, message):
     user_id = message.from_user.id
     protect_content = await verify_protect(user_id)
@@ -192,7 +198,6 @@ async def verify_mail(client, message):
     else:
         await message.reply("No hay un código de verificación pendiente. Usa /setmail para iniciar el proceso.")
 
-# Diccionario para almacenar configuraciones de múltiples correos
 multi_user_emails = {}
 
 async def multisetmail(client, message):
