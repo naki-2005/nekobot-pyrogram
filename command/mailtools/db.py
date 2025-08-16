@@ -78,3 +78,40 @@ def save_user_data_to_db(user_id, key, value):
     with urllib.request.urlopen(req) as response:
         result = json.loads(response.read())
         return result.get("content", {}).get("download_url", "Subido sin URL")
+
+def load_user_config(user_id):
+    db_path = "user_data.db"
+    GIT_REPO = os.getenv("GIT_REPO")
+    GIT_API = os.getenv("GIT_API")
+    GIT_TOKEN = os.getenv("GIT_TOKEN")
+    FILE_PATH = "data/user_data.db"
+    url = f"https://api.github.com/repos/{GIT_REPO}/contents/{FILE_PATH}"
+
+    # 📥 Descargar la base
+    try:
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {GIT_TOKEN}"})
+        with urllib.request.urlopen(req) as response:
+            existing = json.loads(response.read())
+            content = base64.b64decode(existing["content"])
+            with open(db_path, "wb") as f:
+                f.write(content)
+    except Exception as e:
+        raise RuntimeError(f"No se pudo descargar la base de datos: {e}")
+
+    # 🔍 Leer datos del usuario
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT email, limit, delay FROM user_data WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+
+    if not row or not row[0]:
+        raise ValueError("Correo electrónico no registrado. Usa /setmail primero.")
+
+    email = row[0]
+    mail_mb = int(row[1]) if row[1] and row[1].isdigit() else 10
+    mail_delay = row[2] if row[2] else "manual"
+
+    return email, mail_mb, mail_delay
+    
