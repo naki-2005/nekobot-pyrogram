@@ -26,18 +26,15 @@ async def copy_manager(user):
             
 async def verify_protect(user_id):
         protect_content = not (user_id in admin_users or user_id in vip_users or not PROTECT_CONTENT)
-        return protect_content            
-
-# Función para generar un código de verificación de 6 números
-def generate_verification_code():
-    return f"{random.randint(100000, 999999)}"
-
-# Función para establecer el límite de MAIL_MB para un usuario
+        return protect_content 
+    
 async def set_mail_limit(client, message):
     user_id = message.from_user.id
     protect_content = await verify_protect(user_id)
+
     try:
         new_limit = int(message.text.split(' ', 1)[1])
+
         if new_limit < 1:
             await client.send_sticker(
                 chat_id=message.chat.id,
@@ -46,6 +43,7 @@ async def set_mail_limit(client, message):
             time.sleep(3)
             await message.reply("¿Qué haces pendejo?")
             return
+
         if new_limit > 20 and user_id not in admin_users:
             if user_id in exceeded_users:
                 await client.send_sticker(
@@ -58,19 +56,27 @@ async def set_mail_limit(client, message):
             else:
                 exceeded_users.append(user_id)
                 new_limit = 20
+
         user_limits[user_id] = new_limit
+        save_user_data_to_db(user_id, "limit", new_limit)
         await message.reply(f"El límite personal del usuario ha sido cambiado a {new_limit} MB.")
+
     except ValueError:
         await message.reply("Por favor, proporciona un número válido como límite.")
+        
+def generate_verification_code():
+    return f"{random.randint(100000, 999999)}"
 
 async def set_mail_delay(client, message):
     user_id = message.from_user.id
     protect_content = await verify_protect(user_id)
+
     try:
         raw_input = message.text.split(' ', 1)[1].strip().lower()
 
         if raw_input == "manual":
             user_delays[user_id] = "manual"
+            save_user_data_to_db(user_id, "delay", "manual")
             await message.reply("Modo manual activado. El tiempo de espera será definido por otros parámetros.")
             return
 
@@ -99,6 +105,7 @@ async def set_mail_delay(client, message):
                 new_limit = 300
 
         user_delays[user_id] = new_limit
+        save_user_data_to_db(user_id, "delay", new_limit)
         time.sleep(4)
         await message.reply(
             f"El tiempo de espera personal del usuario entre el envío de partes ha sido cambiado a {new_limit} segundos."
