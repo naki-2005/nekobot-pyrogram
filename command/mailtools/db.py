@@ -9,35 +9,40 @@ def save_user_data_to_db(user_id, key, value):
     db_path = "user_data.db"
     GIT_REPO = os.getenv("GIT_REPO")
     GIT_API = os.getenv("GIT_API")
-    GIT_TOKEN = os.getenv("GIT_TOKEN")
     FILE_PATH = "data/user_data.db"
     url = f"https://api.github.com/repos/{GIT_REPO}/contents/{FILE_PATH}"
 
-    # 📥 1. Descargar la base de datos desde GitHub si existe
+    headers = {
+        "Authorization": f"Bearer {GIT_API}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "python-urllib"
+    }
+
+    # 📥 1. Descargar la base si existe
     sha = None
     try:
-        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {GIT_TOKEN}"})
+        req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req) as response:
             existing = json.loads(response.read())
             sha = existing.get("sha")
             content = base64.b64decode(existing["content"])
             with open(db_path, "wb") as f:
                 f.write(content)
-    except:
-        # Si no existe, se creará localmente
-        pass
+    except urllib.error.HTTPError as e:
+        if e.code != 404:
+            raise RuntimeError(f"Error al descargar la base: {e.code} {e.reason}")
+    except Exception as e:
+        raise RuntimeError(f"Error inesperado al descargar: {e}")
 
     # 🧱 2. Crear base si no existe y asegurar columnas
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_data (
             user_id INTEGER PRIMARY KEY,
             timestamp TEXT
         )
     """)
-
     cursor.execute("PRAGMA table_info(user_data)")
     columns = [col[1] for col in cursor.fetchall()]
     if key not in columns:
@@ -49,11 +54,10 @@ def save_user_data_to_db(user_id, key, value):
         VALUES (?, ?, ?)
         ON CONFLICT(user_id) DO UPDATE SET {key} = excluded.{key}, timestamp = excluded.timestamp
     """, (user_id, value, datetime.utcnow().isoformat()))
-
     conn.commit()
     conn.close()
 
-    # 🚀 4. Subir la base modificada a GitHub
+    # 🚀 4. Subir la base modificada
     with open(db_path, "rb") as f:
         new_content = base64.b64encode(f.read()).decode("utf-8")
 
@@ -68,10 +72,7 @@ def save_user_data_to_db(user_id, key, value):
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {GIT_TOKEN}",
-            "Content-Type": "application/json"
-        },
+        headers={**headers, "Content-Type": "application/json"},
         method="PUT"
     )
 
@@ -79,17 +80,24 @@ def save_user_data_to_db(user_id, key, value):
         result = json.loads(response.read())
         return result.get("content", {}).get("download_url", "Subido sin URL")
 
+
+
 def load_user_config(user_id):
     db_path = "user_data.db"
     GIT_REPO = os.getenv("GIT_REPO")
     GIT_API = os.getenv("GIT_API")
-    GIT_TOKEN = os.getenv("GIT_TOKEN")
     FILE_PATH = "data/user_data.db"
     url = f"https://api.github.com/repos/{GIT_REPO}/contents/{FILE_PATH}"
 
+    headers = {
+        "Authorization": f"Bearer {GIT_API}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "python-urllib"
+    }
+
     # 📥 Descargar la base
     try:
-        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {GIT_TOKEN}"})
+        req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req) as response:
             existing = json.loads(response.read())
             content = base64.b64decode(existing["content"])
@@ -101,7 +109,6 @@ def load_user_config(user_id):
     # 🔍 Leer datos del usuario
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-
     cursor.execute("SELECT email, limit, delay FROM user_data WHERE user_id = ?", (user_id,))
     row = cursor.fetchone()
     conn.close()
