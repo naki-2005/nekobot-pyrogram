@@ -20,7 +20,9 @@ async def mydata(client, message):
     user_id = message.from_user.id
 
     try:
-        email, mail_mb, mail_delay = load_user_config(user_id)
+        email = load_user_config(user_id, "email")
+        mail_mb = load_user_config(user_id, "limit")
+        mail_delay = load_user_config(user_id, "delay")
     except Exception as e:
         await message.reply(f"⚠️ Error al cargar datos: {e}")
         return
@@ -31,6 +33,7 @@ async def mydata(client, message):
         f"⏱️ Delay: `{mail_delay}`"
     )
     await message.reply(text)
+
     
 async def copy_manager(user):
     if user not in copy_users:
