@@ -81,14 +81,24 @@ async def process_access_command(message):
 async def handle_message(client, message):
     await lista_cmd(app)
     global bot_is_sleeping, start_sleep_time, sleep_duration
+
     user_id = message.from_user.id if message.from_user else ""
     username = message.from_user.username if message.from_user else ""
     chat_id = message.chat.id if message.chat else ""
 
-    if user_id in ban_users:
+    try:
+        lvl = int(load_user_config(user_id, "lvl"))
+    except Exception:
+        lvl = None 
+
+    if lvl == 0:
         return
 
-    if not is_bot_public() and user_id not in allowed_users and chat_id not in allowed_users:
+    if is_bot_public() and lvl is None:
+        save_user_data_to_db(user_id, "lvl", "1")
+        lvl = 1
+
+    if not is_bot_public() and lvl < 2:
         return
 
     if message.text and message.text.startswith("/reactive") and (str(user_id) == MAIN_ADMIN or username.lower() == MAIN_ADMIN.lower()):
