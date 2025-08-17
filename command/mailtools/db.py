@@ -54,14 +54,6 @@ def save_user_data_to_db(user_id, key, value):
         if key not in columns:
             cursor.execute(f'ALTER TABLE user_data ADD COLUMN "{key}" TEXT')
 
-        cursor.execute(f'SELECT "{key}" FROM user_data WHERE user_id = ?', (str(user_id),))
-        row = cursor.fetchone()
-        current_value = row[0] if row else None
-
-        if str(current_value) == str(value):
-            print(f"[SKIP] Valor ya existente para user_id {user_id}, key {key}")
-            return
-
         cursor.execute(f'''
             INSERT INTO user_data (user_id, "{key}", timestamp)
             VALUES (?, ?, ?)
@@ -91,7 +83,6 @@ def save_user_data_to_db(user_id, key, value):
         result = json.loads(response.read())
         return result.get("content", {}).get("download_url", "Subido sin URL")
     
-
 def load_user_config(user_id, key):
     import os, json, base64, urllib.request, sqlite3
 
