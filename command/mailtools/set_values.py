@@ -31,7 +31,7 @@ async def mydata(client, message):
     try:
         lvl = load_user_config(user_id, "lvl")
         acceso = get_access_label(lvl)
-        email = load_user_config(user_id, "email")
+        email = load_user_config(user_id, "email") or "Sin configurar"
         mail_mb = load_user_config(user_id, "limit")
         mail_delay = load_user_config(user_id, "delay")
     except Exception as e:
