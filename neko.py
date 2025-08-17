@@ -85,11 +85,21 @@ async def handle_message(client, message):
     username = message.from_user.username if message.from_user else ""
     chat_id = message.chat.id if message.chat else ""
 
-    if user_id in ban_users:
+    try:
+        lvl = load_user_config(user_id, "lvl")
+    except Exception as e:
+        await message.reply(f"Error al verificar nivel remoto: {e}")
         return
 
-    if not is_bot_public() and user_id not in allowed_users and chat_id not in allowed_users:
+    if lvl == "0":
         return
+
+    if not is_bot_public():
+        try:
+            if lvl is None or int(lvl) < 2:
+                return
+        except ValueError:
+            return
 
     if message.text and message.text.startswith("/reactive") and (str(user_id) == MAIN_ADMIN or username.lower() == MAIN_ADMIN.lower()):
         if bot_is_sleeping:
