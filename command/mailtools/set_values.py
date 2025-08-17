@@ -40,7 +40,7 @@ async def mydata(client, message):
 
     text = (
         f"👤 Perfil del usuario\n"
-        f"🔐 Nivel de acceso: `{acceso}`"
+        f"🔐 Nivel de acceso: `{acceso}`\n"
         f"📧 Email: `{email}`\n"
         f"📦 Límite: `{mail_mb} MB`\n"
         f"⏱️ Delay: `{mail_delay}`\n"
