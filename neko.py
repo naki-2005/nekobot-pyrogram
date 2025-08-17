@@ -29,7 +29,7 @@ sleep_duration = 0
 start_sleep_time = 0
 not_start = True
 
-def start_data():
+async def start_data():
     admin_users = list(map(int, os.getenv('ADMINS', '').split(','))) if os.getenv('ADMINS') else []
     users = list(map(int, os.getenv('USERS', '').split(','))) if os.getenv('USERS') else []
     vip_users = list(map(int, os.getenv('VIP_USERS', '').split(','))) if os.getenv('VIP_USERS') else []
