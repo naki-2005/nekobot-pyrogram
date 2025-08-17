@@ -15,11 +15,22 @@ user_limits = {}
 user_delays = {}
 exceeded_users = []
 copy_users = []
+def get_access_label(lvl: str) -> str:
+    return {
+        "1": "Usuario público",
+        "2": "Usuario",
+        "3": "Usuario VIP",
+        "4": "Administrador",
+        "5": "ADMIN",
+        "6": "Owner"
+    }.get(lvl, "Desconocido")
 
 async def mydata(client, message):
     user_id = message.from_user.id
 
     try:
+        lvl = load_user_config(user_id, "lvl")
+        acceso = get_access_label(lvl)
         email = load_user_config(user_id, "email")
         mail_mb = load_user_config(user_id, "limit")
         mail_delay = load_user_config(user_id, "delay")
@@ -28,11 +39,14 @@ async def mydata(client, message):
         return
 
     text = (
+        f"👤 Perfil del usuario\n"
+        f"🔐 Nivel de acceso: `{acceso}`"
         f"📧 Email: `{email}`\n"
         f"📦 Límite: `{mail_mb} MB`\n"
-        f"⏱️ Delay: `{mail_delay}`"
+        f"⏱️ Delay: `{mail_delay}`\n"
     )
     await message.reply(text)
+    
 
     
 async def copy_manager(user):
