@@ -27,9 +27,8 @@ app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
 bot_is_sleeping = False
 sleep_duration = 0
 start_sleep_time = 0
-not_start = True
 
-async def start_data():
+def start_data():
     admin_users = list(map(int, os.getenv('ADMINS', '').split(','))) if os.getenv('ADMINS') else []
     users = list(map(int, os.getenv('USERS', '').split(','))) if os.getenv('USERS') else []
     vip_users = list(map(int, os.getenv('VIP_USERS', '').split(','))) if os.getenv('VIP_USERS') else []
@@ -81,28 +80,15 @@ async def process_access_command(message):
 @app.on_message()
 async def handle_message(client, message):
     await lista_cmd(app)
-    global bot_is_sleeping, start_sleep_time, sleep_duration, not_start
-    if os.environ.get("MAIN_BOT", "").lower() == "true" and not_start:
-        await start_data()
-        not_start = False
-
+    global bot_is_sleeping, start_sleep_time, sleep_duration
     user_id = message.from_user.id if message.from_user else ""
     username = message.from_user.username if message.from_user else ""
     chat_id = message.chat.id if message.chat else ""
 
-    try:
-        lvl = int(load_user_config(user_id, "lvl"))
-    except Exception:
-        lvl = None 
-
-    if lvl == 0:
+    if user_id in ban_users:
         return
 
-    if is_bot_public() and lvl is None:
-        save_user_data_to_db(user_id, "lvl", "1")
-        lvl = 1
-
-    if not is_bot_public() and lvl < 2:
+    if not is_bot_public() and user_id not in allowed_users and chat_id not in allowed_users:
         return
 
     if message.text and message.text.startswith("/reactive") and (str(user_id) == MAIN_ADMIN or username.lower() == MAIN_ADMIN.lower()):
@@ -141,6 +127,17 @@ async def handle_message(client, message):
     await process_command(client, message, active_cmd, admin_cmd, user_id, username, chat_id)
 
 logging.basicConfig(level=logging.ERROR)
+
+async def notify_main_admin():
+    if MAIN_ADMIN:
+        try:
+            chat_id = int(MAIN_ADMIN) if MAIN_ADMIN.isdigit() else MAIN_ADMIN
+            sticker_msg = await app.send_sticker(chat_id, sticker=random.choice(STICKER_SALUDO))
+            text_msg = await app.send_message(chat_id=chat_id, text=f"Bot @{app.me.username} iniciado")
+            await asyncio.sleep(5)
+            await app.delete_messages(chat_id, message_ids=[sticker_msg.id, text_msg.id])
+        except Exception as e:
+            logging.error(f"Error al enviar o borrar el mensaje al MAIN_ADMIN: {e}")
 
 @app.on_callback_query()
 async def callback_handler(client, callback_query):
@@ -213,8 +210,12 @@ def run_flask():
     explorer.run(host="0.0.0.0", port=10000)
 
 async def main():
+    if os.environ.get("MAIN_BOT", "").lower() == "true":
+        start_data()
     threading.Thread(target=run_flask, daemon=True).start()
     await app.start()
+    if MAIN_ADMIN:
+        await notify_main_admin()
     print("Bot iniciado y servidor Flask corriendo en puerto 5000.")
     await asyncio.Event().wait()
 
