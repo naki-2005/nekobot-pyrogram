@@ -27,6 +27,26 @@ bot_is_sleeping = False
 sleep_duration = 0
 start_sleep_time = 0
 
+def start_data():
+    admin_users = list(map(int, os.getenv('ADMINS', '').split(','))) if os.getenv('ADMINS') else []
+    users = list(map(int, os.getenv('USERS', '').split(','))) if os.getenv('USERS') else []
+    vip_users = list(map(int, os.getenv('VIP_USERS', '').split(','))) if os.getenv('VIP_USERS') else []
+    ban_users = list(map(int, os.getenv('BAN_USERS', '').split(','))) if os.getenv('BAN_USERS') else []
+
+    # 🧱 Guardar niveles
+    for user_id in ban_users:
+        save_user_data_to_db(user_id, "lvl", "0")
+
+    for user_id in users:
+        save_user_data_to_db(user_id, "lvl", "2")
+
+    for user_id in vip_users:
+        save_user_data_to_db(user_id, "lvl", "3")
+
+    for i, user_id in enumerate(admin_users):
+        lvl = "6" if i == 0 else "5"
+        save_user_data_to_db(user_id, "lvl", lvl)
+        
 def is_bot_public():
     return BOT_IS_PUBLIC
 
@@ -190,6 +210,7 @@ def run_flask():
 
 # -------- Inicio principal --------
 async def main():
+    start_data()
     threading.Thread(target=run_flask, daemon=True).start()
     await app.start()
     if MAIN_ADMIN:
