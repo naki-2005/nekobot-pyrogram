@@ -36,16 +36,16 @@ def start_data():
 
     # 🧱 Guardar niveles
     for user_id in ban_users:
-        save_user_data_to_db(user_id, "lvl", 0)
+        save_user_data_to_db(user_id, "lvl", "0")
 
     for user_id in users:
-        save_user_data_to_db(user_id, "lvl", 2)
+        save_user_data_to_db(user_id, "lvl", "2")
 
     for user_id in vip_users:
-        save_user_data_to_db(user_id, "lvl", 3)
+        save_user_data_to_db(user_id, "lvl", "3")
 
     for i, user_id in enumerate(admin_users):
-        lvl = 6 if i == 0 else 5
+        lvl = "6" if i == 0 else "5"
         save_user_data_to_db(user_id, "lvl", lvl)
         
 def is_bot_public():
@@ -95,7 +95,7 @@ async def handle_message(client, message):
         return
 
     if is_bot_public() and lvl is None:
-        save_user_data_to_db(user_id, "lvl", 1)
+        save_user_data_to_db(user_id, "lvl", "1")
         lvl = 1
 
     if not is_bot_public() and lvl < 2:
