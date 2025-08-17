@@ -95,7 +95,7 @@ async def handle_message(client, message):
         return
 
     if is_bot_public() and lvl is None:
-        save_user_data_to_db(user_id, "lvl", "1")
+        save_user_data_to_db(user_id, "lvl", 1)
         lvl = 1
 
     if not is_bot_public() and lvl < 2:
