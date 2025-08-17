@@ -11,6 +11,9 @@ def escape_sql_key(key):
     return f'"{key}"' if key.lower() in RESERVED_SQL else key
 
 def save_user_data_to_db(user_id, key, value):
+    import urllib.request, json, base64, os
+    from datetime import datetime
+
     db_path = "user_data.db"
     GIT_REPO = os.getenv("GIT_REPO")
     GIT_API = os.getenv("GIT_API")
@@ -40,27 +43,35 @@ def save_user_data_to_db(user_id, key, value):
         raise RuntimeError(f"Error inesperado al descargar: {e}")
 
     # 🧱 2. Crear base si no existe y asegurar columnas
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS user_data (
-            user_id INTEGER PRIMARY KEY,
-            timestamp TEXT
-        )
-    """)
-    cursor.execute("PRAGMA table_info(user_data)")
-    columns = [col[1] for col in cursor.fetchall()]
-    if key not in columns:
-        cursor.execute(f'ALTER TABLE user_data ADD COLUMN {escape_sql_key(key)} TEXT')
+    with sqlite3.connect(db_path, timeout=5, check_same_thread=False) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_data (
+                user_id INTEGER PRIMARY KEY,
+                timestamp TEXT
+            )
+        """)
+        cursor.execute("PRAGMA table_info(user_data)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if key not in columns:
+            cursor.execute(f'ALTER TABLE user_data ADD COLUMN {escape_sql_key(key)} TEXT')
 
-    # 🔁 3. Insertar o actualizar datos
-    cursor.execute(f'''
-        INSERT INTO user_data (user_id, {escape_sql_key(key)}, timestamp)
-        VALUES (?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET {escape_sql_key(key)} = excluded.{escape_sql_key(key)}, timestamp = excluded.timestamp
-    ''', (user_id, value, datetime.utcnow().isoformat()))
-    conn.commit()
-    conn.close()
+        # 🔍 2.1 Verificar si el valor ya existe
+        cursor.execute(f"SELECT {escape_sql_key(key)} FROM user_data WHERE user_id = ?", (user_id,))
+        row = cursor.fetchone()
+        current_value = row[0] if row else None
+
+        if str(current_value) == str(value):
+            print(f"[SKIP] Valor ya existente para user_id {user_id}, key {key}")
+            return  # No subir si no hay cambio
+
+        # 🔁 3. Insertar o actualizar datos
+        cursor.execute(f'''
+            INSERT INTO user_data (user_id, {escape_sql_key(key)}, timestamp)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET {escape_sql_key(key)} = excluded.{escape_sql_key(key)}, timestamp = excluded.timestamp
+        ''', (user_id, str(value), datetime.utcnow().isoformat()))
+        conn.commit()
 
     # 🚀 4. Subir la base modificada
     with open(db_path, "rb") as f:
