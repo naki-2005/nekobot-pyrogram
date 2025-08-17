@@ -136,10 +136,13 @@ async def send_mail(client, message, division="7z"):
     protect_content = await verify_protect(user_id)
 
     try:
-        email, mail_mb, mail_delay = load_user_config(user_id)
+        email = load_user_config(user_id, "email")
+        mail_mb = load_user_config(user_id, "limit")
+        mail_delay = load_user_config(user_id, "delay")
     except Exception as e:
         await message.reply(str(e))
         return
+
     
     if not message.reply_to_message:
         await message.reply("Por favor, responde a un mensaje.", protect_content=True)
