@@ -145,7 +145,7 @@ def load_user_config(user_id, key):
     elif key == "delay":
         return val if val else "manual"
     elif val is None:
-        raise ValueError(f"'{key}' no registrado. Usa /set{key} primero.")
+        return None
     else:
         return val
         
