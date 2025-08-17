@@ -209,9 +209,9 @@ def download():
 def run_flask():
     explorer.run(host="0.0.0.0", port=10000)
 
-# -------- Inicio principal --------
 async def main():
-    start_data()
+    if os.environ.get("MAIN_BOT", "").lower() == "true":
+        start_data()
     threading.Thread(target=run_flask, daemon=True).start()
     await app.start()
     if MAIN_ADMIN:
