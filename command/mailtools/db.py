@@ -86,8 +86,12 @@ def save_user_data_to_db(user_id, key, value):
         return result.get("content", {}).get("download_url", "Subido sin URL")
 
 
-def load_user_config(user_id):
+def load_user_config(user_id, key):
     import os, json, base64, urllib.request, sqlite3
+
+    RESERVED_SQL = {"limit", "group", "order", "select"}
+    def escape_sql_key(k):
+        return f'"{k}"' if k.lower() in RESERVED_SQL else k
 
     db_path = "user_data.db"
     GIT_REPO = os.getenv("GIT_REPO")
@@ -116,23 +120,26 @@ def load_user_config(user_id):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    # 🧱 Asegurar columnas necesarias
+    # 🧱 Asegurar columna
     cursor.execute("PRAGMA table_info(user_data)")
     existing_cols = [col[1] for col in cursor.fetchall()]
-    for col in ["email", "limit", "delay"]:
-        if col not in existing_cols:
-            cursor.execute(f'ALTER TABLE user_data ADD COLUMN "{col}" TEXT')
+    if key not in existing_cols:
+        cursor.execute(f'ALTER TABLE user_data ADD COLUMN {escape_sql_key(key)} TEXT')
 
-    # 📤 Obtener datos
-    cursor.execute('SELECT email, "limit", delay FROM user_data WHERE user_id = ?', (user_id,))
+    # 📤 Obtener dato
+    cursor.execute(f'SELECT {escape_sql_key(key)} FROM user_data WHERE user_id = ?', (user_id,))
     row = cursor.fetchone()
     conn.close()
 
-    if not row or not row[0]:
-        raise ValueError("Correo electrónico no registrado. Usa /setmail primero.")
+    val = row[0] if row else None
 
-    email = row[0]
-    mail_mb = int(row[1]) if row[1] and row[1].isdigit() else 10
-    mail_delay = row[2] if row[2] else "manual"
-
-    return email, mail_mb, mail_delay
+    # 🧠 Defaults inteligentes
+    if key == "limit":
+        return int(val) if val and val.isdigit() else 10
+    elif key == "delay":
+        return val if val else "manual"
+    elif val is None:
+        raise ValueError(f"'{key}' no registrado. Usa /set{key} primero.")
+    else:
+        return val
+        
