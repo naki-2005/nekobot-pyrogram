@@ -29,19 +29,23 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 def get_access_buttons(user_lvl: str, target_id: int):
     buttons = []
-
-    buttons.append([InlineKeyboardButton("❌ Banear", callback_data=f"id_{target_id}#0")])
-    buttons.append([InlineKeyboardButton("🌐 Acceso público", callback_data=f"id_{target_id}#1")])
-    buttons.append([InlineKeyboardButton("👤 Usuario", callback_data=f"id_{target_id}#2")])
-    buttons.append([InlineKeyboardButton("⭐ Usuario VIP", callback_data=f"id_{target_id}#3")])
-
+    buttons.append([
+        InlineKeyboardButton("❌ Banear", callback_data=f"id_{target_id}#0"),
+        InlineKeyboardButton("🌐 Acceso público", callback_data=f"id_{target_id}#1")
+    ])
+    buttons.append([
+        InlineKeyboardButton("👤 Usuario", callback_data=f"id_{target_id}#2"),
+        InlineKeyboardButton("⭐ Usuario VIP", callback_data=f"id_{target_id}#3")
+    ])
+    admin_row = []
     if user_lvl in ["5", "6"]:
-        buttons.append([InlineKeyboardButton("🛠️ Administrador", callback_data=f"id_{target_id}#4")])
-
+        admin_row.append(InlineKeyboardButton("🛠️ Administrador", callback_data=f"id_{target_id}#4"))
     if user_lvl == "6":
-        buttons.append([InlineKeyboardButton("👑 ADMIN", callback_data=f"id_{target_id}#5")])
-
+        admin_row.append(InlineKeyboardButton("👑 ADMIN", callback_data=f"id_{target_id}#5"))
+    if admin_row:
+        buttons.append(admin_row)
     return InlineKeyboardMarkup(buttons)
+
 
 async def send_access_editor(client, message):
     user_id = message.from_user.id
