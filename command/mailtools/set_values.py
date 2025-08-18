@@ -28,6 +28,10 @@ def get_access_label(lvl: str) -> str:
 
 async def mydata(client, message):
     user_id = message.from_user.id
+    first_name = message.from_user.first_name
+    last_name = message.from_user.last_name or ""
+    name = f"{first_name} {last_name}".strip()
+    username = message.from_user.username
 
     try:
         lvl = load_user_config(user_id, "lvl")
@@ -39,14 +43,19 @@ async def mydata(client, message):
         await message.reply(f"⚠️ Error al cargar datos: {e}")
         return
 
+    username_text = f"📎 Usuario: @{username}\n" if username else ""
+
     text = (
-        f"👤 Perfil del usuario\n"
+        f"👤 Perfil del usuario {name}\n"
+        f"{username_text}"
+        f"🆔 : `{user_id}`\n"
         f"🔐 Nivel de acceso: `{acceso}`\n"
         f"📧 Email: `{email}`\n"
         f"📦 Límite: `{mail_mb} MB`\n"
         f"⏱️ Delay: `{mail_delay}`\n"
     )
     await message.reply(text)
+
     
 
     
