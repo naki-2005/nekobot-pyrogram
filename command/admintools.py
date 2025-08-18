@@ -105,6 +105,8 @@ async def process_access_callback(client, callback_query):
 
 async def send_setting_editor(client, message):
     user_id = message.from_user.id
+    bot_info = await client.get_me()
+    bot_id = bot_info.id
     try:
         user_lvl = load_user_config(user_id, "lvl")
         if not user_lvl or int(user_lvl) < 5:
@@ -112,5 +114,7 @@ async def send_setting_editor(client, message):
     except Exception as e:
         await message.reply(f"⚠️ Error al cargar tu nivel: {e}")
         return
+
+    mesage.reply(f"Editar la configuración del bot {bot_id}")
         
     
