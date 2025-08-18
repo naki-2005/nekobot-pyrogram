@@ -19,6 +19,7 @@ from data.vars import (
     temp_chats, vip_users, ban_users, MAIN_ADMIN, CODEWORD,
     BOT_IS_PUBLIC, PROTECT_CONTENT, allowed_ids, allowed_users
 )
+from command.admintools import process_access_callback
 
 # -------- Bot de Telegram --------
 nest_asyncio.apply()
@@ -173,9 +174,11 @@ async def callback_handler(client, callback_query):
         await mail_query(client, callback_query)
     elif data in help_related:
         await handle_help_callback(client, callback_query)
+    elif data.startswith("id_") and "#" in data:
+        await process_access_callback(client, callback_query)
     else:
         await callback_query.answer("No se ha encontrado una respuesta Query correcta.", show_alert=True)
-        
+
 # -------- Servidor Flask --------
 explorer = Flask("file_explorer")
 BASE_DIR = "/opt/render/project/src"
