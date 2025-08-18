@@ -72,3 +72,26 @@ async def send_access_editor(client, message):
     markup = get_access_buttons(user_lvl, target_id)
     await message.reply(f"⚙️ Editar el nivel de acceso del usuario `{target_id}`", reply_markup=markup)
     
+async def process_access_callback(client, callback_query):
+    user_id = callback_query.from_user.id
+    data = callback_query.data
+
+    try:
+        raw_id, new_lvl_str = data.split("#")
+        target_id = int(raw_id.replace("id_", ""))
+        new_lvl = str(new_lvl_str)
+    except Exception:
+        await callback_query.answer("❌ Callback inválido", show_alert=True)
+        return
+
+    try:
+        await save_user_data_to_db(target_id, "lvl", new_lvl)
+        await callback_query.answer(f"✅ Nivel actualizado a {get_access_label(new_lvl)}", show_alert=True)
+
+        await callback_query.message.edit_text(
+            f"✅ El nivel de acceso de `{target_id}` ha sido actualizado a: {get_access_label(new_lvl)}",
+            reply_markup=None
+        )
+    except Exception as e:
+        await callback_query.answer(f"⚠️ Error al guardar: {e}", show_alert=True)
+        
