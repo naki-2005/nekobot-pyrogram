@@ -8,7 +8,7 @@ import random
 from data.vars import admin_users, vip_users, video_limit, PROTECT_CONTENT, correo_manual
 import asyncio
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from command.mailtools.db import save_user_data_to_db, load_user_config
+from command.db.db import save_user_data_to_db, load_user_config
 user_emails = {}
 verification_storage = {}
 user_limits = {}
