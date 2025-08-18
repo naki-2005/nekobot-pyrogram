@@ -17,6 +17,7 @@ exceeded_users = []
 copy_users = []
 def get_access_label(lvl: str) -> str:
     return {
+        "0": "Usuario baneado",
         "1": "Usuario público",
         "2": "Usuario",
         "3": "Usuario VIP",
