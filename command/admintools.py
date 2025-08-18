@@ -52,6 +52,8 @@ async def send_access_editor(client, message):
 
     try:
         user_lvl = load_user_config(user_id, "lvl")
+        if not user_lvl or int(user_lvl) < 4:
+            return
     except Exception as e:
         await message.reply(f"⚠️ Error al cargar tu nivel: {e}")
         return
