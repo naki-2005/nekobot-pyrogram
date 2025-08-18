@@ -21,7 +21,7 @@ def get_access_label(lvl: str) -> str:
         "1": "Usuario público",
         "2": "Usuario",
         "3": "Usuario VIP",
-        "4": "Administrador",
+        "4": "MOD",
         "5": "ADMIN",
         "6": "Owner"
     }.get(lvl, "Desconocido")
