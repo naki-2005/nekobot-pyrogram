@@ -337,5 +337,5 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
         return
 
     if command == "/edituser" and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
-        await send_access_editor(client, message, user_id)
+        await send_access_editor(client, message)
         return
