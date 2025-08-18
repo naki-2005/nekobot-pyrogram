@@ -24,49 +24,51 @@ async def handle_start(client, message):
     # Evita la vista previa de enlaces en el mensaje
     await message.reply(response, disable_web_page_preview=True)
     
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
+def get_access_buttons(user_lvl: str, target_id: int):
+    buttons = []
+
+    buttons.append([InlineKeyboardButton("❌ Sin acceso", callback_data=f"id_{target_id}#0")])
+    buttons.append([InlineKeyboardButton("🌐 Acceso público", callback_data=f"id_{target_id}#1")])
+    buttons.append([InlineKeyboardButton("👤 Usuario", callback_data=f"id_{target_id}#2")])
+    buttons.append([InlineKeyboardButton("⭐ Usuario VIP", callback_data=f"id_{target_id}#3")])
+
+    if user_lvl in ["5", "6"]:
+        buttons.append([InlineKeyboardButton("🛠️ Administrador", callback_data=f"id_{target_id}#4")])
+
+    if user_lvl == "6":
+        buttons.append([InlineKeyboardButton("👑 ADMIN", callback_data=f"id_{target_id}#5")])
+
+    return InlineKeyboardMarkup(buttons)
+
+async def send_access_editor(client, message):
+    user_id = message.from_user.id
+    try:
+        target_id = int(message.text.split()[1])
+    except (IndexError, ValueError):
+        await message.reply("⚠️ Debes especificar un ID válido.")
+        return
+
+    try:
+        user_lvl = load_user_config(user_id, "lvl")
+    except Exception as e:
+        await message.reply(f"⚠️ Error al cargar tu nivel: {e}")
+        return
+
+    try:
+        target_lvl = load_user_config(target_id, "lvl")
+    except:
+        target_lvl = "1"
+
+    try:
+        if int(target_lvl) >= int(user_lvl):
+            await message.reply("🚫 No puedes editar el acceso de este usuario.")
+            return
+    except ValueError:
+        await message.reply("❌ Nivel inválido.")
+        return
+
+    markup = get_access_buttons(user_lvl, target_id)
+    await message.reply(f"⚙️ Editar el nivel de acceso del usuario `{target_id}`", reply_markup=markup)
     
-async def add_user(client, message, user_id, chat_id):
-    new_user_id = int(message.text.split()[1])
-    temp_users.append(new_user_id)
-    allowed_users.append(new_user_id)
-    await message.reply(f"Usuario {new_user_id} añadido temporalmente.")
-
-async def remove_user(client, message, user_id, chat_id):
-    rem_user_id = int(message.text.split()[1])
-    if rem_user_id in temp_users:
-        temp_users.remove(rem_user_id)
-        allowed_users.remove(rem_user_id)
-        await message.reply(f"Usuario {rem_user_id} eliminado temporalmente.")
-    else:
-        await message.reply("Usuario no encontrado en la lista temporal.")
-
-async def add_chat(client, message, user_id, chat_id):
-    chat_id = message.chat.id
-    temp_chats.append(chat_id)
-    allowed_users.append(chat_id)
-    await message.reply(f"Chat {chat_id} añadido temporalmente.")
-
-async def remove_chat(client, message, user_id, chat_id):
-    chat_id = message.chat.id
-    if chat_id in temp_chats:
-        temp_chats.remove(chat_id)
-        allowed_users.remove(chat_id)
-        await message.reply(f"Chat {chat_id} eliminado temporalmente.")
-    else:
-        await message.reply("Chat no encontrado en la lista temporal.")
-
-async def ban_user(client, message, user_id, chat_id):
-    ban_user_id = int(message.text.split()[1])
-    if ban_user_id not in admin_users:
-        ban_users.append(ban_user_id)
-        await message.reply(f"Usuario {ban_user_id} baneado.")
-
-async def deban_user(client, message, user_id,chat_id):
-    deban_user_id = int(message.text.split()[1])
-    if deban_user_id in ban_users:
-        ban_users.remove(deban_user_id)
-        await message.reply(f"Usuario {deban_user_id} desbaneado.")
-    else:
-        await message.reply("Usuario no encontrado en la lista de baneados.")
-        
