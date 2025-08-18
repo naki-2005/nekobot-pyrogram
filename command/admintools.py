@@ -101,4 +101,16 @@ async def process_access_callback(client, callback_query):
         )
     except Exception as e:
         await callback_query.answer(f"⚠️ Error al guardar: {e}", show_alert=True)
+
+
+async def send_setting_editor(client, message):
+    user_id = message.from_user.id
+    try:
+        user_lvl = load_user_config(user_id, "lvl")
+        if not user_lvl or int(user_lvl) < 5:
+            return
+    except Exception as e:
+        await message.reply(f"⚠️ Error al cargar tu nivel: {e}")
+        return
         
+    
