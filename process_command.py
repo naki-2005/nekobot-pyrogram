@@ -6,7 +6,7 @@ from pyrogram import Client
 from pyrogram.types import Message
 from command.moodleclient import upload_token
 from command.htools import nh_combined_operation, cambiar_default_selection
-from command.admintools import add_user, remove_user, add_chat, remove_chat, ban_user, deban_user, handle_start
+from command.admintools import send_access_editor, handle_start
 from command.imgtools import create_imgchest_post
 from command.webtools import handle_scan, handle_multiscan, summarize_lines
 from command.mailtools.set_values import set_mail, verify_mail, set_mail_limit, set_mail_delay, multisetmail, copy_manager, mydata
@@ -336,18 +336,6 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                 os.remove(file_path)
         return
 
-    elif command in ("/adduser", "/remuser", "/addchat", "/remchat", "/ban", "/unban") and user_id in admin_users:
-        if command == "/adduser":
-            await asyncio.create_task(add_user(client, message, user_id, chat_id))
-        elif command == "/remuser":
-            await asyncio.create_task(remove_user(client, message, user_id, chat_id))
-        elif command == "/addchat":
-            await asyncio.create_task(add_chat(client, message, user_id, chat_id))
-        elif command == "/remchat":
-            await asyncio.create_task(remove_chat(client, message, user_id, chat_id))
-        elif command == "/ban":
-            await asyncio.create_task(ban_user(client, message, user_id, chat_id))
-        elif command == "/unban":
-            await asyncio.create_task(deban_user(client, message, user_id, chat_id))
+    if command == "/edituser" and message.chat.type == "private":
+        await send_access_editor(client, message, user_id)
         return
-            
