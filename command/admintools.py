@@ -115,6 +115,6 @@ async def send_setting_editor(client, message):
         await message.reply(f"⚠️ Error al cargar tu nivel: {e}")
         return
 
-    message.reply(f"Editar la configuración del bot {bot_id}")
+    await message.reply(f"Editar la configuración del bot {bot_id}")
         
     
