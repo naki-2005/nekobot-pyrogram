@@ -39,7 +39,7 @@ def get_access_buttons(user_lvl: str, target_id: int):
     ])
     admin_row = []
     if user_lvl in ["5", "6"]:
-        admin_row.append(InlineKeyboardButton("🛠️ Administrador", callback_data=f"id_{target_id}#4"))
+        admin_row.append(InlineKeyboardButton("🛠️ MOD", callback_data=f"id_{target_id}#4"))
     if user_lvl == "6":
         admin_row.append(InlineKeyboardButton("👑 ADMIN", callback_data=f"id_{target_id}#5"))
     if admin_row:
