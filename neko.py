@@ -11,7 +11,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from process_command import process_command
 from command.help import handle_help_callback
 from command.mailtools.send import mail_query
-from command.mailtools.db import save_user_data_to_db, load_user_config
+from command.db.db import save_user_data_to_db, load_user_config
 from cmd_list import lista_cmd
 from data.stickers import saludos, STICKER_SALUDO, STICKER_DESCANSO, STICKER_REACTIVADO
 from data.vars import (
@@ -20,7 +20,6 @@ from data.vars import (
     BOT_IS_PUBLIC, PROTECT_CONTENT, allowed_ids, allowed_users
 )
 from command.admintools import process_access_callback
-from command.db.db import save_user_data_to_db, load_user_config
 
 # -------- Bot de Telegram --------
 nest_asyncio.apply()
