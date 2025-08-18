@@ -101,6 +101,15 @@ async def handle_message(client, message):
         except ValueError:
             return
 
+    if is_bot_public():
+        if lvl is None or (lvl not in ["1", "2", "3", "4", "5", "6"] and int(lvl) < 2):
+            try:
+                save_user_data_to_db(user_id, "lvl", "1")
+                await message.reply("Registrado como usuario publico, disfrute del bot")
+            except Exception as e:
+                await message.reply(f"Error {e}")
+            
+
     if message.text and message.text.startswith("/reactive") and (str(user_id) == MAIN_ADMIN or username.lower() == MAIN_ADMIN.lower()):
         if bot_is_sleeping:
             bot_is_sleeping = False
