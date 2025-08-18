@@ -148,17 +148,6 @@ async def handle_message(client, message):
 
 logging.basicConfig(level=logging.ERROR)
 
-async def notify_main_admin():
-    if MAIN_ADMIN:
-        try:
-            chat_id = int(MAIN_ADMIN) if MAIN_ADMIN.isdigit() else MAIN_ADMIN
-            sticker_msg = await app.send_sticker(chat_id, sticker=random.choice(STICKER_SALUDO))
-            text_msg = await app.send_message(chat_id=chat_id, text=f"Bot @{app.me.username} iniciado")
-            await asyncio.sleep(5)
-            await app.delete_messages(chat_id, message_ids=[sticker_msg.id, text_msg.id])
-        except Exception as e:
-            logging.error(f"Error al enviar o borrar el mensaje al MAIN_ADMIN: {e}")
-
 @app.on_callback_query()
 async def callback_handler(client, callback_query):
     data = callback_query.data
@@ -236,8 +225,6 @@ async def main():
         start_data()
     threading.Thread(target=run_flask, daemon=True).start()
     await app.start()
-    if MAIN_ADMIN:
-        await notify_main_admin()
     print("Bot iniciado y servidor Flask corriendo en puerto 5000.")
     await asyncio.Event().wait()
 
