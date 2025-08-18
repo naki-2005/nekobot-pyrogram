@@ -15,7 +15,7 @@ from command.videotools import update_video_settings, compress_video, cancelar_t
 from command.filetools import handle_compress, rename, set_size, caption
 from command.telegramtools import get_file_id, send_file_by_id
 from command.help import handle_help, handle_help_callback  # Importar funciones de ayuda desde help.py
-
+from pyrogram.enums import ChatType
 nest_asyncio.apply()
 
 # Definir usuarios administradores y VIPs
@@ -336,6 +336,6 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                 os.remove(file_path)
         return
 
-    if command == "/edituser" and message.chat.type == "private":
+    if command == "/edituser" and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
         await send_access_editor(client, message, user_id)
         return
