@@ -10,7 +10,7 @@ import asyncio
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from command.mailtools.set_values import verify_protect, get_mail_limit, get_user_delay, multi_user_emails, copy_users, exceeded_users, user_emails, user_delays, user_limits
 
-from command.mailtools.db import load_user_config
+from command.db.db import load_user_config
 
 part_queue = {}
 
