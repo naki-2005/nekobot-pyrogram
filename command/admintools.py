@@ -30,7 +30,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 def get_access_buttons(user_lvl: str, target_id: int):
     buttons = []
 
-    buttons.append([InlineKeyboardButton("❌ Sin acceso", callback_data=f"id_{target_id}#0")])
+    buttons.append([InlineKeyboardButton("❌ Banear", callback_data=f"id_{target_id}#0")])
     buttons.append([InlineKeyboardButton("🌐 Acceso público", callback_data=f"id_{target_id}#1")])
     buttons.append([InlineKeyboardButton("👤 Usuario", callback_data=f"id_{target_id}#2")])
     buttons.append([InlineKeyboardButton("⭐ Usuario VIP", callback_data=f"id_{target_id}#3")])
@@ -88,7 +88,7 @@ async def process_access_callback(client, callback_query):
         return
 
     try:
-        await save_user_data_to_db(target_id, "lvl", new_lvl)
+        save_user_data_to_db(target_id, "lvl", new_lvl)
         await callback_query.answer(f"✅ Nivel actualizado a {get_access_label(new_lvl)}", show_alert=True)
 
         await callback_query.message.edit_text(
