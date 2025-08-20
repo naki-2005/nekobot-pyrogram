@@ -5,7 +5,7 @@ import re
 from pyrogram import Client
 from pyrogram.types import Message
 from command.moodleclient import upload_token
-from command.htools import nh_combined_operation, cambiar_default_selection
+from command.htools import nh_combined_operation, nh_combined_operation_txt, cambiar_default_selection
 from command.admintools import send_access_editor, send_setting_editor, handle_start
 from command.imgtools import create_imgchest_post
 from command.webtools import handle_scan, handle_multiscan, summarize_lines
