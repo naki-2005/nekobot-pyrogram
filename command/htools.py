@@ -75,7 +75,7 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             await client.send_photo(
                 chat_id=message.chat.id,
                 photo=previewpath,
-                caption=f"{nombrebase} Número de páginas: {len(imagenes)}",
+                caption=f"{codigo} {nombrebase} Número de páginas: {len(imagenes)}",
                 protect_content=proteger
             )
             os.remove(previewpath)
