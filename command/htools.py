@@ -201,7 +201,7 @@ async def nh_combined_operation_txt(client, message, tipo, proteger, userid, ope
     siguientes = codigos[1:]
 
     # Ejecutar operación con el primer código
-    await nh_combined_operatione(client, message, [primer_codigo], tipo, proteger, userid, operacion)
+    await nh_combined_operation(client, message, [primer_codigo], tipo, proteger, userid, operacion)
 
     # Preparar nuevo archivo si hay más códigos
     os.remove(filepath)
