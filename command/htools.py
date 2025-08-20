@@ -180,42 +180,62 @@ async def nh_combined_operation_txt(client, message, tipo, proteger, userid, ope
         await message.reply("❌ Usar en un archivo txt")
         return
 
-    # Descargar y leer el archivo
+    # Descargar archivo inicial
     filepath = await client.download_media(doc.file_id, file_name="temp_input.txt")
-    with open(filepath, "r", encoding="utf-8") as f:
-        contenido = f.read().strip()
 
-    # Validación de estructura
-    if not contenido:
+    mensaje_pendientes = None
+
+    while True:
+        # Leer contenido actual
+        with open(filepath, "r", encoding="utf-8") as f:
+            contenido = f.read().strip()
+
+        if not contenido:
+            os.remove(filepath)
+            if mensaje_pendientes:
+                try: await mensaje_pendientes.delete()
+                except: pass
+            await message.reply("✅ Descarga terminada")
+            return
+
+        if not all(c in "0123456789," for c in contenido):
+            os.remove(filepath)
+            if mensaje_pendientes:
+                try: await mensaje_pendientes.delete()
+                except: pass
+            await message.reply("❌ Estructura incorrecta")
+            return
+
+        codigos = contenido.split(",")
+        primer_codigo = codigos[0]
+        siguientes = codigos[1:]
+
+        # Ejecutar operación con el primer código
+        await nh_combined_operation(client, message, [primer_codigo], tipo, proteger, userid, operacion)
+
+        # Preparar nuevo archivo si hay más códigos
         os.remove(filepath)
-        await message.reply("✅ Descarga terminada")
-        return
+        if siguientes:
+            nuevo_path = "temp_next.txt"
+            with open(nuevo_path, "w", encoding="utf-8") as f:
+                f.write(",".join(siguientes))
 
-    if not all(c in "0123456789," for c in contenido):
-        os.remove(filepath)
-        await message.reply("❌ Estructura incorrecta")
-        return
+            # Borrar mensaje anterior si existe
+            if mensaje_pendientes:
+                try: await mensaje_pendientes.delete()
+                except: pass
 
-    codigos = contenido.split(",")
-    primer_codigo = codigos[0]
-    siguientes = codigos[1:]
+            mensaje_pendientes = await message.reply(f"💻 Pendientes: {len(siguientes)}")
+            await client.send_document(
+                chat_id=message.chat.id,
+                document=nuevo_path,
+                protect_content=proteger
+            )
 
-    # Ejecutar operación con el primer código
-    await nh_combined_operation(client, message, [primer_codigo], tipo, proteger, userid, operacion)
-
-    # Preparar nuevo archivo si hay más códigos
-    os.remove(filepath)
-    if siguientes:
-        nuevo_path = "temp_next.txt"
-        with open(nuevo_path, "w", encoding="utf-8") as f:
-            f.write(",".join(siguientes))
-
-        await client.send_document(
-            chat_id=message.chat.id,
-            document=nuevo_path,
-            caption="📄 Siguiente lote",
-            protect_content=proteger
-        )
-        os.remove(nuevo_path)
-    else:
-        await message.reply("✅ Descarga terminada")
+            filepath = nuevo_path  # Usar el nuevo archivo como entrada
+        else:
+            if mensaje_pendientes:
+                try: await mensaje_pendientes.delete()
+                except: pass
+            await message.reply("✅ Descarga terminada")
+            return
