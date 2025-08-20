@@ -165,3 +165,57 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             await progresomsg.delete()
         except Exception:
             pass
+
+
+async def nh_combined_operation_txt(client, message, tipo, proteger, userid, operacion):
+    # Verificar si el mensaje es respuesta a un archivo
+    if not message.reply_to_message or not message.reply_to_message.document:
+        await message.reply("❌ Debes responder a un archivo .txt")
+        return
+
+    doc = message.reply_to_message.document
+    if not doc.file_name.lower().endswith(".txt"):
+        await client.download_media(doc.file_id, file_name="temp_invalid")
+        os.remove("temp_invalid")
+        await message.reply("❌ Usar en un archivo txt")
+        return
+
+    # Descargar y leer el archivo
+    filepath = await client.download_media(doc.file_id, file_name="temp_input.txt")
+    with open(filepath, "r", encoding="utf-8") as f:
+        contenido = f.read().strip()
+
+    # Validación de estructura
+    if not contenido:
+        os.remove(filepath)
+        await message.reply("✅ Descarga terminada")
+        return
+
+    if not all(c in "0123456789," for c in contenido):
+        os.remove(filepath)
+        await message.reply("❌ Estructura incorrecta")
+        return
+
+    codigos = contenido.split(",")
+    primer_codigo = codigos[0]
+    siguientes = codigos[1:]
+
+    # Ejecutar operación con el primer código
+    await nh_combined_operatione(client, message, [primer_codigo], tipo, proteger, userid, operacion)
+
+    # Preparar nuevo archivo si hay más códigos
+    os.remove(filepath)
+    if siguientes:
+        nuevo_path = "temp_next.txt"
+        with open(nuevo_path, "w", encoding="utf-8") as f:
+            f.write(",".join(siguientes))
+
+        await client.send_document(
+            chat_id=message.chat.id,
+            document=nuevo_path,
+            caption="📄 Siguiente lote",
+            protect_content=proteger
+        )
+        os.remove(nuevo_path)
+    else:
+        await message.reply("✅ Descarga terminada")
