@@ -182,8 +182,7 @@ async def nh_combined_operation_txt(client, message, tipo, proteger, userid, ope
 
     # Descargar archivo inicial
     filepath = await client.download_media(doc.file_id, file_name="temp_input.txt")
-
-    mensaje_pendientes = None
+    mensaje_txt = message.reply_to_message
 
     while True:
         # Leer contenido actual
@@ -192,17 +191,15 @@ async def nh_combined_operation_txt(client, message, tipo, proteger, userid, ope
 
         if not contenido:
             os.remove(filepath)
-            if mensaje_pendientes:
-                try: await mensaje_pendientes.delete()
-                except: pass
+            try: await mensaje_txt.delete()
+            except: pass
             await message.reply("✅ Descarga terminada")
             return
 
         if not all(c in "0123456789," for c in contenido):
             os.remove(filepath)
-            if mensaje_pendientes:
-                try: await mensaje_pendientes.delete()
-                except: pass
+            try: await mensaje_txt.delete()
+            except: pass
             await message.reply("❌ Estructura incorrecta")
             return
 
@@ -215,27 +212,22 @@ async def nh_combined_operation_txt(client, message, tipo, proteger, userid, ope
 
         # Preparar nuevo archivo si hay más códigos
         os.remove(filepath)
+        try: await mensaje_txt.delete()
+        except: pass
+
         if siguientes:
             nuevo_path = "temp_next.txt"
             with open(nuevo_path, "w", encoding="utf-8") as f:
                 f.write(",".join(siguientes))
 
-            # Borrar mensaje anterior si existe
-            if mensaje_pendientes:
-                try: await mensaje_pendientes.delete()
-                except: pass
-
-            mensaje_pendientes = await message.reply(f"💻 Pendientes: {len(siguientes)}")
-            await client.send_document(
+            mensaje_txt = await client.send_document(
                 chat_id=message.chat.id,
                 document=nuevo_path,
+                caption=f"💻 Pendientes: {len(siguientes)}",
                 protect_content=proteger
             )
 
             filepath = nuevo_path  # Usar el nuevo archivo como entrada
         else:
-            if mensaje_pendientes:
-                try: await mensaje_pendientes.delete()
-                except: pass
             await message.reply("✅ Descarga terminada")
             return
