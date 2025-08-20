@@ -58,13 +58,20 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
     elif command == "/help":
         await asyncio.create_task(handle_help(client, message))
         return
-
-    elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile"):
+        
+    elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt"):
         if cmd("htools", user_id in admin_users, user_id in vip_users):
             parts = text.split(maxsplit=1)
             arg_text = parts[1] if len(parts) > 1 else ""
             codes = arg_text.split(',') if ',' in arg_text else [arg_text] if arg_text else []
-            codes_limpiados = [re.sub(r"https://nhentai\.net|https://[a-z]{2}\.3hentai\.net|https://3hentai\.net|/d/|/g/|/", "", code).strip() for code in codes]
+            codes_limpiados = [
+                re.sub(
+                    r"https://nhentai\.net|https://[a-z]{2}\.3hentai\.net|https://3hentai\.net|/d/|/g/|/",
+                    "",
+                    code
+                ).strip()
+                for code in codes
+            ]
 
             if codes_limpiados != codes:
                 codes = codes_limpiados
@@ -84,20 +91,41 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
                 return
 
             elif command == "/nh":
-                await asyncio.create_task(nh_combined_operation(client, message, codes, "nh", protect_content, user_id, "download"))
+                await asyncio.create_task(
+                    nh_combined_operation(client, message, codes, "nh", protect_content, user_id, "download")
+                )
                 return
 
             elif command == "/3h":
-                await asyncio.create_task(nh_combined_operation(client, message, codes, "3h", protect_content, user_id, "download"))
+                await asyncio.create_task(
+                    nh_combined_operation(client, message, codes, "3h", protect_content, user_id, "download")
+                )
                 return
 
             elif command == "/cover3h":
-                await asyncio.create_task(nh_combined_operation(client, message, codes, "3h", protect_content, user_id, "cover"))
+                await asyncio.create_task(
+                    nh_combined_operation(client, message, codes, "3h", protect_content, user_id, "cover")
+                )
                 return
 
             elif command == "/covernh":
-                await asyncio.create_task(nh_combined_operation(client, message, codes, "nh", protect_content, user_id, "cover"))
+                await asyncio.create_task(
+                    nh_combined_operation(client, message, codes, "nh", protect_content, user_id, "cover")
+                )
                 return
+
+            elif command == "/nhtxt":
+                await asyncio.create_task(
+                    nh_combined_operation_txt(client, message, "nh", protect_content, user_id, "download")
+                )
+                return
+
+            elif command == "/3htxt":
+                await asyncio.create_task(
+                    nh_combined_operation_txt(client, message, "3h", protect_content, user_id, "download")
+                )
+                return
+
 
     elif command == "/imgchest":
         if cmd("imgtools", user_id in admin_users, user_id in vip_users):
