@@ -30,7 +30,16 @@ protect_content_env = os.getenv('PROTECT_CONTENT', '').strip().lower()
 is_protect_content_enabled = protect_content_env == 'true'  # Evaluamos si es "True" en cualquier formato
 auto_users = {}
 
-async def process_command(client: Client, message: Message, active_cmd: str, admin_cmd: str, user_id: int, username: str, chat_id: int):
+async def process_command(
+    client: Client,
+    message: Message,
+    active_cmd: str,
+    admin_cmd: str,
+    user_id: int,
+    username: str,
+    chat_id: int,
+    int_lvl: int
+):
     global allowed_ids
     text = message.text.strip().lower() if message.text else ""
     if message.from_user is None:
@@ -38,12 +47,17 @@ async def process_command(client: Client, message: Message, active_cmd: str, adm
 
     user_id = message.from_user.id
     auto = auto_users.get(user_id, False)
-    protect_content = user_id not in allowed_ids
+    protect_content = int_lvl < 3
 
     if not is_protect_content_enabled and protect_content:
         allowed_ids = allowed_ids.union({user_id})
 
-    def cmd(command_env, is_admin=False, is_vip=False):
+    is_vip = int_lvl >= 3
+    is_mod = int_lvl >= 4
+    is_admin = int_lvl >= 5
+    is_owner = int_lvl == 6
+
+    def cmd(command_env, is_admin=is_admin, is_vip=is_vip):
         return (
             active_cmd == "all" or 
             command_env in active_cmd or 
