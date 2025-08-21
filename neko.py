@@ -88,30 +88,28 @@ async def handle_message(client, message):
 
     try:
         lvl = load_user_config(user_id, "lvl")
+        int_lvl = int(lvl) if lvl is not None and lvl.isdigit() else 0
     except Exception as e:
         await message.reply(f"Error al verificar nivel remoto: {e}")
         return
 
-    if lvl == "0":
+    if int_lvl == 0:
         return
 
     if not is_bot_public():
-        try:
-            if lvl is None or int(lvl) < 2:
-                return
-        except ValueError:
+        if int_lvl < 2:
             return
 
     if is_bot_public():
-        if lvl is None or (lvl not in ["1", "2", "3", "4", "5", "6"] and int(lvl) < 2):
+        if lvl is None or (lvl not in ["1", "2", "3", "4", "5", "6"] and int_lvl < 2):
             try:
                 save_user_data_to_db(user_id, "lvl", "1")
-                await message.reply("Registrado como usuario publico, disfrute del bot")
+                await message.reply("Registrado como usuario público, disfrute del bot")
+                int_lvl = 1
             except Exception as e:
                 await message.reply(f"Error {e}")
-            
 
-    if message.text and message.text.startswith("/reactive") and (str(user_id) == MAIN_ADMIN or username.lower() == MAIN_ADMIN.lower()):
+    if message.text and message.text.startswith("/reactive") and int_lvl == 6:
         if bot_is_sleeping:
             bot_is_sleeping = False
             await app.send_sticker(chat_id, sticker=random.choice(STICKER_REACTIVADO))
@@ -124,7 +122,7 @@ async def handle_message(client, message):
         await message.reply(f"Actualmente estoy descansando, no recibo comandos.\n\nRegresaré en {format_time(remaining)}")
         return
 
-    if message.text and message.text.startswith("/sleep") and (str(user_id) == MAIN_ADMIN or username.lower() == MAIN_ADMIN.lower()):
+    if message.text and message.text.startswith("/sleep") and int_lvl == 6:
         try:
             sleep_duration = int(message.text.split(" ")[1])
             bot_is_sleeping = True
@@ -144,7 +142,7 @@ async def handle_message(client, message):
 
     active_cmd = os.getenv('ACTIVE_CMD', '').lower()
     admin_cmd = os.getenv('ADMIN_CMD', '').lower()
-    await process_command(client, message, active_cmd, admin_cmd, user_id, username, chat_id)
+    await process_command(client, message, active_cmd, admin_cmd, user_id, username, chat_id, int_lvl)
 
 logging.basicConfig(level=logging.ERROR)
 
