@@ -7,6 +7,7 @@ import aiohttp
 import asyncio
 from PIL import Image
 from pyrogram.types import InputMediaPhoto
+from pyrogram.errors import FloodWait
 
 defaultselectionmap = {}
 
@@ -24,7 +25,6 @@ def limpiarnombre(nombre):
     nombre = nombre.replace('\n', ' ').strip()
     nombre = unicodedata.normalize('NFC', nombre)
     return re.sub(r'[^a-zA-Z0-9ñÑáéíóúÁÉÍÓÚ ]', '', nombre)
-
 
 async def descargarimagen_async(session, url, path):
     try:
@@ -45,19 +45,25 @@ def obtenerporcli(codigo, tipo, cover):
             datos = obtener_info_y_links(codigo, cover=cover)
         else:
             datos = obtener_info_y_links_h3(codigo, cover=cover)
-
         texto = datos.get("texto", "").strip()
         imagenes = datos.get("imagenes", [])
-
         return {"texto": texto, "imagenes": imagenes}
-
     except Exception as e:
         print(f"❌ Error ejecutando función de extracción para {codigo}:", e)
         return {"texto": "", "imagenes": []}
 
+# Funciones tolerantes a FloodWait
+async def safe_call(func, *args, **kwargs):
+    while True:
+        try:
+            return await func(*args, **kwargs)
+        except FloodWait as e:
+            print(f"⏳ Esperando {e.value} seg para continuar")
+            await asyncio.sleep(e.value)
+
 async def nh_combined_operation(client, message, codigos, tipo, proteger, userid, operacion):
     seleccion = defaultselectionmap.get(userid, "cbz")
-    MAX_FILENAME_LEN = 100  # límite defensivo para nombres de archivo
+    MAX_FILENAME_LEN = 100
 
     for codigo in codigos:
         datos = obtenerporcli(codigo, tipo, cover=(operacion == "cover"))
@@ -70,7 +76,7 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
 
         imagenes = datos["imagenes"]
         if not imagenes:
-            await message.reply(f"❌ No se encontraron imágenes para {codigo}")
+            await safe_call(message.reply, f"❌ No se encontraron imágenes para {codigo}")
             continue
 
         try:
@@ -78,7 +84,7 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             async with aiohttp.ClientSession() as session:
                 await descargarimagen_async(session, imagenes[0], previewpath)
 
-            await client.send_photo(
+            await safe_call(client.send_photo,
                 chat_id=message.chat.id,
                 photo=previewpath,
                 caption=f"{texto_titulo} Número de páginas: {len(imagenes)}",
@@ -87,12 +93,12 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             os.remove(previewpath)
 
         except Exception:
-            await message.reply(f"❌ No pude enviar la portada para {texto_titulo}")
+            await safe_call(message.reply, f"❌ No pude enviar la portada para {texto_titulo}")
 
         if operacion == "cover":
             continue
 
-        progresomsg = await message.reply(
+        progresomsg = await safe_call(message.reply,
             f"📦 Procesando imágenes para {texto_titulo} ({len(imagenes)} páginas)...\nProgreso 0/{len(imagenes)}"
         )
 
@@ -108,12 +114,9 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                     tasks.append(descargarimagen_async(session, url, path))
                     paths.append(path)
                     if (idx + 1) % 5 == 0 or (idx + 1) == len(imagenes):
-                        try:
-                            await progresomsg.edit_text(
-                                f"📦 Procesando imágenes para {texto_titulo} ({len(imagenes)} páginas)...\nProgreso {idx + 1}/{len(imagenes)}"
-                            )
-                        except Exception:
-                            pass
+                        await safe_call(progresomsg.edit_text,
+                            f"📦 Procesando imágenes para {texto_titulo} ({len(imagenes)} páginas)...\nProgreso {idx + 1}/{len(imagenes)}"
+                        )
                 await asyncio.gather(*tasks)
 
             if seleccion is None:
@@ -121,12 +124,12 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                     grupo = paths[i:i+10]
                     media_group = [InputMediaPhoto(media=path) for path in grupo]
                     try:
-                        await client.send_media_group(
+                        await safe_call(client.send_media_group,
                             chat_id=message.chat.id,
                             media=media_group
                         )
                     except Exception as e:
-                        await message.reply(f"❌ Error al enviar grupo de imágenes: {type(e).__name__}: {e}")
+                        await safe_call(message.reply, f"❌ Error al enviar grupo de imágenes: {type(e).__name__}: {e}")
             else:
                 finalimage_path = os.path.join("command", "spam.png")
                 finalpage_path = os.path.join(tmpdir, f"{len(paths)+1:03d}.png")
@@ -156,10 +159,10 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                             mainimages[0].save(pdfpath, save_all=True, append_images=mainimages[1:])
                             archivos.append(pdfpath)
                     except Exception:
-                        await message.reply(f"❌ Error al generar PDF para {texto_titulo}")
+                        await safe_call(message.reply, f"❌ Error al generar PDF para {texto_titulo}")
 
                 for archivo in archivos:
-                    await client.send_document(
+                    await safe_call(client.send_document,
                         chat_id=message.chat.id,
                         document=archivo,
                         caption=texto_titulo,
@@ -167,59 +170,49 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                     )
                     os.remove(archivo)
 
-        try:
-            await progresomsg.delete()
-        except Exception:
-            pass
-    
-
+        await safe_call(progresomsg.delete)
 
 async def nh_combined_operation_txt(client, message, tipo, proteger, userid, operacion):
-    # Verificar si el mensaje es respuesta a un archivo
     if not message.reply_to_message or not message.reply_to_message.document:
-        await message.reply("❌ Debes responder a un archivo .txt")
+        await safe_call(message.reply, "❌ Debes responder a un archivo .txt")
         return
 
     doc = message.reply_to_message.document
     if not doc.file_name.lower().endswith(".txt"):
-        await client.download_media(doc.file_id, file_name="temp_invalid")
+        await safe_call(client.download_media, doc.file_id, file_name="temp_invalid")
         os.remove("temp_invalid")
-        await message.reply("❌ Usar en un archivo txt")
+        await safe_call(message.reply, "❌ Usar en un archivo txt")
         return
 
-    # Descargar archivo inicial
-    filepath = await client.download_media(doc.file_id, file_name="temp_input.txt")
+    filepath = await safe_call(client.download_media, doc.file_id, file_name="temp_input.txt")
     mensaje_txt = message.reply_to_message
 
     while True:
-        # Leer contenido actual
         with open(filepath, "r", encoding="utf-8") as f:
             contenido = f.read().strip()
 
         if not contenido:
             os.remove(filepath)
-            try: await mensaje_txt.delete()
+            try: await safe_call(mensaje_txt.delete)
             except: pass
-            await message.reply("✅ Descarga terminada")
+            await safe_call(message.reply, "✅ Descarga terminada")
             return
 
         if not all(c in "0123456789," for c in contenido):
             os.remove(filepath)
-            try: await mensaje_txt.delete()
+            try: await safe_call(mensaje_txt.delete)
             except: pass
-            await message.reply("❌ Estructura incorrecta")
+            await safe_call(message.reply, "❌ Estructura incorrecta")
             return
 
         codigos = contenido.split(",")
         primer_codigo = codigos[0]
         siguientes = codigos[1:]
 
-        # Ejecutar operación con el primer código
         await nh_combined_operation(client, message, [primer_codigo], tipo, proteger, userid, operacion)
 
-        # Preparar nuevo archivo si hay más códigos
         os.remove(filepath)
-        try: await mensaje_txt.delete()
+        try: await safe_call(mensaje_txt.delete)
         except: pass
 
         if siguientes:
@@ -227,14 +220,14 @@ async def nh_combined_operation_txt(client, message, tipo, proteger, userid, ope
             with open(nuevo_path, "w", encoding="utf-8") as f:
                 f.write(",".join(siguientes))
 
-            mensaje_txt = await client.send_document(
+            mensaje_txt = await safe_call(client.send_document,
                 chat_id=message.chat.id,
                 document=nuevo_path,
                 caption=f"💻 Pendientes: {len(siguientes)}",
                 protect_content=proteger
             )
 
-            filepath = nuevo_path  # Usar el nuevo archivo como entrada
+            filepath = nuevo_path
         else:
-            await message.reply("✅ Descarga terminada")
+            await safe_call(message.reply, "✅ Descarga terminada")
             return
