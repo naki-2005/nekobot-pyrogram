@@ -50,7 +50,7 @@ async def process_command(
     protect_content = int_lvl < 3
 
     if not is_protect_content_enabled and protect_content:
-        allowed_ids = allowed_ids.union({user_id})
+        protect_content = False
 
     is_vip = int_lvl >= 3
     is_mod = int_lvl >= 4
