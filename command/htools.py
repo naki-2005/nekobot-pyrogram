@@ -57,37 +57,43 @@ def obtenerporcli(codigo, tipo, cover):
 
 async def nh_combined_operation(client, message, codigos, tipo, proteger, userid, operacion):
     seleccion = defaultselectionmap.get(userid, "cbz")
+    MAX_FILENAME_LEN = 100  # límite defensivo para nombres de archivo
 
     for codigo in codigos:
         datos = obtenerporcli(codigo, tipo, cover=(operacion == "cover"))
-        nombrebase = limpiarnombre(datos["texto"]) or f"{tipo} {codigo}"
-        imagenes = datos["imagenes"]
+        texto_original = datos.get("texto", "").strip()
+        texto_titulo = f"{codigo} {texto_original}"
+        nombrelimpio = limpiarnombre(texto_original)
+        nombrebase = f"{codigo}_{nombrelimpio}" if nombrelimpio else f"{tipo}_{codigo}"
+        if len(nombrebase) > MAX_FILENAME_LEN:
+            nombrebase = nombrebase[:MAX_FILENAME_LEN].rstrip("_")
 
+        imagenes = datos["imagenes"]
         if not imagenes:
             await message.reply(f"❌ No se encontraron imágenes para {codigo}")
             continue
 
         try:
-            previewpath = f"{nombrebase} preview.jpg"
+            previewpath = f"{nombrebase}_preview.jpg"
             async with aiohttp.ClientSession() as session:
                 await descargarimagen_async(session, imagenes[0], previewpath)
 
             await client.send_photo(
                 chat_id=message.chat.id,
                 photo=previewpath,
-                caption=f"{codigo} {nombrebase} Número de páginas: {len(imagenes)}",
+                caption=f"{texto_titulo} Número de páginas: {len(imagenes)}",
                 protect_content=proteger
             )
             os.remove(previewpath)
 
         except Exception:
-            await message.reply(f"❌ No pude enviar la portada para {nombrebase}")
+            await message.reply(f"❌ No pude enviar la portada para {texto_titulo}")
 
         if operacion == "cover":
             continue
 
         progresomsg = await message.reply(
-            f"📦 Procesando imágenes para {nombrebase} ({len(imagenes)} páginas)...\nProgreso 0/{len(imagenes)}"
+            f"📦 Procesando imágenes para {texto_titulo} ({len(imagenes)} páginas)...\nProgreso 0/{len(imagenes)}"
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -96,21 +102,21 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                 tasks = []
                 for idx, url in enumerate(imagenes):
                     ext = os.path.splitext(url)[1].lower()
-                    if ext not in [".jpg", ".jpeg", ".png"]: ext = ".jpg"
+                    if ext not in [".jpg", ".jpeg", ".png"]:
+                        ext = ".jpg"
                     path = os.path.join(tmpdir, f"{idx+1:03d}{ext}")
                     tasks.append(descargarimagen_async(session, url, path))
                     paths.append(path)
                     if (idx + 1) % 5 == 0 or (idx + 1) == len(imagenes):
                         try:
                             await progresomsg.edit_text(
-                                f"📦 Procesando imágenes para {nombrebase} ({len(imagenes)} páginas)...\nProgreso {idx + 1}/{len(imagenes)}"
+                                f"📦 Procesando imágenes para {texto_titulo} ({len(imagenes)} páginas)...\nProgreso {idx + 1}/{len(imagenes)}"
                             )
                         except Exception:
                             pass
                 await asyncio.gather(*tasks)
 
             if seleccion is None:
-                # Enviar como grupos de fotos
                 for i in range(0, len(paths), 10):
                     grupo = paths[i:i+10]
                     media_group = [InputMediaPhoto(media=path) for path in grupo]
@@ -122,7 +128,6 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                     except Exception as e:
                         await message.reply(f"❌ Error al enviar grupo de imágenes: {type(e).__name__}: {e}")
             else:
-                # Añadir página final
                 finalimage_path = os.path.join("command", "spam.png")
                 finalpage_path = os.path.join(tmpdir, f"{len(paths)+1:03d}.png")
                 shutil.copyfile(finalimage_path, finalpage_path)
@@ -131,13 +136,14 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                 archivos = []
 
                 if seleccion in ["cbz", "both"]:
-                    cbzpath = f"{nombrebase}.cbz"
-                    shutil.make_archive(nombrebase, 'zip', tmpdir)
-                    os.rename(f"{nombrebase}.zip", cbzpath)
+                    cbzbase = f"{nombrebase}_cbz"
+                    cbzpath = f"{cbzbase}.cbz"
+                    shutil.make_archive(cbzbase, 'zip', tmpdir)
+                    os.rename(f"{cbzbase}.zip", cbzpath)
                     archivos.append(cbzpath)
 
                 if seleccion in ["pdf", "both"]:
-                    pdfpath = f"{nombrebase}.pdf"
+                    pdfpath = f"{nombrebase}_pdf.pdf"
                     try:
                         mainimages = []
                         for path in paths:
@@ -150,13 +156,13 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                             mainimages[0].save(pdfpath, save_all=True, append_images=mainimages[1:])
                             archivos.append(pdfpath)
                     except Exception:
-                        await message.reply(f"❌ Error al generar PDF para {nombrebase}")
+                        await message.reply(f"❌ Error al generar PDF para {texto_titulo}")
 
                 for archivo in archivos:
                     await client.send_document(
                         chat_id=message.chat.id,
                         document=archivo,
-                        caption=nombrebase,
+                        caption=texto_titulo,
                         protect_content=proteger
                     )
                     os.remove(archivo)
@@ -165,6 +171,7 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             await progresomsg.delete()
         except Exception:
             pass
+    
 
 
 async def nh_combined_operation_txt(client, message, tipo, proteger, userid, operacion):
