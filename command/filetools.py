@@ -51,7 +51,7 @@ def compressfile(file_path, part_size, type):
                 part_data = original.read(part_size)
                 if not part_data:
                     break
-                part_file = f"{file_path}.part{part_num:03d}"
+                part_file = f"{file_path}.{part_num:03d}"
                 with open(part_file, 'wb') as part:
                     part.write(part_data)
                 parts.append(part_file)
