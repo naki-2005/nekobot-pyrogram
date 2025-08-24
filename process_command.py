@@ -74,7 +74,7 @@ async def process_command(
         await asyncio.create_task(handle_help(client, message))
         return
         
-    elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt", "dltxt"):
+    elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt", "/dltxt"):
         if cmd("htools", user_id in admin_users, user_id in vip_users):
             parts = text.split(maxsplit=1)
             arg_text = parts[1] if len(parts) > 1 else ""
@@ -147,6 +147,8 @@ async def process_command(
                         os.remove(path_txt)
                     await message.reply("Solo usar con archivos .txt")
                     return
+
+                
                 path_cbz = txt_a_cbz(path_txt)
                 await safe_call(client.send_document,
                         chat_id=message.chat.id,
