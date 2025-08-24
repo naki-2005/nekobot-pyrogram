@@ -332,7 +332,7 @@ async def process_command(
                 await asyncio.create_task(compress_video(admin_users, client, message, allowed_ids))
         return
 
-    elif command in ("/scan", "/multiscan", "/resumecodes", "/resumetxtcodes"):
+    elif command in ("/scan", "/multiscan", "/resumecodes", "/resumetxtcodes", "/codesplit"):
         if cmd("webtools", user_id in admin_users, user_id in vip_users):
             reply = message.reply_to_message
             if command == "/scan":
