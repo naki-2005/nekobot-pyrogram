@@ -76,6 +76,7 @@ async def process_command(
         
     elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt", "/dltxt"):
         if cmd("htools", user_id in admin_users, user_id in vip_users):
+            reply = message.reply_to_message
             parts = text.split(maxsplit=1)
             arg_text = parts[1] if len(parts) > 1 else ""
             codes = arg_text.split(',') if ',' in arg_text else [arg_text] if arg_text else []
@@ -140,7 +141,7 @@ async def process_command(
                     nh_combined_operation_txt(client, message, "3h", protect_content, user_id, "download")
                 )
                 return
-            elif command == "/dltxt" and reply.document:
+            elif command == "/dltxt" and reply and reply.document:
                 path_txt = await client.download_media(reply.document)
                 if not path_txt or not path_txt.endswith(".txt"):
                     if path_txt:
