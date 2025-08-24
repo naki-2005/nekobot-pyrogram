@@ -8,7 +8,7 @@ from command.moodleclient import upload_token
 from command.htools import nh_combined_operation, nh_combined_operation_txt, cambiar_default_selection
 from command.admintools import send_access_editor, send_setting_editor, handle_start
 from command.imgtools import create_imgchest_post
-from command.webtools import handle_scan, handle_multiscan, summarize_lines
+from command.webtools import handle_scan, handle_multiscan, summarize_lines, split_codes
 from command.mailtools.set_values import set_mail, verify_mail, set_mail_limit, set_mail_delay, multisetmail, copy_manager, mydata
 from command.mailtools.send import send_mail, multisendmail
 from command.videotools import update_video_settings, compress_video, cancelar_tarea, listar_tareas, cambiar_miniatura
@@ -340,7 +340,35 @@ async def process_command(
 
             elif command == "/multiscan":
                 await asyncio.create_task(handle_multiscan(client, message))
+            elif command == "/codesplit" and reply and reply.document:
+                file_path = await client.download_media(reply.document)
+                if not file_path.endswith(".txt"):
+                    os.remove(file_path)
+                    await message.reply("Solo usar con archivos .txt generados por /resumetxtcodes.")
+                    return
 
+                try:
+                    chunk_size = int(command.split(" ")[1])
+                except (IndexError, ValueError):
+                    await message.reply("Formato incorrecto. Usa: /codesplit 1000")
+                    return
+
+                with open(file_path, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+
+                os.remove(file_path)
+
+                if not content or "," not in content:
+                    await message.reply("El archivo no contiene códigos válidos.")
+                    return
+
+                codes = content.split(",")
+                file_paths = await split_codes(codes, chunk_size)
+
+                for i, path in enumerate(file_paths):
+                    await client.send_document(chat_id=message.chat.id, document=path, caption=f"Parte {i+1} ({chunk_size} códigos máx)")
+                    os.remove(path)
+                    
             elif command == "/resumecodes" and reply and reply.document:
                 file_path = await client.download_media(reply.document)
                 if not file_path.endswith(".txt"):
@@ -357,6 +385,7 @@ async def process_command(
                 else:
                     await message.reply("No se encontraron códigos en el archivo.")
                 os.remove(file_path)
+
 
             elif command == "/resumetxtcodes" and reply and reply.document:
                 file_path = await client.download_media(reply.document)
