@@ -43,7 +43,7 @@ def txt_a_cbz(path_txt):
     with zipfile.ZipFile(path_cbz, "w", compression=zipfile.ZIP_DEFLATED) as cbz:
         for i, url in enumerate(urls, 1):
             try:
-                print(f"Tratando de descargar {url")
+                print(f"Tratando de descargar {url}")
                 res = requests.get(url, headers=headers, timeout=10)
                 res.raise_for_status()
                 ext = os.path.splitext(url)[1].lower()
