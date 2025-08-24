@@ -4,7 +4,7 @@ import argparse
 import os
 import re  # ✅ Añadido para usar re.sub
 
-def obtener_titulo_y_imagenes(code, cover=False):
+def obtener_info_y_links(code, cover=False):
     base_url = f"https://nhentai.website/g/{code}"
     headers = {
         "User-Agent": (
