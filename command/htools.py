@@ -125,10 +125,6 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                     path = os.path.join(tmpdir, f"{idx+1:03d}{ext}")
                     tasks.append(descargarimagen_async(session, url, path))
                     paths.append(path)
-                    if (idx + 1) % 5 == 0 or (idx + 1) == len(imagenes):
-                        await safe_call(progresomsg.edit_text,
-                            f"📦 Procesando imágenes para {texto_titulo} ({len(imagenes)} páginas)...\nProgreso {idx + 1}/{len(imagenes)}"
-                        )
                 await asyncio.gather(*tasks)
 
             if seleccion is None:
