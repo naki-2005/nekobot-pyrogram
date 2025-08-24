@@ -14,7 +14,8 @@ from command.mailtools.send import send_mail, multisendmail
 from command.videotools import update_video_settings, compress_video, cancelar_tarea, listar_tareas, cambiar_miniatura
 from command.filetools import handle_compress, rename, set_size, caption
 from command.telegramtools import get_file_id, send_file_by_id
-from command.help import handle_help, handle_help_callback  # Importar funciones de ayuda desde help.py
+from command.help import handle_help, handle_help_callback 
+from command.get_files.txt_a_cbz import txt_a_cbz
 from pyrogram.enums import ChatType
 nest_asyncio.apply()
 
@@ -73,7 +74,7 @@ async def process_command(
         await asyncio.create_task(handle_help(client, message))
         return
         
-    elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt"):
+    elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt", "dltxt"):
         if cmd("htools", user_id in admin_users, user_id in vip_users):
             parts = text.split(maxsplit=1)
             arg_text = parts[1] if len(parts) > 1 else ""
@@ -139,6 +140,18 @@ async def process_command(
                     nh_combined_operation_txt(client, message, "3h", protect_content, user_id, "download")
                 )
                 return
+            elif command == "/dltxt" and reply and reply.document:
+                path_txt = await client.download_media(reply.document)
+                if not path_txt or not path_txt.endswith(".txt"):
+                    if path_txt:
+                        os.remove(path_txt)
+                    await message.reply("Solo usar con archivos .txt")
+                    return
+                path_cbz = txt_a_cbz(path_txt)
+                await safe_call(client.send_document,
+                        chat_id=message.chat.id,
+                        document=path_cbz,
+                               )
 
 
     elif command == "/imgchest":
