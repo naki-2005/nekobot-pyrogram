@@ -342,19 +342,29 @@ async def process_command(
                 await asyncio.create_task(handle_multiscan(client, message))
             elif command == "/codesplit" and reply and reply.document:
                 file_path = await client.download_media(reply.document)
-                if not file_path.endswith(".txt"):
-                    os.remove(file_path)
+                if not file_path or not file_path.endswith(".txt"):
+                    if file_path:
+                        os.remove(file_path)
                     await message.reply("Solo usar con archivos .txt generados por /resumetxtcodes.")
                     return
 
+                parts = text.split()
                 try:
-                    chunk_size = int(command.split(" ")[1])
-                except (IndexError, ValueError):
-                    await message.reply("Formato incorrecto. Usa: /codesplit 1000")
+                    chunk_size = int(parts[1]) if len(parts) > 1 else 1000
+                    if chunk_size <= 0:
+                        raise ValueError
+                except ValueError:
+                    os.remove(file_path)
+                    await message.reply("Formato incorrecto. Usa: /codesplit <cantidad>, ej. /codesplit 1000")
                     return
 
-                with open(file_path, "r", encoding="utf-8") as f:
-                    content = f.read().strip()
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        content = f.read().strip()
+                except Exception:
+                    os.remove(file_path)
+                    await message.reply("Error al leer el archivo.")
+                    return
 
                 os.remove(file_path)
 
@@ -362,13 +372,18 @@ async def process_command(
                     await message.reply("El archivo no contiene códigos válidos.")
                     return
 
-                codes = content.split(",")
+                codes = [c.strip() for c in content.split(",") if c.strip()]
+                if not codes:
+                    await message.reply("No se encontraron códigos válidos.")
+                    return
+
                 file_paths = await split_codes(codes, chunk_size)
 
                 for i, path in enumerate(file_paths):
-                    await client.send_document(chat_id=message.chat.id, document=path, caption=f"Parte {i+1} ({chunk_size} códigos máx)")
+                    caption = f"Parte {i+1} ({chunk_size} códigos máx)"
+                    await client.send_document(chat_id=message.chat.id, document=path, caption=caption)
                     os.remove(path)
-                    
+
             elif command == "/resumecodes" and reply and reply.document:
                 file_path = await client.download_media(reply.document)
                 if not file_path.endswith(".txt"):
