@@ -140,7 +140,7 @@ async def process_command(
                     nh_combined_operation_txt(client, message, "3h", protect_content, user_id, "download")
                 )
                 return
-            elif command == "/dltxt" and reply and reply.document:
+            elif command == "/dltxt" and reply.document:
                 path_txt = await client.download_media(reply.document)
                 if not path_txt or not path_txt.endswith(".txt"):
                     if path_txt:
