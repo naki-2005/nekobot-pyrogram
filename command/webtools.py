@@ -124,4 +124,16 @@ async def summarize_lines(lines):
         codes = None
 
     return codes
-        
+
+
+async def split_codes(codes, chunk_size):
+    file_paths = []
+    for i in range(0, len(codes), chunk_size):
+        chunk = codes[i:i + chunk_size]
+        chunk_text = ",".join(chunk)
+        file_name = f"codes_part_{i//chunk_size + 1}.txt"
+        with open(file_name, "w", encoding="utf-8") as f:
+            f.write(chunk_text)
+        file_paths.append(file_name)
+    return file_paths
+    
