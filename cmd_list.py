@@ -25,6 +25,7 @@ async def lista_cmd(app):
         BotCommand("scan", "Escanea los links dentro de un link indicando"),
         BotCommand("resumecodes", "Extrae codigos Hentai de archivos txt del scan"),
         BotCommand("resumetxtcodes", "Extrae codigos Hentai y los envia en txt"),
+        BotCommand("codesplit", "Divide la cantidas de códigos en un txt"),
         BotCommand("imgchest", "Publica una imagen en Imgchest"),
         BotCommand("access", "Obten acceso al bot mediante una contraseña"),
         BotCommand("settings", "(admin) configura el bot"),
