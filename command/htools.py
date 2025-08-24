@@ -47,7 +47,8 @@ async def descargarimagen_async(session, url, path):
     except Exception:
         pass
 
-from command.get_files.nh_links import obtener_info_y_links
+#from command.get_files.nh_links import obtener_info_y_links
+from command.get_files.nh_website import obtener_info_y_links
 from command.get_files.h3_links import obtener_titulo_y_imagenes as obtener_info_y_links_h3
 
 def obtenerporcli(codigo, tipo, cover):
