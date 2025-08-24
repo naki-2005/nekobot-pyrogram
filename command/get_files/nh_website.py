@@ -1,12 +1,11 @@
 import requests
 from bs4 import BeautifulSoup
 import argparse
-import re
 import os
+import re  # ✅ Añadido para usar re.sub
 
 def obtener_titulo_y_imagenes(code, cover=False):
-    web_1 = "https://es.3hentai.net"
-    base_url = f"{web_1}/d/{code}"
+    base_url = f"https://nhentai.website/g/{code}"
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -23,30 +22,27 @@ def obtener_titulo_y_imagenes(code, cover=False):
         return {"texto": "", "imagenes": [], "total_paginas": 0}
 
     soup = BeautifulSoup(response.text, "html.parser")
+
+    # 📄 Título desde <head><title>
     titulo = soup.title.string.strip() if soup.title and soup.title.string else "Sin título"
 
-    gallery = soup.find("div", id="main-content")
-    thumbs = gallery.find("div", id="thumbnail-gallery") if gallery else None
-    thumb_divs = thumbs.find_all("div", class_="single-thumb") if thumbs else []
+    # 🔍 Buscar contenedor de thumbnails
+    thumbs_container = soup.find("div", id="thumbnail-container")
+    thumb_divs = thumbs_container.find_all("div", class_="thumb-container") if thumbs_container else []
     total_paginas = len(thumb_divs)
 
     imagenes = []
     if cover:
-        if thumb_divs:
-            img_tag = thumb_divs[0].find("img")
-            if img_tag:
-                src_url = img_tag.get("data-src") or img_tag.get("src")
-                if src_url:
-                    full_img_url = re.sub(r't(?=\.\w{3,4}$)', '', src_url)
-                    imagenes.append(full_img_url)
-    else:
-        for div in thumb_divs:
-            img_tag = div.find("img")
-            if img_tag:
-                src_url = img_tag.get("data-src") or img_tag.get("src")
-                if src_url:
-                    full_img_url = re.sub(r't(?=\.\w{3,4}$)', '', src_url)
-                    imagenes.append(full_img_url)
+        thumb_divs = thumb_divs[:1]
+
+    for div in thumb_divs:
+        img_tag = div.find("img", class_="lazyload")
+        if img_tag:
+            src_url = img_tag.get("data-src")
+            if src_url:
+                # 🔧 Eliminar la 'x' justo antes de la extensión
+                src_url = re.sub(r'x(?=\.(jpg|jpeg|png|webp|gif)$)', '', src_url, flags=re.IGNORECASE)
+                imagenes.append(src_url)
 
     return {
         "texto": titulo,
@@ -69,7 +65,7 @@ def guardar_como_txt(datos, code):
 
 # 🎯 CLI
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Extraer título e imágenes HD")
+    parser = argparse.ArgumentParser(description="Extraer título e imágenes HD de nhentai.website")
     parser.add_argument("-code", "-C", dest="code", required=True, help="Código de galería")
     parser.add_argument("--cover", action="store_true", help="Solo extraer portada")
     parser.add_argument("--txt", action="store_true", help="Guardar salida como .txt")

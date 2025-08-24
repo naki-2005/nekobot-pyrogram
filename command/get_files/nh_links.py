@@ -3,8 +3,16 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import argparse
 
+
+import re
+
+def limpiar_nombre_para_archivo(nombre_raw):
+    nombre_limpio = re.sub(r"[^\w\[\]ñÑ]", "_", nombre_raw, flags=re.UNICODE)
+    nombre_limpio = re.sub(r"_+", "_", nombre_limpio).strip("_")
+    return nombre_limpio
+    
 def obtener_info_y_links(code, cover=False):
-    web_1 = "https://nhentai.net"
+    web_1 = "https://nhentai.website"
     base_url = f"{web_1}/g/{code}"
     headers = {
         "User-Agent": (
@@ -26,7 +34,6 @@ def obtener_info_y_links(code, cover=False):
     if not content:
         return {"texto": "", "imagenes": [], "total_paginas": 0}
 
-    # 📄 Extraer texto del encabezado
     texto_final = []
     info_div = content.find("div", id="bigcontainer")
     if info_div:
@@ -45,13 +52,11 @@ def obtener_info_y_links(code, cover=False):
                         if partes:
                             texto_final.append(" ".join(partes))
 
-    # 🔢 Detectar total de thumbnails
     thumbnail_container = content.find("div", id="thumbnail-container")
     thumbs = thumbnail_container.find("div", class_="thumbs") if thumbnail_container else None
     thumb_divs = thumbs.find_all("div", class_="thumb-container") if thumbs else []
     total_paginas = len(thumb_divs)
 
-    # 🖼️ Solo portada
     if cover:
         primera_pagina = f"{web_1}/g/{code}/1/"
         try:
@@ -77,7 +82,6 @@ def obtener_info_y_links(code, cover=False):
             "total_paginas": total_paginas
         }
 
-    # 🖼️ Todas las imágenes
     imagenes = []
     for i in range(1, total_paginas + 1):
         pagina_url = f"{web_1}/g/{code}/{i}/"
@@ -103,11 +107,12 @@ def obtener_info_y_links(code, cover=False):
         "total_paginas": total_paginas
     }
 
-# 🎯 CLI de prueba
+# 🎯 CLI
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Obtener texto e imágenes por código")
     parser.add_argument("-code", "-C", dest="code", required=True, help="Código del recurso")
     parser.add_argument("--cover", action="store_true", help="Solo obtener portada")
+    parser.add_argument("-txt", "-T", dest="guardar_txt", action="store_true", help="Guardar información textual en archivo .txt")
     args = parser.parse_args()
 
     datos = obtener_info_y_links(args.code, cover=args.cover)
@@ -118,3 +123,19 @@ if __name__ == "__main__":
     print("\n🖼️ URLs de imágenes:")
     for url in datos["imagenes"]:
         print(url)
+
+    if args.guardar_txt and datos["texto"].strip():
+        nombre_base = datos["texto"].split("\n")[0] if datos["texto"] else f"code_{args.code}"
+        nombre_archivo = limpiar_nombre_para_archivo(nombre_base) + ".txt"
+
+        try:
+            with open(nombre_archivo, "w", encoding="utf-8") as f:
+                f.write(datos["texto"].strip() + "\n\n")
+                f.write(f"🧮 Total de páginas: {datos['total_paginas']}\n")
+                f.write("🖼️ URLs de imágenes:\n")
+                for url in datos["imagenes"]:
+                    f.write(url + "\n")
+            print(f"\n✅ Archivo guardado como: {nombre_archivo}")
+        except Exception as e:
+            print(f"\n❌ Error al guardar archivo: {e}")
+            
