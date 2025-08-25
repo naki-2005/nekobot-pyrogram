@@ -12,7 +12,7 @@ def secure_filename(fname: str) -> str:
     fname = re.sub(r"[^a-zA-Z0-9_.-]", "", fname)
     return fname or "file"
 
-def clear_vault_files():
+def clear_vault_files(client: Client, message: Message):
     if not os.path.isdir(VAULT_FOLDER):
         return
     for fname in os.listdir(VAULT_FOLDER):
@@ -20,6 +20,7 @@ def clear_vault_files():
         if os.path.isfile(fpath):
             try:
                 os.remove(fpath)
+                await message.reply(f"✅ Archivo borrados")
             except Exception:
                 pass
 
