@@ -11,7 +11,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from process_command import process_command
 from command.help import handle_help_callback
 from command.mailtools.send import mail_query
-from command.db.db import save_user_data_to_db, load_user_config, subir_bot_config
+from command.db.db import save_user_data_to_db, load_user_config, subir_bot_config, descargar_bot_config
 from cmd_list import lista_cmd
 from data.stickers import saludos, STICKER_SALUDO, STICKER_DESCANSO, STICKER_REACTIVADO
 from data.vars import (
@@ -239,10 +239,22 @@ def download():
 
 def run_flask():
     explorer.run(host="0.0.0.0", port=10000)
+def start_data_2():
+    token = os.environ.get("TOKEN", "")
+    if ":" not in token:
+        print("[!] TOKEN inválido o no definido")
+        return
+
+    bot_id = token.split(":")[0]
+    print(f"[↘] Descargando configuración para bot_id: {bot_id}")
+    descargar_bot_config(bot_id)
 
 async def main():
     if os.environ.get("MAIN_BOT", "").lower() == "true":
         start_data()
+
+    start_data_2()
+
     threading.Thread(target=run_flask, daemon=True).start()
     await app.start()
     print("Bot iniciado y servidor Flask corriendo en puerto 5000.")
