@@ -16,6 +16,8 @@ async def lista_cmd(app):
         BotCommand("setmb", "Configure el peso de las partes"),
         BotCommand("sendmail", "Envía un archivo dividido en 7z a su correo"),
         BotCommand("sendmailb", "Envía un archivo dividido en bytes a su correo"),
+        BotCommand("upfile", "Sube un archivo al servidor"),
+        BotCommand("clearfiles", "Borra los archivos en el servidor"),
         BotCommand("verify", "Verifica tu correo con un código"),
         BotCommand("setfile", "Define su preferencia de descarga de Hentai"),
         BotCommand("nh", "Descarga un manga hentai de Nhentai"),
