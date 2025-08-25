@@ -190,7 +190,7 @@ async def callback_handler(client, callback_query):
 
 # -------- Servidor Flask --------
 explorer = Flask("file_explorer")
-BASE_DIR = "/opt/render/project/src"
+BASE_DIR = "/opt/render/project/src/vault_files"
 
 TEMPLATE = """
 <!doctype html>
