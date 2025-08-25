@@ -5,6 +5,66 @@ import json
 import urllib.request
 from datetime import datetime
 
+def subir_bot_config(bot_id: str):
+    db_path = "bot_cmd.db"
+    if not os.path.exists(db_path):
+        print(f"[!] No existe el archivo: {db_path}")
+        return
+
+    GIT_REPO = os.getenv("GIT_REPO")
+    GIT_API = os.getenv("GIT_API")
+    if not GIT_REPO or not GIT_API:
+        print("[!] Variables de entorno GIT_REPO o GIT_API no definidas")
+        return
+
+    file_name = f"{bot_id}.db"
+    file_path = f"data/{file_name}"
+    url = f"https://api.github.com/repos/{GIT_REPO}/contents/{file_path}"
+
+    headers = {
+        "Authorization": f"Bearer {GIT_API}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "python-urllib"
+    }
+
+    # Detectar si el archivo ya existe para obtener el SHA
+    sha = None
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req) as response:
+            existing = json.loads(response.read())
+            sha = existing.get("sha")
+    except urllib.error.HTTPError as e:
+        if e.code != 404:
+            raise RuntimeError(f"Error al consultar GitHub: {e.code} {e.reason}")
+        # Si es 404, el archivo no existe aún → no se necesita SHA
+
+    # Codificar el contenido del archivo local
+    with open(db_path, "rb") as f:
+        encoded_content = base64.b64encode(f.read()).decode("utf-8")
+
+    # Preparar el payload para subir o sobrescribir
+    payload = {
+        "message": f"Subida de configuración bot {bot_id}",
+        "content": encoded_content,
+        "branch": "main"
+    }
+    if sha:
+        payload["sha"] = sha  # Necesario para sobrescribir
+
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={**headers, "Content-Type": "application/json"},
+        method="PUT"
+    )
+
+    with urllib.request.urlopen(req) as response:
+        result = json.loads(response.read())
+        print(f"[✓] Subido como {file_name}")
+        return result.get("content", {}).get("download_url", "Subido sin URL")
+
+
 RESERVED_SQL = {"limit", "group", "order", "select"}
 
 def escape_sql_key(key):
