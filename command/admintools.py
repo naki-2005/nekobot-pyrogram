@@ -49,7 +49,7 @@ def get_main_buttons():
     return InlineKeyboardMarkup([botones[i:i+2] for i in range(0, len(botones), 2)])
 
 
-def get_access_buttons(parametro):
+def get_accesscmd_buttons(parametro):
     botones = [
         InlineKeyboardButton("Usuarios", callback_data=f"access_{parametro}_1"),
         InlineKeyboardButton("Usuarios especiales", callback_data=f"access_{parametro}_2"),
