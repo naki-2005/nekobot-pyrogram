@@ -20,7 +20,7 @@ from data.vars import (
     BOT_IS_PUBLIC, PROTECT_CONTENT, allowed_ids, allowed_users
 )
 from command.admintools import process_access_callback
-
+from command.admintools import guardar_parametro, get_main_buttons, get_access_buttons
 # -------- Bot de Telegram --------
 nest_asyncio.apply()
 app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
@@ -163,6 +163,20 @@ async def callback_handler(client, callback_query):
         await handle_help_callback(client, callback_query)
     elif data.startswith("id_") and "#" in data:
         await process_access_callback(client, callback_query)
+
+    elif data.startswith("config_"):
+        parametro = data.split("_")[1]
+        texto = f"Editar acceso a los comandos de {parametro}"
+        await callback_query.message.edit_text(
+            texto,
+            reply_markup=get_access_buttons(parametro)
+        )
+
+    elif data.startswith("access_"):
+        _, parametro, valor = data.split("_")
+        guardar_parametro(parametro, valor)
+        await callback_query.answer("✅ Configuración guardada", show_alert=True)
+
     else:
         await callback_query.answer("No se ha encontrado una respuesta Query correcta.", show_alert=True)
 
