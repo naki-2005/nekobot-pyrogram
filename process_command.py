@@ -16,6 +16,7 @@ from command.filetools import handle_compress, rename, set_size, caption
 from command.telegramtools import get_file_id, send_file_by_id
 from command.help import handle_help, handle_help_callback 
 from command.get_files.txt_a_cbz import txt_a_cbz
+from command.filetolink import handle_up_command, clear_vault_files
 from pyrogram.enums import ChatType
 nest_asyncio.apply()
 
@@ -373,6 +374,17 @@ async def process_command(
             elif auto and (message.video or (message.document and message.document.mime_type.startswith("video/"))):
                 await asyncio.create_task(compress_video(admin_users, client, message, allowed_ids))
         return
+
+    elif command in ("/upfile", "/clearfiles"):
+        if cmd("filetolink", int_lvl):
+            reply = message.reply_to_message
+
+            if command == "/upfile":
+                await handle_up_command(client, message)
+
+            elif command == "/clearfiles":
+                await clear_vault_files(client, message)
+                
 
     elif command in ("/scan", "/multiscan", "/resumecodes", "/resumetxtcodes", "/codesplit"):
         if cmd("webtools", int_lvl):
