@@ -10,6 +10,53 @@ from data.vars import api_id, api_hash, bot_token, admin_users, users, temp_user
 from command.db.db import save_user_data_to_db, load_user_config
 from command.mailtools.set_values import get_access_label
 
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+import sqlite3
+import os
+
+def guardar_parametro(parametro: str, valor: str):
+    permitidos = {'videotools', 'mailtools', 'filetools', 'htools', 'webtools', 'imgtools'}
+    if parametro not in permitidos:
+        print(f"[!] Parámetro inválido: {parametro}")
+        return
+
+    ruta_db = os.path.join(os.getcwd(), 'bot_cmd.db')
+    conn = sqlite3.connect(ruta_db)
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS parametros (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT NOT NULL,
+            valor TEXT NOT NULL
+        )
+    ''')
+
+    cursor.execute('INSERT INTO parametros (nombre, valor) VALUES (?, ?)', (parametro, valor))
+    conn.commit()
+    conn.close()
+    print(f"[✓] Guardado en bot_cmd.db: {parametro} → '{valor}'")
+
+def get_main_buttons():
+    botones = [
+        InlineKeyboardButton("Archivos", callback_data="config_filetools"),
+        InlineKeyboardButton("Correo", callback_data="config_mailtools"),
+        InlineKeyboardButton("Hentai", callback_data="config_htools"),
+        InlineKeyboardButton("Web", callback_data="config_webtools"),
+        InlineKeyboardButton("Videos", callback_data="config_videotools"),
+        InlineKeyboardButton("Imágenes", callback_data="config_imgtools"),
+    ]
+    return InlineKeyboardMarkup([botones[i:i+2] for i in range(0, len(botones), 2)])
+
+
+def get_access_buttons(parametro):
+    botones = [
+        InlineKeyboardButton("Usuarios", callback_data=f"access_{parametro}_1"),
+        InlineKeyboardButton("Usuarios especiales", callback_data=f"access_{parametro}_2"),
+        InlineKeyboardButton("Nadie", callback_data=f"access_{parametro}_3"),
+    ]
+    return InlineKeyboardMarkup([botones])
+    
 async def handle_start(client, message):
     first_name = message.from_user.first_name
     last_name = message.from_user.last_name or ""
@@ -102,11 +149,11 @@ async def process_access_callback(client, callback_query):
     except Exception as e:
         await callback_query.answer(f"⚠️ Error al guardar: {e}", show_alert=True)
 
-
 async def send_setting_editor(client, message):
     user_id = message.from_user.id
     bot_info = await client.get_me()
     bot_id = bot_info.id
+
     try:
         user_lvl = load_user_config(user_id, "lvl")
         if not user_lvl or int(user_lvl) < 5:
@@ -115,6 +162,9 @@ async def send_setting_editor(client, message):
         await message.reply(f"⚠️ Error al cargar tu nivel: {e}")
         return
 
-    await message.reply(f"Editar la configuración del bot {bot_id}")
-        
+    await message.reply(
+        f"Editar la configuración del bot {bot_id}",
+        reply_markup=get_main_buttons()
+    )
+
     
