@@ -15,7 +15,7 @@ import sqlite3
 import os
 
 def guardar_parametro(parametro: str, valor: str):
-    permitidos = {'videotools', 'mailtools', 'filetools', 'htools', 'webtools', 'imgtools'}
+    permitidos = {'videotools', 'mailtools', 'filetools', 'filetolink', 'htools', 'webtools', 'imgtools'}
     if parametro not in permitidos:
         print(f"[!] Parámetro inválido: {parametro}")
         return
@@ -45,6 +45,7 @@ def get_main_buttons():
         InlineKeyboardButton("Web", callback_data="config_webtools"),
         InlineKeyboardButton("Videos", callback_data="config_videotools"),
         InlineKeyboardButton("Imágenes", callback_data="config_imgtools"),
+        InlineKeyboardButton("File to Link", callback_data="filetolink"),
         InlineKeyboardButton("Guardar", callback_data="save_config"),
     ]
     return InlineKeyboardMarkup([botones[i:i+2] for i in range(0, len(botones), 2)])
