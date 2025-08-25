@@ -477,6 +477,8 @@ async def process_command(
         return
 
     elif command == "/settings" and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
+        if int_lvl < 6:
+            return
         await send_setting_editor(client, message)
         return
 
