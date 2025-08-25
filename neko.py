@@ -244,6 +244,7 @@ def download():
 def run_flask():
     explorer.run(host="0.0.0.0", port=10000)
 def start_data_2():
+    os.makedirs("vault_files", exist_ok=True)
     token = os.environ.get("TOKEN", "")
     if ":" not in token:
         print("[!] TOKEN inválido o no definido")
