@@ -11,7 +11,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from process_command import process_command
 from command.help import handle_help_callback
 from command.mailtools.send import mail_query
-from command.db.db import save_user_data_to_db, load_user_config
+from command.db.db import save_user_data_to_db, load_user_config, subir_bot_config
 from cmd_list import lista_cmd
 from data.stickers import saludos, STICKER_SALUDO, STICKER_DESCANSO, STICKER_REACTIVADO
 from data.vars import (
@@ -159,8 +159,10 @@ async def callback_handler(client, callback_query):
 
     if data in mail_related:
         await mail_query(client, callback_query)
+
     elif data in help_related:
         await handle_help_callback(client, callback_query)
+
     elif data.startswith("id_") and "#" in data:
         await process_access_callback(client, callback_query)
 
@@ -176,6 +178,12 @@ async def callback_handler(client, callback_query):
         _, parametro, valor = data.split("_")
         guardar_parametro(parametro, valor)
         await callback_query.answer("✅ Configuración guardada", show_alert=True)
+
+    elif data == "save_config":
+        bot_info = await client.get_me()
+        bot_id = str(bot_info.id)
+        subir_bot_config(bot_id)
+        await callback_query.answer("📤 Configuración subida al repositorio", show_alert=True)
 
     else:
         await callback_query.answer("No se ha encontrado una respuesta Query correcta.", show_alert=True)
