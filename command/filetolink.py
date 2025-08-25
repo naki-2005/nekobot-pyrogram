@@ -5,7 +5,12 @@ from pyrogram import Client
 from pyrogram.types import Message
 
 VAULT_FOLDER = "vault_files"
-
+def get_info(msg: Message):
+    media = next((m for m in [msg.document, msg.photo, msg.audio, msg.video, msg.voice, msg.animation, msg.sticker] if m), None)
+    fname = getattr(media, "file_name", None) or media.file_id if media else None
+    fid = media.file_id if media else None
+    size = getattr(media, "file_size", 0) / (1024 * 1024) if media else 0.0
+    return fname, fid, size
 def secure_filename(fname: str) -> str:
     fname = os.path.basename(fname)
     fname = fname.strip().replace(" ", "_")
