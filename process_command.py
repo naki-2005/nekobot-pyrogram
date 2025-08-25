@@ -30,7 +30,40 @@ allowed_ids = set(admin_users).union(set(vip_users))
 protect_content_env = os.getenv('PROTECT_CONTENT', '').strip().lower()
 is_protect_content_enabled = protect_content_env == 'true'  # Evaluamos si es "True" en cualquier formato
 auto_users = {}
+import sqlite3
+import os
 
+def cmd(command_env: str, int_lvl: int) -> bool:
+    if int_lvl == 6:
+        return True
+
+    ruta_db = os.path.join(os.getcwd(), 'bot_cmd.db')
+    if not os.path.exists(ruta_db):
+        return False 
+
+    try:
+        conn = sqlite3.connect(ruta_db)
+        cursor = conn.cursor()
+        cursor.execute('SELECT valor FROM parametros WHERE nombre = ?', (command_env,))
+        resultado = cursor.fetchone()
+        conn.close()
+
+        if not resultado:
+            return False
+
+        valor = int(resultado[0]) 
+
+        if int_lvl in [1, 2]:
+            return valor == 1
+        elif int_lvl in [3, 4, 5]:
+            return valor < 3 
+        else:
+            return False 
+
+    except Exception as e:
+        print(f"[!] Error al acceder a bot_cmd.db: {e}")
+        return False
+        
 async def process_command(
     client: Client,
     message: Message,
@@ -58,13 +91,6 @@ async def process_command(
     is_admin = int_lvl >= 5
     is_owner = int_lvl == 6
 
-    def cmd(command_env, is_admin=is_admin, is_vip=is_vip):
-        return (
-            active_cmd == "all" or 
-            command_env in active_cmd or 
-            ((is_admin or is_vip) and (admin_cmd == "all" or command_env in admin_cmd))
-        )
-
     command = text.split()[0] if text else ""
 
     if command == "/start":
@@ -75,7 +101,7 @@ async def process_command(
         return
         
     elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt", "/dltxt"):
-        if cmd("htools", user_id in admin_users, user_id in vip_users):
+        if cmd("htools", int_lvl):
             reply = message.reply_to_message
             parts = text.split(maxsplit=1)
             arg_text = parts[1] if len(parts) > 1 else ""
@@ -158,7 +184,7 @@ async def process_command(
 
 
     elif command == "/imgchest":
-        if cmd("imgtools", user_id in admin_users, user_id in vip_users):
+        if cmd("imgtools", int_lvl):
             reply = message.reply_to_message
             if reply and (reply.photo or reply.document or reply.video):
                 await asyncio.create_task(create_imgchest_post(client, message))
@@ -167,7 +193,7 @@ async def process_command(
         return
 
     elif command in ("/compress", "/split", "/setsize", "/rename", "/caption"):
-        if cmd("filetools", user_id in admin_users, user_id in vip_users):
+        if cmd("filetools", int_lvl):
             if command == "/compress":
                 await handle_compress(client, message, username, type="7z")
 
@@ -206,7 +232,7 @@ async def process_command(
                 await caption(client, chat_id, file_id, caption_text)
         return
     elif command in ("/mydata", "/setmail", "/sendmail", "/sendmailb", "/verify", "/setmb", "/setdelay", "/multisetmail", "/multisendmail", "/savemail", "/mailcopy"):
-        if cmd("mailtools", user_id in admin_users, user_id in vip_users):
+        if cmd("mailtools", int_lvl):
             parts = text.split()
             arg = parts[1] if len(parts) > 1 else ""
             repeats = min(int(arg), 99999) if arg.isdigit() else 1
@@ -261,7 +287,7 @@ async def process_command(
         return
                         
     elif command in ("/compress", "/split", "/setsize", "/rename", "/caption"):
-        if cmd("filetools", user_id in admin_users, user_id in vip_users):
+        if cmd("filetools", int_lvl):
             parts = text.split(maxsplit=1)
             arg = parts[1] if len(parts) > 1 else ""
             reply = message.reply_to_message
@@ -307,7 +333,7 @@ async def process_command(
     elif command in ("/convert", "/calidad", "/autoconvert", "/cancel", "/list", "/miniatura") or \
          ((message.video is not None) or (message.document and message.document.mime_type and message.document.mime_type.startswith("video/"))) or \
          (message.photo and message.caption and message.caption.startswith("/miniatura")):
-        if cmd("videotools", user_id in admin_users, user_id in vip_users):
+        if cmd("videotools", int_lvl):
             parts = text.split(maxsplit=1)
             arg = parts[1] if len(parts) > 1 else ""
 
@@ -349,7 +375,7 @@ async def process_command(
         return
 
     elif command in ("/scan", "/multiscan", "/resumecodes", "/resumetxtcodes", "/codesplit"):
-        if cmd("webtools", user_id in admin_users, user_id in vip_users):
+        if cmd("webtools", int_lvl):
             reply = message.reply_to_message
             if command == "/scan":
                 await asyncio.create_task(handle_scan(client, message))
