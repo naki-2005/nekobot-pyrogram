@@ -12,7 +12,7 @@ def secure_filename(fname: str) -> str:
     fname = re.sub(r"[^a-zA-Z0-9_.-]", "", fname)
     return fname or "file"
 
-def clear_vault_files(client: Client, message: Message):
+async def clear_vault_files(client: Client, message: Message):
     if not os.path.isdir(VAULT_FOLDER):
         return
     for fname in os.listdir(VAULT_FOLDER):
