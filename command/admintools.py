@@ -45,7 +45,7 @@ def get_main_buttons():
         InlineKeyboardButton("Web", callback_data="config_webtools"),
         InlineKeyboardButton("Videos", callback_data="config_videotools"),
         InlineKeyboardButton("Imágenes", callback_data="config_imgtools"),
-        InlineKeyboardButton("File to Link", callback_data="filetolink"),
+        InlineKeyboardButton("File to Link", callback_data="config_filetolink"),
         InlineKeyboardButton("Guardar", callback_data="save_config"),
     ]
     return InlineKeyboardMarkup([botones[i:i+2] for i in range(0, len(botones), 2)])
