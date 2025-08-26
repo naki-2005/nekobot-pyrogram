@@ -17,7 +17,7 @@ import os
 def guardar_parametro(parametro: str, valor: str):
     permitidos = {
         'videotools', 'mailtools', 'filetools', 'filetolink',
-        'htools', 'webtools', 'imgtools', 'public'
+        'htools', 'webtools', 'imgtools', 'public', 'protect'
     }
 
     if parametro not in permitidos:
@@ -72,6 +72,13 @@ def get_public_buttons():
     botones = [
         InlineKeyboardButton("Publico", callback_data=f"access_public_1"),
         InlineKeyboardButton("Privado", callback_data=f"access_public_2"),
+    ]
+    return InlineKeyboardMarkup([botones])
+
+def get_protect_buttons():
+    botones = [
+        InlineKeyboardButton("Si", callback_data=f"access_protect_1"),
+        InlineKeyboardButton("No", callback_data=f"access_protect_2"),
     ]
     return InlineKeyboardMarkup([botones])
     
@@ -203,4 +210,22 @@ async def send_setting_public(client, message):
         reply_markup=get_public_buttons()
     )
     
+    
+async def send_setting_protect(client, message):
+    user_id = message.from_user.id
+    bot_info = await client.get_me()
+    bot_id = bot_info.id
+
+    try:
+        user_lvl = load_user_config(user_id, "lvl")
+        if not user_lvl or int(user_lvl) < 5:
+            return
+    except Exception as e:
+        await message.reply(f"⚠️ Error al cargar tu nivel: {e}")
+        return
+
+    await message.reply(
+        f"¿Permitir reenvíos de los archivos del bot {bot_id}?",
+        reply_markup=get_protect_buttons()
+    )
     
