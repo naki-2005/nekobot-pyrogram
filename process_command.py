@@ -262,7 +262,7 @@ async def process_command(
             repeats = min(int(arg), 99999) if arg.isdigit() else 1
 
             if command == "/setmail":
-                await asyncio.create_task(set_mail(client, message))
+                await asyncio.create_task(set_mail(client, message, int_lvl))
 
             elif command == "/multisetmail":
                 await asyncio.create_task(multisetmail(client, message))
