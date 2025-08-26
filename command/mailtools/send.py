@@ -257,8 +257,6 @@ def splitfile(file_path, part_size_mb):
 
     return parts
     
-    
-
 def send_email(destino, asunto, contenido=None, adjunto=False):
     import os
     import smtplib
@@ -266,13 +264,18 @@ def send_email(destino, asunto, contenido=None, adjunto=False):
     from email.message import EmailMessage
 
     def obtener_parametro(nombre):
-        ruta_db = os.path.join(os.getcwd(), 'bot_cmd.db')
-        conn = sqlite3.connect(ruta_db)
-        cursor = conn.cursor()
-        cursor.execute('SELECT valor FROM parametros WHERE nombre = ?', (nombre,))
-        resultado = cursor.fetchone()
-        conn.close()
-        return resultado[0] if resultado else None
+        try:
+            ruta_db = os.path.join(os.getcwd(), 'bot_cmd.db')
+            conn = sqlite3.connect(ruta_db)
+            cursor = conn.cursor()
+            cursor.execute('SELECT valor FROM parametros WHERE nombre = ?', (nombre,))
+            resultado = cursor.fetchone()
+            conn.close()
+            if resultado:
+                return resultado[0]
+        except Exception:
+            pass
+        return os.getenv(nombre.upper())
 
     maildir = obtener_parametro("maildir")
     mailpass = obtener_parametro("mailpass")
@@ -284,8 +287,9 @@ def send_email(destino, asunto, contenido=None, adjunto=False):
 
     msg = EmailMessage()
     msg['Subject'] = asunto
-    msg['From'] = f"Neko Bot <{maildir}>"
+    msg['From'] = "Neko Bot"
     msg['To'] = destino
+    msg.set_content(contenido if contenido else asunto, subtype='plain')
 
     if adjunto:
         try:
@@ -299,8 +303,6 @@ def send_email(destino, asunto, contenido=None, adjunto=False):
         except Exception as e:
             print(f"[!] Error al adjuntar archivo: {e}")
             return
-    else:
-        msg.set_content(contenido if contenido else asunto)
 
     partes = mailserv.split(':')
     if len(partes) < 2:
@@ -318,10 +320,13 @@ def send_email(destino, asunto, contenido=None, adjunto=False):
 
     try:
         with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.ehlo()
             if usar_tls:
                 server.starttls()
+                server.ehlo()
             server.login(maildir, mailpass)
             server.send_message(msg)
+            server.quit()
             print("[✓] Correo enviado correctamente.")
     except Exception as e:
         print(f"[!] Error al enviar el correo: {e}")
