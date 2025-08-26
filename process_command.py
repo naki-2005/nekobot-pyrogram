@@ -6,7 +6,7 @@ from pyrogram import Client
 from pyrogram.types import Message
 from command.moodleclient import upload_token
 from command.htools import safe_call, nh_combined_operation, nh_combined_operation_txt, cambiar_default_selection
-from command.admintools import send_access_editor, send_setting_editor, handle_start
+from command.admintools import send_access_editor, send_setting_editor, send_setting_public, handle_start
 from command.imgtools import create_imgchest_post
 from command.webtools import handle_scan, handle_multiscan, summarize_lines, split_codes
 from command.mailtools.set_values import set_mail, verify_mail, set_mail_limit, set_mail_delay, multisetmail, copy_manager, mydata
@@ -476,11 +476,16 @@ async def process_command(
                 os.remove(file_path)
         return
 
-    elif command == "/settings" and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
+    elif command.startswith("/settings") and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
         if int_lvl < 6:
             return
-        await send_setting_editor(client, message)
+
+        if command.strip() == "/settings public":
+            await send_setting_public(client, message)
+        else:
+            await send_setting_editor(client, message)
         return
+
 
     elif command == "/edituser" and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
         await send_access_editor(client, message)
