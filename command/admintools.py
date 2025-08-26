@@ -15,9 +15,17 @@ import sqlite3
 import os
 
 def guardar_parametro(parametro: str, valor: str):
-    permitidos = {'videotools', 'mailtools', 'filetools', 'filetolink', 'htools', 'webtools', 'imgtools', 'public'}
+    permitidos = {
+        'videotools', 'mailtools', 'filetools', 'filetolink',
+        'htools', 'webtools', 'imgtools', 'public'
+    }
+
     if parametro not in permitidos:
         print(f"[!] Parámetro inválido: {parametro}")
+        return
+
+    if parametro == "public" and valor not in {"1", "2"}:
+        print(f"[!] Valor inválido para 'public': {valor}")
         return
 
     ruta_db = os.path.join(os.getcwd(), 'bot_cmd.db')
@@ -26,16 +34,17 @@ def guardar_parametro(parametro: str, valor: str):
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS parametros (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT NOT NULL,
+            nombre TEXT PRIMARY KEY,
             valor TEXT NOT NULL
         )
     ''')
 
-    cursor.execute('INSERT INTO parametros (nombre, valor) VALUES (?, ?)', (parametro, valor))
+    cursor.execute('REPLACE INTO parametros (nombre, valor) VALUES (?, ?)', (parametro, valor))
     conn.commit()
     conn.close()
+
     print(f"[✓] Guardado en bot_cmd.db: {parametro} → '{valor}'")
+    
 
 def get_main_buttons():
     botones = [
