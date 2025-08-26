@@ -15,7 +15,7 @@ import sqlite3
 import os
 
 def guardar_parametro(parametro: str, valor: str):
-    permitidos = {'videotools', 'mailtools', 'filetools', 'filetolink', 'htools', 'webtools', 'imgtools'}
+    permitidos = {'videotools', 'mailtools', 'filetools', 'filetolink', 'htools', 'webtools', 'imgtools', 'public'}
     if parametro not in permitidos:
         print(f"[!] Parámetro inválido: {parametro}")
         return
@@ -56,6 +56,13 @@ def get_accesscmd_buttons(parametro):
         InlineKeyboardButton("Usuarios", callback_data=f"access_{parametro}_1"),
         InlineKeyboardButton("Usuarios especiales", callback_data=f"access_{parametro}_2"),
         InlineKeyboardButton("Nadie", callback_data=f"access_{parametro}_3"),
+    ]
+    return InlineKeyboardMarkup([botones])
+
+def get_public_buttons():
+    botones = [
+        InlineKeyboardButton("Publico", callback_data=f"access_public_1"),
+        InlineKeyboardButton("Privado", callback_data=f"access_public_2"),
     ]
     return InlineKeyboardMarkup([botones])
     
@@ -169,4 +176,22 @@ async def send_setting_editor(client, message):
         reply_markup=get_main_buttons()
     )
 
+async def send_setting_public(client, message):
+    user_id = message.from_user.id
+    bot_info = await client.get_me()
+    bot_id = bot_info.id
+
+    try:
+        user_lvl = load_user_config(user_id, "lvl")
+        if not user_lvl or int(user_lvl) < 5:
+            return
+    except Exception as e:
+        await message.reply(f"⚠️ Error al cargar tu nivel: {e}")
+        return
+
+    await message.reply(
+        f"Editar tipo del bot {bot_id}",
+        reply_markup=get_public_buttons()
+    )
+    
     
