@@ -205,7 +205,7 @@ async def set_mail(client, message, int_lvl):
     user_id = message.from_user.id
     protect_content = await verify_protect(user_id)
     mail_confirmed = os.getenv('MAIL_CONFIRMED')
-    if int_lvl => 4:
+    if int_lvl >= 4:
         user_emails[user_id] = email
         save_user_data_to_db(user_id, "email", email)
         await message.reply("Correo electrónico registrado automáticamente porque eres parte de la administración del bot.")
