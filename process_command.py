@@ -476,11 +476,11 @@ async def process_command(
                 os.remove(file_path)
         return
 
-    elif command.startswith("/settings") and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
+    elif command == "/settings" and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
         if int_lvl < 6:
             return
 
-        if command.strip() == "/settings public":
+        if "public" in text.split()[1:]:
             await send_setting_public(client, message)
         else:
             await send_setting_editor(client, message)
