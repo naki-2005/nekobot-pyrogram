@@ -17,7 +17,7 @@ import os
 def guardar_parametro(parametro: str, valor: str):
     permitidos = {
         'videotools', 'mailtools', 'filetools', 'filetolink',
-        'htools', 'webtools', 'imgtools', 'public', 'protect'
+        'htools', 'webtools', 'imgtools', 'public', 'protect', 'maildir', 'mailpass', 'mailserv', 'imgapi'
     }
 
     if parametro not in permitidos:
