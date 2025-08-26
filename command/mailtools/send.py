@@ -260,76 +260,34 @@ def splitfile(file_path, part_size_mb):
 def send_email(destino, asunto, contenido=None, adjunto=False):
     import os
     import smtplib
-    import sqlite3
     from email.message import EmailMessage
-
-    def obtener_parametro(nombre):
-        try:
-            ruta_db = os.path.join(os.getcwd(), 'bot_cmd.db')
-            conn = sqlite3.connect(ruta_db)
-            cursor = conn.cursor()
-            cursor.execute('SELECT valor FROM parametros WHERE nombre = ?', (nombre,))
-            resultado = cursor.fetchone()
-            conn.close()
-            if resultado:
-                return resultado[0]
-        except Exception:
-            pass
-        return os.getenv(nombre.upper())
-
-    maildir = obtener_parametro("maildir")
-    mailpass = obtener_parametro("mailpass")
-    mailserv = obtener_parametro("mailserv")
-
-    if not all([maildir, mailpass, mailserv]):
-        print("[!] Faltan parámetros de configuración para enviar el correo.")
-        return
 
     msg = EmailMessage()
     msg['Subject'] = asunto
-    msg['From'] = "Neko Bot"
+    msg['From'] = f"Neko Bot <{os.getenv('MAILDIR')}>"
     msg['To'] = destino
-    msg.set_content(contenido if contenido else asunto, subtype='plain')
 
     if adjunto:
-        try:
-            with open(adjunto, 'rb') as f:
-                msg.add_attachment(
-                    f.read(),
-                    maintype='application',
-                    subtype='octet-stream',
-                    filename=os.path.basename(adjunto)
-                )
-        except Exception as e:
-            print(f"[!] Error al adjuntar archivo: {e}")
-            return
+        with open(adjunto, 'rb') as f:
+            msg.add_attachment(
+                f.read(),
+                maintype='application',
+                subtype='octet-stream',
+                filename=os.path.basename(adjunto)
+            )
+    else:
+        msg.set_content(contenido if contenido else asunto)
 
-    partes = mailserv.split(':')
-    if len(partes) < 2:
-        print("[!] Formato inválido para 'mailserv'. Se esperaba host:port[:tls]")
-        return
+    server_details = os.getenv('MAIL_SERVER').split(':')
+    smtp_host = server_details[0]
+    smtp_port = int(server_details[1])
+    security_enabled = len(server_details) > 2 and server_details[2].lower() == 'tls'
 
-    smtp_host = partes[0]
-    try:
-        smtp_port = int(partes[1])
-    except ValueError:
-        print("[!] Puerto SMTP inválido.")
-        return
-
-    usar_tls = len(partes) > 2 and partes[2].lower() == 'tls'
-
-    try:
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
-            server.ehlo()
-            if usar_tls:
-                server.starttls()
-                server.ehlo()
-            server.login(maildir, mailpass)
-            server.send_message(msg)
-            server.quit()
-            print("[✓] Correo enviado correctamente.")
-    except Exception as e:
-        print(f"[!] Error al enviar el correo: {e}")
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        if security_enabled:
+            server.starttls()
+        server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
+        server.send_message(msg)
 
         
 async def multisendmail(client, message):
