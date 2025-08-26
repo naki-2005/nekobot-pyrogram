@@ -117,6 +117,7 @@ async def handle_message(client, message):
 
     if not is_bot_public():
         if int_lvl < 2:
+            print(f"Acceso a {user_id} rechazado, Bot Public = {is_bot_public}")
             return
 
     if is_bot_public():
