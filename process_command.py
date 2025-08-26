@@ -500,9 +500,42 @@ async def process_command(
         if int_lvl < 6:
             return
 
-        if "public" in text.split()[1:]:
+        args = text.split()[1:]
+
+        if not args:
+            await send_setting_editor(client, message)
+            return
+
+        if "imgapi" in args:
+            idx = args.index("imgapi")
+            if len(args) > idx + 1:
+                valor = args[idx + 1]
+                guardar_parametro("imgapi", valor)
+                await message.reply(f"✅ API de imágenes guardada como 'imgapi': '{valor}'")
+            else:
+                await message.reply("⚠️ Falta el valor para 'imgapi'")
+            return
+
+        if args[0] == "mail" and len(args) >= 3:
+            subcomando = args[1]
+            valor = " ".join(args[2:])
+
+            if subcomando == "acc":
+                guardar_parametro("maildir", valor)
+                await message.reply(f"✅ Dirección de correo guardada como 'maildir': '{valor}'")
+            elif subcomando == "pass":
+                guardar_parametro("mailpass", valor)
+                await message.reply(f"✅ Contraseña guardada como 'mailpass'")
+            elif subcomando == "serv":
+                guardar_parametro("mailserv", valor)
+                await message.reply(f"✅ Servidor guardado como 'mailserv': '{valor}'")
+            else:
+                await message.reply(f"⚠️ Subcomando desconocido para 'mail': '{subcomando}'")
+            return
+
+        if "public" in args:
             await send_setting_public(client, message)
-        elif "protect" in text.split()[1:]:
+        elif "protect" in args:
             await send_setting_protect(client, message)
         else:
             await send_setting_editor(client, message)
