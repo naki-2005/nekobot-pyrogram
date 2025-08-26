@@ -2,11 +2,12 @@ import os
 import asyncio
 import nest_asyncio
 import re
+import sqlite3
 from pyrogram import Client
 from pyrogram.types import Message
 from command.moodleclient import upload_token
 from command.htools import safe_call, nh_combined_operation, nh_combined_operation_txt, cambiar_default_selection
-from command.admintools import send_access_editor, send_setting_editor, send_setting_public, handle_start
+from command.admintools import send_access_editor, send_setting_protect, send_setting_editor, send_setting_public, handle_start
 from command.imgtools import create_imgchest_post
 from command.webtools import handle_scan, handle_multiscan, summarize_lines, split_codes
 from command.mailtools.set_values import set_mail, verify_mail, set_mail_limit, set_mail_delay, multisetmail, copy_manager, mydata
@@ -27,9 +28,28 @@ vip_users = list(map(int, os.getenv('VIP_USERS', '').split(','))) if os.getenv('
 # Definir lista de IDs permitidos (allowed_ids)
 allowed_ids = set(admin_users).union(set(vip_users))
 
-# Revisar PROTECT_CONTENT
-protect_content_env = os.getenv('PROTECT_CONTENT', '').strip().lower()
-is_protect_content_enabled = protect_content_env == 'true'  # Evaluamos si es "True" en cualquier formato
+def is_bot_protect() -> bool:
+    ruta_db = os.path.join(os.getcwd(), 'bot_cmd.db')
+    if not os.path.exists(ruta_db):
+        return False
+
+    try:
+        conn = sqlite3.connect(ruta_db)
+        cursor = conn.cursor()
+        cursor.execute('SELECT valor FROM parametros WHERE nombre = ?', ('protect',))
+        resultado = cursor.fetchone()
+        conn.close()
+
+        if not resultado:
+            return False
+
+        return int(resultado[0]) == 2
+
+    except Exception as e:
+        print(f"[!] Error al acceder a bot_cmd.db: {e}")
+        return False
+        
+
 auto_users = {}
 import sqlite3
 import os
@@ -84,7 +104,7 @@ async def process_command(
     auto = auto_users.get(user_id, False)
     protect_content = int_lvl < 3
 
-    if not is_protect_content_enabled and protect_content:
+    if not is_bot_protect() and protect_content:
         protect_content = False
 
     is_vip = int_lvl >= 3
@@ -97,6 +117,9 @@ async def process_command(
     if command == "/start":
         await asyncio.create_task(handle_start(client, message))
 
+    elif command == "/mydata":
+        await asyncio.create_task(mydata(client, message))
+        
     elif command == "/help":
         await asyncio.create_task(handle_help(client, message))
         return
@@ -232,7 +255,7 @@ async def process_command(
                 caption_text = text.split(maxsplit=1)[1] if len(text.split(maxsplit=1)) > 1 else "Archivo reenviado"
                 await caption(client, chat_id, file_id, caption_text)
         return
-    elif command in ("/mydata", "/setmail", "/sendmail", "/sendmailb", "/verify", "/setmb", "/setdelay", "/multisetmail", "/multisendmail", "/savemail", "/mailcopy"):
+    elif command in ("/setmail", "/sendmail", "/sendmailb", "/verify", "/setmb", "/setdelay", "/multisetmail", "/multisendmail", "/savemail", "/mailcopy"):
         if cmd("mailtools", int_lvl):
             parts = text.split()
             arg = parts[1] if len(parts) > 1 else ""
@@ -240,9 +263,6 @@ async def process_command(
 
             if command == "/setmail":
                 await asyncio.create_task(set_mail(client, message))
-
-            elif command == "/mydata":
-                await asyncio.create_task(mydata(client, message))
 
             elif command == "/multisetmail":
                 await asyncio.create_task(multisetmail(client, message))
@@ -482,6 +502,8 @@ async def process_command(
 
         if "public" in text.split()[1:]:
             await send_setting_public(client, message)
+        elif "protect" in text.split()[1:]:
+            await send_setting_protect(client, message)
         else:
             await send_setting_editor(client, message)
         return
