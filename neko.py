@@ -21,6 +21,7 @@ from data.vars import (
 )
 from command.admintools import process_access_callback
 from command.admintools import guardar_parametro, get_main_buttons, get_accesscmd_buttons
+import sqlite3
 # -------- Bot de Telegram --------
 nest_asyncio.apply()
 app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
