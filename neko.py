@@ -48,9 +48,28 @@ def start_data():
     for i, user_id in enumerate(admin_users):
         lvl = "6" if i == 0 else "5"
         save_user_data_to_db(user_id, "lvl", lvl)
-        
-def is_bot_public():
-    return BOT_IS_PUBLIC
+
+def is_bot_public() -> bool:
+    ruta_db = os.path.join(os.getcwd(), 'bot_cmd.db')
+    if not os.path.exists(ruta_db):
+        return False
+
+    try:
+        conn = sqlite3.connect(ruta_db)
+        cursor = conn.cursor()
+        cursor.execute('SELECT valor FROM parametros WHERE nombre = ?', ('public',))
+        resultado = cursor.fetchone()
+        conn.close()
+
+        if not resultado:
+            return False
+
+        return int(resultado[0]) == 1
+
+    except Exception as e:
+        print(f"[!] Error al acceder a bot_cmd.db: {e}")
+        return False
+
 
 def format_time(seconds):
     years = seconds // (365 * 24 * 3600)
