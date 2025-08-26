@@ -195,7 +195,7 @@ def send_ver(destino, asunto, contenido=None, adjunto=False):
         server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
         server.send_message(msg)
 
-async def set_mail(client, message):
+async def set_mail(client, message, int_lvl):
     try:
         email = message.text.split(' ', 1)[1]
     except IndexError:
@@ -205,10 +205,10 @@ async def set_mail(client, message):
     user_id = message.from_user.id
     protect_content = await verify_protect(user_id)
     mail_confirmed = os.getenv('MAIL_CONFIRMED')
-    if user_id in admin_users:
+    if int_lvl => 4:
         user_emails[user_id] = email
         save_user_data_to_db(user_id, "email", email)
-        await message.reply("Correo electrónico registrado automáticamente porque eres el administrador del bot.")
+        await message.reply("Correo electrónico registrado automáticamente porque eres parte de la administración del bot.")
         return
     if mail_confirmed:
         confirmed_users = {
