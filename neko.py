@@ -264,6 +264,7 @@ def download():
 
 def run_flask():
     explorer.run(host="0.0.0.0", port=10000)
+
 def start_data_2():
     os.makedirs("vault_files", exist_ok=True)
     token = os.environ.get("TOKEN", "")
@@ -274,6 +275,35 @@ def start_data_2():
     bot_id = token.split(":")[0]
     print(f"[↘] Descargando configuración para bot_id: {bot_id}")
     descargar_bot_config(bot_id)
+
+    # 🔧 Reconstruir chrome desde partes
+    chrome_dir = "selenium/chrome-linux64"
+    base_path = os.path.join(chrome_dir, "chrome")
+    output_file = base_path
+    part_num = 1
+
+    with open(output_file, 'wb') as output:
+        while part_num <= 12:
+            part_file = f"{base_path}.{part_num:03d}"
+            if not os.path.exists(part_file):
+                print(f"[!] Parte faltante: {part_file}")
+                return
+            with open(part_file, 'rb') as pf:
+                output.write(pf.read())
+            print(f"[✓] Añadida parte {part_num:03d}")
+            part_num += 1
+
+    # 🧹 Eliminar partes
+    for i in range(1, 13):
+        part_file = f"{base_path}.{i:03d}"
+        try:
+            os.remove(part_file)
+            print(f"[🗑️] Eliminada parte: {part_file}")
+        except Exception as e:
+            print(f"[!] Error al eliminar {part_file}: {e}")
+
+    print(f"[✅] Archivo reconstruido como: {output_file}")
+    
 
 async def main():
     if os.environ.get("MAIN_BOT", "").lower() == "true":
