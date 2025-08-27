@@ -24,6 +24,7 @@ async def lista_cmd(app):
         BotCommand("3h", "Descarga un manga hentai de 3Hentai"),
         BotCommand("covernh", "Obtener info de un manga hentai de Nhentai"),
         BotCommand("cover3h", "Obtener info de un manga hentai de 3Hentai"),
+        BotCommand("hito", "Descarga un manga hentai de Hitomila"),
         BotCommand("scan", "Escanea los links dentro de un link indicando"),
         BotCommand("resumecodes", "Extrae codigos Hentai de archivos txt del scan"),
         BotCommand("resumetxtcodes", "Extrae codigos Hentai y los envia en txt"),
