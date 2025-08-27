@@ -200,7 +200,6 @@ def load_user_config(user_id, key):
         "User-Agent": "python-urllib"
     }
 
-    # 📥 Descargar la base
     try:
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req) as response:
@@ -211,30 +210,25 @@ def load_user_config(user_id, key):
     except Exception as e:
         raise RuntimeError(f"No se pudo descargar la base de datos: {e}")
 
-    # 🔍 Leer datos del usuario
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    # 🧱 Asegurar columna
     cursor.execute("PRAGMA table_info(user_data)")
     existing_cols = [col[1] for col in cursor.fetchall()]
     if key not in existing_cols:
         cursor.execute(f'ALTER TABLE user_data ADD COLUMN {escape_sql_key(key)} TEXT')
-
-    # 📤 Obtener dato
     cursor.execute(f'SELECT {escape_sql_key(key)} FROM user_data WHERE user_id = ?', (user_id,))
     row = cursor.fetchone()
     conn.close()
 
     val = row[0] if row else None
-
-    # 🧠 Defaults inteligentes
-    if key == "limit":
+    if row is None:
+        return "1"
+    elif key == "limit":
         return int(val) if val and val.isdigit() else 10
     elif key == "delay":
         return val if val else "manual"
     elif val is None:
-        return None
+        return "1"
     else:
         return val
-        
