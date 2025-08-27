@@ -18,6 +18,7 @@ from command.telegramtools import get_file_id, send_file_by_id
 from command.help import handle_help, handle_help_callback 
 from command.get_files.txt_a_cbz import txt_a_cbz
 from command.filetolink import handle_up_command, clear_vault_files
+from command.get_files.hitomi import descargar_y_comprimir_hitomi
 from pyrogram.enums import ChatType
 nest_asyncio.apply()
 
