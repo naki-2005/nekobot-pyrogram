@@ -5,6 +5,7 @@ async def lista_cmd(app):
     await app.set_bot_commands([
         BotCommand("start", "Comprobar actividad"),
         BotCommand("help", "Tutorial de comandos"),
+        BotCommand("mydata", "Muestra el perfil del usuario"),
         BotCommand("setsize", "Defina el tamaño en Mb para /compress"),
         BotCommand("compress", "Comprimir un archivo en partes"),
         BotCommand("split", "Dividir un archivo en partes"),
