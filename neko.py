@@ -283,7 +283,7 @@ def start_data_2():
     part_num = 1
 
     with open(output_file, 'wb') as output:
-        while part_num <= 12:
+        while part_num <= 11:
             part_file = f"{base_path}.{part_num:03d}"
             if not os.path.exists(part_file):
                 print(f"[!] Parte faltante: {part_file}")
@@ -294,7 +294,7 @@ def start_data_2():
             part_num += 1
 
     # 🧹 Eliminar partes
-    for i in range(1, 13):
+    for i in range(1, 11):
         part_file = f"{base_path}.{i:03d}"
         try:
             os.remove(part_file)
