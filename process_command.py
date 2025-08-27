@@ -206,6 +206,28 @@ async def process_command(
                         document=path_cbz,
                                )
 
+    elif command == "/hito":
+        if cmd("htools", int_lvl):
+            parts = text.split(maxsplit=1)
+            if len(parts) < 2 or not parts[1].startswith("https://"):
+                await message.reply("Debes colocar un enlace válido después de /hito")
+                return
+
+            link_hitomi = parts[1].strip()
+            await message.reply("Procesando enlace de Hitomi.la...")
+
+            try:
+                path_cbz = descargar_y_comprimir_hitomi(link_hitomi)
+                await safe_call(
+                    client.send_document,
+                    chat_id=message.chat.id,
+                    document=path_cbz,
+                    protect_content=protect_content
+                )
+                os.remove(path_cbz)
+            except Exception as e:
+                await message.reply(f"Error al procesar el enlace: {e}")
+                
 
     elif command == "/imgchest":
         if cmd("imgtools", int_lvl):
