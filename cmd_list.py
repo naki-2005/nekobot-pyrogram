@@ -31,6 +31,6 @@ async def lista_cmd(app):
         BotCommand("codesplit", "Divide la cantidas de códigos en un txt"),
         BotCommand("imgchest", "Publica una imagen en Imgchest"),
         BotCommand("access", "Obten acceso al bot mediante una contraseña"),
-        BotCommand("settings", "(admin) configura el bot"),
+        BotCommand("settings", "(owner) configura el bot"),
         BotCommand("edituser", "(admin) controla el acceso al bot")
     ])
