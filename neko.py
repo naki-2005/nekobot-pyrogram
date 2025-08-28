@@ -4,8 +4,10 @@ import asyncio
 import threading
 import logging
 import random
+import nest_asyncio
 import sqlite3
 import argparse
+import sys
 
 from flask import Flask, send_from_directory, request, render_template_string
 from pyrogram import Client, filters
@@ -19,18 +21,30 @@ from my_server_flask import run_flask
 from start_bot import start_data, start_data_2
 from process_query import process_query
 
-import nest_asyncio
 nest_asyncio.apply()
 
 parser = argparse.ArgumentParser(description="Inicializa el bot con credenciales")
+
 parser.add_argument("-a", "--api_id", required=True, help="API ID de Telegram")
 parser.add_argument("-H", "--api_hash", required=True, help="API Hash de Telegram")
-parser.add_argument("-t", "--bot_token", required=True, help="Token del bot")
+parser.add_argument("-t", "--bot_token", help="Token del bot")
+parser.add_argument("-ss", "--session_string", help="Session string del usuario")
+
 args = parser.parse_args()
 
-app = Client("my_bot", api_id=args.api_id, api_hash=args.api_hash, bot_token=args.bot_token)
+if args.bot_token and args.session_string:
+    print("❌ No puedes usar -t y -ss al mismo tiempo. Usa solo uno.")
+    sys.exit(1)
+elif not args.bot_token and not args.session_string:
+    print("❌ Debes proporcionar -t o -ss. Uno de los dos es obligatorio.")
+    sys.exit(1)
 
-bot_is_sleeping = False
+if args.bot_token:
+    app = Client("my_bot", api_id=args.api_id, api_hash=args.api_hash, bot_token=args.bot_token)
+else:
+    app = Client("my_bot", api_id=args.api_id, api_hash=args.api_hash, session_string=args.session_string)
+
+bot_is_sle1eping = False
 sleep_duration = 0
 start_sleep_time = 0
 
