@@ -22,12 +22,6 @@ from command.get_files.hitomi import descargar_y_comprimir_hitomi
 from pyrogram.enums import ChatType
 nest_asyncio.apply()
 
-# Definir usuarios administradores y VIPs
-admin_users = list(map(int, os.getenv('ADMINS', '').split(','))) if os.getenv('ADMINS') else []
-vip_users = list(map(int, os.getenv('VIP_USERS', '').split(','))) if os.getenv('VIP_USERS') else []
-
-# Definir lista de IDs permitidos (allowed_ids)
-allowed_ids = set(admin_users).union(set(vip_users))
 
 def is_bot_protect() -> bool:
     ruta_db = os.path.join(os.getcwd(), 'bot_cmd.db')
@@ -89,8 +83,6 @@ def cmd(command_env: str, int_lvl: int) -> bool:
 async def process_command(
     client: Client,
     message: Message,
-    active_cmd: str,
-    admin_cmd: str,
     user_id: int,
     username: str,
     chat_id: int,
