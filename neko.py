@@ -116,9 +116,7 @@ async def handle_message(client, message):
             await message.reply("Por favor, proporciona un número válido en segundos.")
         return
 
-    active_cmd = os.getenv('ACTIVE_CMD', '').lower()
-    admin_cmd = os.getenv('ADMIN_CMD', '').lower()
-    await process_command(client, message, active_cmd, admin_cmd, user_id, username, chat_id, int_lvl)
+    await process_command(client, message, user_id, username, chat_id, int_lvl)
 
 @app.on_callback_query()
 async def callback_handler(client, callback_query):
