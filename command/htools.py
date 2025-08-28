@@ -31,12 +31,6 @@ def cambiar_default_selection(userid, nuevaseleccion):
     defaultselectionmap[userid] = nuevaseleccion
 
 import unicodedata
-
-def limpiarnombre(nombre):
-    nombre = nombre.replace('\n', ' ').strip()
-    nombre = unicodedata.normalize('NFC', nombre)
-    return re.sub(r'[^a-zA-Z0-9ñÑáéíóúÁÉÍÓÚ ]', '', nombre)
-
 async def descargarimagen_async(session, url, path):
     try:
         async with session.get(url, timeout=10) as resp:
@@ -73,18 +67,27 @@ async def safe_call(func, *args, **kwargs):
             print(f"⏳ Esperando {e.value} seg para continuar")
             await asyncio.sleep(e.value)
 
+def limpiarnombre(nombre: str) -> str:
+    nombre = nombre.replace('\n', ' ').strip()
+    nombre = unicodedata.normalize('NFC', nombre)
+    return re.sub(r'[^a-zA-Z0-9ñÑáéíóúÁÉÍÓÚ ]', '', nombre)
+
 async def nh_combined_operation(client, message, codigos, tipo, proteger, userid, operacion):
     seleccion = defaultselectionmap.get(userid, "cbz")
-    MAX_FILENAME_LEN = 100
+    EXTENSIONES = {"cbz": ".cbz", "pdf": ".pdf", "both": ".cbz"}
+    extension = EXTENSIONES.get(seleccion, ".cbz")
+    MAX_FILENAME_LEN = 63
 
     for codigo in codigos:
         datos = obtenerporcli(codigo, tipo, cover=(operacion == "cover"))
         texto_original = datos.get("texto", "").strip()
         texto_titulo = f"{codigo} {texto_original}"
         nombrelimpio = limpiarnombre(texto_original)
-        nombrebase = f"{codigo}_{nombrelimpio}" if nombrelimpio else f"{tipo}_{codigo}"
-        if len(nombrebase) > MAX_FILENAME_LEN:
-            nombrebase = nombrebase[:MAX_FILENAME_LEN].rstrip("_")
+        nombrebase = f"{codigo} {nombrelimpio}" if nombrelimpio else f"{tipo} {codigo}"
+        nombrebase = nombrebase.strip()
+        max_nombre_len = MAX_FILENAME_LEN - len(extension)
+        if len(nombrebase) > max_nombre_len:
+            nombrebase = nombrebase[:max_nombre_len].rstrip()
 
         imagenes = datos["imagenes"]
         if not imagenes:
@@ -147,14 +150,14 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                 archivos = []
 
                 if seleccion in ["cbz", "both"]:
-                    cbzbase = f"{nombrebase}_cbz"
+                    cbzbase = f"{nombrebase}"
                     cbzpath = f"{cbzbase}.cbz"
                     shutil.make_archive(cbzbase, 'zip', tmpdir)
                     os.rename(f"{cbzbase}.zip", cbzpath)
                     archivos.append(cbzpath)
 
                 if seleccion in ["pdf", "both"]:
-                    pdfpath = f"{nombrebase}_pdf.pdf"
+                    pdfpath = f"{nombrebase}.pdf"
                     try:
                         mainimages = []
                         for path in paths:
@@ -179,6 +182,7 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                     os.remove(archivo)
 
         await safe_call(progresomsg.delete)
+
 
 async def nh_combined_operation_txt(client, message, tipo, proteger, userid, operacion):
     if not message.reply_to_message or not message.reply_to_message.document:
