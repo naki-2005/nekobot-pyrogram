@@ -1,34 +1,25 @@
 import os
 import time
 import asyncio
-import nest_asyncio
 import threading
 import logging
 import random
+import sqlite3
 from flask import Flask, send_from_directory, request, render_template_string
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from process_command import process_command
-from command.help import handle_help_callback
-from command.mailtools.send import mail_query
-from command.db.db import save_user_data_to_db, load_user_config, subir_bot_config, descargar_bot_config
+from command.db.db import save_user_data_to_db, load_user_config
 from cmd_list import lista_cmd
-from data.stickers import saludos, STICKER_SALUDO, STICKER_DESCANSO, STICKER_REACTIVADO
-from data.vars import (
-    api_id, api_hash, bot_token, admin_users, users, temp_users,
-    temp_chats, vip_users, ban_users, MAIN_ADMIN, CODEWORD,
-    BOT_IS_PUBLIC, PROTECT_CONTENT, allowed_ids, allowed_users
-)
-from command.admintools import process_access_callback
-from command.admintools import guardar_parametro, get_main_buttons, get_accesscmd_buttons
-import sqlite3
-
+from data.stickers import STICKER_DESCANSO, STICKER_REACTIVADO
+from data.vars import api_id, api_hash, bot_token
 from my_server_flask import run_flask
 from start_bot import start_data, start_data_2
 from process_query import process_query
 
-# -------- Bot de Telegram --------
+import nest_asyncio
 nest_asyncio.apply()
+
 app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
 
 bot_is_sleeping = False
@@ -39,23 +30,18 @@ def is_bot_public() -> bool:
     ruta_db = os.path.join(os.getcwd(), 'bot_cmd.db')
     if not os.path.exists(ruta_db):
         return False
-
     try:
         conn = sqlite3.connect(ruta_db)
         cursor = conn.cursor()
         cursor.execute('SELECT valor FROM parametros WHERE nombre = ?', ('public',))
         resultado = cursor.fetchone()
         conn.close()
-
         if not resultado:
             return False
-
         return int(resultado[0]) == 1
-
     except Exception as e:
         print(f"[!] Error al acceder a bot_cmd.db: {e}")
         return False
-
 
 def format_time(seconds):
     years = seconds // (365 * 24 * 3600)
@@ -70,18 +56,6 @@ def format_time(seconds):
     if minutes: result.append(f"{minutes} minuto" if minutes == 1 else f"{minutes} minutos")
     if seconds: result.append(f"{seconds} segundo" if seconds == 1 else f"{seconds} segundos")
     return ", ".join(result)
-
-async def process_access_command(message):
-    user_id = message.from_user.id
-    if len(message.command) > 1 and message.command[1] == CODEWORD:
-        if user_id not in temp_users:
-            temp_users.append(user_id)
-            allowed_users.append(user_id)
-            await message.reply("Acceso concedido.")
-        else:
-            await message.reply("Ya estás en la lista de acceso temporal.")
-    else:
-        await message.reply("Palabra secreta incorrecta.")
 
 @app.on_message()
 async def handle_message(client, message):
@@ -103,7 +77,7 @@ async def handle_message(client, message):
 
     if not is_bot_public():
         if int_lvl < 2:
-            print(f"Acceso a {user_id} rechazado, Bot Public = {is_bot_public}")
+            print(f"Acceso a {user_id} rechazado, Bot Public = {is_bot_public()}")
             return
 
     if is_bot_public():
@@ -142,28 +116,21 @@ async def handle_message(client, message):
             await message.reply("Por favor, proporciona un número válido en segundos.")
         return
 
-    if message.text and message.text.startswith("/access") and message.chat.type == "private":
-        await process_access_command(message)
-        return
-
     active_cmd = os.getenv('ACTIVE_CMD', '').lower()
     admin_cmd = os.getenv('ADMIN_CMD', '').lower()
     await process_command(client, message, active_cmd, admin_cmd, user_id, username, chat_id, int_lvl)
 
-
 @app.on_callback_query()
 async def callback_handler(client, callback_query):
     await process_query(client, callback_query)
-    
+
 logging.basicConfig(level=logging.ERROR)
+
 async def main():
     if os.environ.get("MAIN_BOT", "").lower() == "true":
         start_data()
-
     start_data_2()
-
     threading.Thread(target=run_flask, daemon=True).start()
-
     await app.start()
     print("Bot iniciado y servidor Flask corriendo en puerto 5000.")
     await asyncio.Event().wait()
