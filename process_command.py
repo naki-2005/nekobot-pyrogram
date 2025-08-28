@@ -88,7 +88,6 @@ async def process_command(
     chat_id: int,
     int_lvl: int
 ):
-    global allowed_ids
     text = message.text.strip().lower() if message.text else ""
     if message.from_user is None:
         return
@@ -376,7 +375,7 @@ async def process_command(
             if command == "/convert":
                 reply = message.reply_to_message
                 if reply and (reply.video or (reply.document and reply.document.mime_type.startswith("video/"))):
-                    await asyncio.create_task(compress_video(admin_users, client, message, allowed_ids))
+                    await asyncio.create_task(compress_video(client, message, int_lvl))
 
             elif command == "/autoconvert":
                 auto_users[user_id] = not auto_users.get(user_id, False)
@@ -384,12 +383,12 @@ async def process_command(
                 await client.send_message(chat_id=message.chat.id, text=status, protect_content=False)
 
             elif command == "/calidad":
-                await asyncio.create_task(update_video_settings(client, message, allowed_ids))
+                await asyncio.create_task(update_video_settings(client, message, int_lvl))
 
             elif command == "/cancel":
                 try:
                     task_id = arg.strip()
-                    await cancelar_tarea(admin_users, client, task_id, message.chat.id, message, allowed_ids)
+                    await cancelar_tarea(client, task_id, message.chat.id, message, int_lvl)
                 except IndexError:
                     await client.send_message(
                         chat_id=message.chat.id,
@@ -401,13 +400,13 @@ async def process_command(
                 await cambiar_miniatura(client, message)
 
             elif command == "/list":
-                if user_id in admin_users or user_id in vip_users:
-                    await listar_tareas(client, chat_id, allowed_ids, message)
+                if int_lvl >= 3:  # VIP o superior
+                    await listar_tareas(client, chat_id, int_lvl, message)
                 else:
                     await client.send_message(chat_id=chat_id, text="⚠️ No tienes permiso para usar este comando.")
 
             elif auto and (message.video or (message.document and message.document.mime_type.startswith("video/"))):
-                await asyncio.create_task(compress_video(admin_users, client, message, allowed_ids))
+                await asyncio.create_task(compress_video(client, message, int_lvl))
         return
 
     elif command in ("/upfile", "/clearfiles"):
@@ -487,76 +486,5 @@ async def process_command(
                     for i in range(0, len(codes_list), 25):
                         await message.reply(", ".join(codes_list[i:i+25]))
                 else:
-                    await message.reply("No se encontraron códigos en el archivo.")
+                    await message.reply("No se encontraron códigos válidos en el archivo.")
                 os.remove(file_path)
-
-
-            elif command == "/resumetxtcodes" and reply and reply.document:
-                file_path = await client.download_media(reply.document)
-                if not file_path.endswith(".txt"):
-                    os.remove(file_path)
-                    await message.reply("Solo usar con TXT.")
-                    return
-                with open(file_path, "r", encoding="utf-8") as f:
-                    lines = [line.strip() for line in f.readlines()]
-                codes = await summarize_lines(lines)
-                if codes:
-                    txt_file_path = "codes_summary.txt"
-                    with open(txt_file_path, "w", encoding="utf-8") as txt_file:
-                        txt_file.write(codes)
-                    await client.send_document(chat_id=message.chat.id, document=txt_file_path, caption="Aquí están todos los códigos.")
-                    os.remove(txt_file_path)
-                else:
-                    await message.reply("No se encontraron códigos en el archivo.")
-                os.remove(file_path)
-        return
-
-    elif command == "/settings" and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
-        if int_lvl < 6:
-            return
-
-        args = text.split()[1:]
-
-        if not args:
-            await send_setting_editor(client, message)
-            return
-
-        if "imgapi" in args:
-            idx = args.index("imgapi")
-            if len(args) > idx + 1:
-                valor = args[idx + 1]
-                guardar_parametro("imgapi", valor)
-                await message.reply(f"✅ API de imágenes guardada como 'imgapi': '{valor}'")
-            else:
-                await message.reply("⚠️ Falta el valor para 'imgapi'")
-            return
-
-        if args[0] == "mail" and len(args) >= 3:
-            subcomando = args[1]
-            valor = " ".join(args[2:])
-
-            if subcomando == "acc":
-                guardar_parametro("maildir", valor)
-                await message.reply(f"✅ Dirección de correo guardada como 'maildir': '{valor}'")
-            elif subcomando == "pass":
-                guardar_parametro("mailpass", valor)
-                await message.reply(f"✅ Contraseña guardada como 'mailpass'")
-            elif subcomando == "serv":
-                guardar_parametro("mailserv", valor)
-                await message.reply(f"✅ Servidor guardado como 'mailserv': '{valor}'")
-            else:
-                await message.reply(f"⚠️ Subcomando desconocido para 'mail': '{subcomando}'")
-            return
-
-        if "public" in args:
-            await send_setting_public(client, message)
-        elif "protect" in args:
-            await send_setting_protect(client, message)
-        else:
-            await send_setting_editor(client, message)
-        return
-
-
-    elif command == "/edituser" and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
-        await send_access_editor(client, message)
-        return
