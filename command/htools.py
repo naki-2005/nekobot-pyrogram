@@ -79,6 +79,9 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
         if len(nombrebase) > max_nombre_len:
             nombrebase = nombrebase[:max_nombre_len].rstrip()
 
+        nombrelimpio_completo = limpiarnombre(texto_original)
+        carpeta_raiz = os.path.abspath(f"{codigo} - {nombrelimpio_completo}")
+
         imagenes = datos["imagenes"]
         if not imagenes:
             await safe_call(message.reply, f"❌ No se encontraron imágenes para {codigo}")
@@ -128,7 +131,6 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             archivos = []
 
             if seleccion in ["cbz", "both"]:
-                carpeta_raiz = os.path.abspath(nombrebase)
                 os.makedirs(carpeta_raiz, exist_ok=True)
                 for path in paths:
                     shutil.move(path, os.path.join(carpeta_raiz, os.path.basename(path)))
@@ -226,6 +228,6 @@ async def nh_combined_operation_txt(client, message, tipo, proteger, userid, ope
             )
 
             filepath = nuevo_path
-        else:
+        else:            
             await safe_call(message.reply, "✅ Descarga terminada")
             return
