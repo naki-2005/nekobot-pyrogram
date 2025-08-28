@@ -25,7 +25,8 @@ import sqlite3
 
 from my_server_flask import run_flask
 from start_bot import start_data, start_data_2
-    
+from process_query import process_query
+
 # -------- Bot de Telegram --------
 nest_asyncio.apply()
 app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
@@ -149,50 +150,12 @@ async def handle_message(client, message):
     admin_cmd = os.getenv('ADMIN_CMD', '').lower()
     await process_command(client, message, active_cmd, admin_cmd, user_id, username, chat_id, int_lvl)
 
-logging.basicConfig(level=logging.ERROR)
 
 @app.on_callback_query()
 async def callback_handler(client, callback_query):
-    data = callback_query.data
-
-    mail_related = (
-        ["send_next_part", "send_5_parts", "send_10_parts", "cancel_send", "no_action"] +
-        [f"auto_delay_{x}" for x in [10, 30, 60, 90, 180]]
-    )
-
-    help_related = [f"help_{x}" for x in [1, 2, 3, 4, 5]] + ["help_back"]
-
-    if data in mail_related:
-        await mail_query(client, callback_query)
-
-    elif data in help_related:
-        await handle_help_callback(client, callback_query)
-
-    elif data.startswith("id_") and "#" in data:
-        await process_access_callback(client, callback_query)
-
-    elif data.startswith("config_"):
-        parametro = data.split("_")[1]
-        texto = f"Editar acceso a los comandos de {parametro}"
-        await callback_query.message.edit_text(
-            texto,
-            reply_markup=get_accesscmd_buttons(parametro)
-        )
-
-    elif data.startswith("access_"):
-        _, parametro, valor = data.split("_")
-        guardar_parametro(parametro, valor)
-        await callback_query.answer("✅ Configuración guardada", show_alert=True)
-
-    elif data == "save_config":
-        bot_info = await client.get_me()
-        bot_id = str(bot_info.id)
-        subir_bot_config(bot_id)
-        await callback_query.answer("📤 Configuración subida al repositorio", show_alert=True)
-
-    else:
-        await callback_query.answer("No se ha encontrado una respuesta Query correcta.", show_alert=True)
-
+    await process_query(client, callback_query)
+    
+logging.basicConfig(level=logging.ERROR)
 async def main():
     if os.environ.get("MAIN_BOT", "").lower() == "true":
         start_data()
