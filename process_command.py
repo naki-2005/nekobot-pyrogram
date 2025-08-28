@@ -77,7 +77,7 @@ def cmd(command_env: str, int_lvl: int) -> bool:
             return False 
 
     except Exception as e:
-        print(f"[!] Error al acceder a bot_cmd.db: {e}")
+        print(f"[!] Error al acceder to bot_cmd.db: {e}")
         return False
         
 async def process_command(
@@ -375,7 +375,7 @@ async def process_command(
             if command == "/convert":
                 reply = message.reply_to_message
                 if reply and (reply.video or (reply.document and reply.document.mime_type.startswith("video/"))):
-                    await asyncio.create_task(compress_video(client, message, protect_content))
+                    await asyncio.create_task(compress_video(client, message, protect_content, int_lvl))
 
             elif command == "/autoconvert":
                 auto_users[user_id] = not auto_users.get(user_id, False)
@@ -388,7 +388,7 @@ async def process_command(
             elif command == "/cancel":
                 try:
                     task_id = arg.strip()
-                    await cancelar_tarea(client, task_id, message.chat.id, message, protect_content)
+                    await cancelar_tarea(int_lvl, client, task_id, message.chat.id, message, protect_content)
                 except IndexError:
                     await client.send_message(
                         chat_id=message.chat.id,
@@ -401,12 +401,12 @@ async def process_command(
 
             elif command == "/list":
                 if int_lvl >= 3:
-                    await listar_tareas(client, chat_id, protect_content, message)
+                    await listar_tareas(client, chat_id, protect_content, message, int_lvl)
                 else:
                     await client.send_message(chat_id=chat_id, text="⚠️ No tienes permiso para usar este comando.")
 
             elif auto and (message.video or (message.document and message.document.mime_type.startswith("video/"))):
-                await asyncio.create_task(compress_video(client, message, int_lvl))
+                await asyncio.create_task(compress_video(client, message, protect_content, int_lvl))
         return
 
     elif command in ("/upfile", "/clearfiles"):
@@ -488,3 +488,52 @@ async def process_command(
                 else:
                     await message.reply("No se encontraron códigos válidos en el archivo.")
                 os.remove(file_path)
+
+    elif command == "/settings" and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
+        if int_lvl < 6:
+            return
+
+        args = text.split()[1:]
+
+        if not args:
+            await send_setting_editor(client, message)
+            return
+
+        if "imgapi" in args:
+            idx = args.index("imgapi")
+            if len(args) > idx + 1:
+                valor = args[idx + 1]
+                guardar_parametro("imgapi", valor)
+                await message.reply(f"✅ API de imágenes guardada como 'imgapi': '{valor}'")
+            else:
+                await message.reply("⚠️ Falta el valor para 'imgapi'")
+            return
+
+        if args[0] == "mail" and len(args) >= 3:
+            subcomando = args[1]
+            valor = " ".join(args[2:])
+
+            if subcomando == "acc":
+                guardar_parametro("maildir", valor)
+                await message.reply(f"✅ Dirección de correo guardada como 'maildir': '{valor}'")
+            elif subcomando == "pass":
+                guardar_parametro("mailpass", valor)
+                await message.reply(f"✅ Contraseña guardada como 'mailpass'")
+            elif subcomando == "serv":
+                guardar_parametro("mailserv", valor)
+                await message.reply(f"✅ Servidor guardado como 'mailserv': '{valor}'")
+            else:
+                await message.reply(f"⚠️ Subcomando desconocido para 'mail': '{subcomando}'")
+            return
+
+        if "public" in args:
+            await send_setting_public(client, message)
+        elif "protect" in args:
+            await send_setting_protect(client, message)
+        else:
+            await send_setting_editor(client, message)
+        return
+
+    elif command == "/edituser" and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
+        await send_access_editor(client, message)
+        return
