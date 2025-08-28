@@ -24,7 +24,7 @@ nest_asyncio.apply()
 
 parser = argparse.ArgumentParser(description="Inicializa el bot con credenciales")
 parser.add_argument("-a", "--api_id", required=True, help="API ID de Telegram")
-parser.add_argument("-h", "--api_hash", required=True, help="API Hash de Telegram")
+parser.add_argument("-H", "--api_hash", required=True, help="API Hash de Telegram")
 parser.add_argument("-t", "--bot_token", required=True, help="Token del bot")
 args = parser.parse_args()
 
