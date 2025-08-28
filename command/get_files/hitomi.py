@@ -41,7 +41,7 @@ def obtener_titulo_y_autor(link_hitomi: str, chrome_path: str, driver_path: str)
 
     return titulo, autor
 
-def truncar_nombre(nombre: str, max_len: int = 30) -> str:
+def truncar_nombre(nombre: str, max_len: int = 63) -> str:
     return nombre[:max_len - 4].strip() + ".cbz"
 
 def descargar_y_comprimir_hitomi(link_hitomi: str) -> str:
