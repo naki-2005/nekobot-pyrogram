@@ -16,7 +16,7 @@ def get_info(msg: Message):
 def secure_filename(fname: str) -> str:
     fname = os.path.basename(fname)
     #fname = fname.strip().replace(" ", "_")
-    fname = re.sub(r"[^a-zA-Z0-9_.-]", "", fname)
+    fname = re.sub(r"[^a-zA-Z0-9_.- ]", "", fname)
     return fname or "file"
 
 async def clear_vault_files(client: Client, message: Message):
