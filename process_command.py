@@ -375,7 +375,7 @@ async def process_command(
             if command == "/convert":
                 reply = message.reply_to_message
                 if reply and (reply.video or (reply.document and reply.document.mime_type.startswith("video/"))):
-                    await asyncio.create_task(compress_video(client, message, int_lvl))
+                    await asyncio.create_task(compress_video(client, message, protect_content))
 
             elif command == "/autoconvert":
                 auto_users[user_id] = not auto_users.get(user_id, False)
@@ -383,12 +383,12 @@ async def process_command(
                 await client.send_message(chat_id=message.chat.id, text=status, protect_content=False)
 
             elif command == "/calidad":
-                await asyncio.create_task(update_video_settings(client, message, int_lvl))
+                await asyncio.create_task(update_video_settings(client, message, protect_content))
 
             elif command == "/cancel":
                 try:
                     task_id = arg.strip()
-                    await cancelar_tarea(client, task_id, message.chat.id, message, int_lvl)
+                    await cancelar_tarea(client, task_id, message.chat.id, message, protect_content)
                 except IndexError:
                     await client.send_message(
                         chat_id=message.chat.id,
@@ -400,8 +400,8 @@ async def process_command(
                 await cambiar_miniatura(client, message)
 
             elif command == "/list":
-                if int_lvl >= 3:  # VIP o superior
-                    await listar_tareas(client, chat_id, int_lvl, message)
+                if int_lvl >= 3:
+                    await listar_tareas(client, chat_id, protect_content, message)
                 else:
                     await client.send_message(chat_id=chat_id, text="⚠️ No tienes permiso para usar este comando.")
 
