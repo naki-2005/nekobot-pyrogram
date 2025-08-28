@@ -5,14 +5,16 @@ import threading
 import logging
 import random
 import sqlite3
+import argparse
+
 from flask import Flask, send_from_directory, request, render_template_string
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
 from process_command import process_command
 from command.db.db import save_user_data_to_db, load_user_config
 from cmd_list import lista_cmd
 from data.stickers import STICKER_DESCANSO, STICKER_REACTIVADO
-from data.vars import api_id, api_hash, bot_token
 from my_server_flask import run_flask
 from start_bot import start_data, start_data_2
 from process_query import process_query
@@ -20,7 +22,13 @@ from process_query import process_query
 import nest_asyncio
 nest_asyncio.apply()
 
-app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
+parser = argparse.ArgumentParser(description="Inicializa el bot con credenciales")
+parser.add_argument("-a", "--api_id", required=True, help="API ID de Telegram")
+parser.add_argument("-h", "--api_hash", required=True, help="API Hash de Telegram")
+parser.add_argument("-t", "--bot_token", required=True, help="Token del bot")
+args = parser.parse_args()
+
+app = Client("my_bot", api_id=args.api_id, api_hash=args.api_hash, bot_token=args.bot_token)
 
 bot_is_sleeping = False
 sleep_duration = 0
