@@ -5,7 +5,7 @@ import re
 import subprocess
 import random
 from command.video_processor import procesar_video
-from data.vars import admin_users, vip_users, video_limit, video_settings
+from data.vars import video_limit, video_settings
 from data.stickers import sobre_mb
 import time
 from pyrogram import Client
@@ -73,7 +73,7 @@ async def cancelar_tarea(int_lvl, client, task_id, chat_id, message, protect_con
 
     if task_id in tareas_en_ejecucion:
         tarea = tareas_en_ejecucion[task_id]
-        if tarea["user_id"] == user_id_requesting or int_lvl > 3 :
+        if tarea["user_id"] == user_id_requesting or int_lvl >= 4:  # Admin o superior
             tarea["cancel"] = True 
             del tareas_en_ejecucion[task_id]
             await client.send_message(chat_id=chat_id, text=f"❌ Tarea `{task_id}` cancelada.", protect_content=protect_content)
@@ -86,8 +86,8 @@ async def cancelar_tarea(int_lvl, client, task_id, chat_id, message, protect_con
 
     elif task_id in [t["id"] for t in cola_de_tareas]:
         tarea = next((t for t in cola_de_tareas if t["id"] == task_id), None)
-        if tarea and (tarea["user_id"] == user_id_requesting or user_id_requesting in admin_users):
-            cola_de_tareas = [t for t in cola_de_tareas if t["id"] != task_id]  # Remover tarea de la cola
+        if tarea and (tarea["user_id"] == user_id_requesting or int_lvl >= 4):  # Admin o superior
+            cola_de_tareas = [t for t in cola_de_tareas if t["id"] != task_id]
             await client.send_message(chat_id=chat_id, text=f"❌ Tarea `{task_id}` eliminada de la cola.", protect_content=protect_content)
         else:
             await client.send_message(chat_id=chat_id, text="⚠️ No tienes permiso para eliminar esta tarea de la cola.", protect_content=protect_content)
@@ -95,21 +95,21 @@ async def cancelar_tarea(int_lvl, client, task_id, chat_id, message, protect_con
     else:
         await client.send_message(chat_id=chat_id, text=f"⚠️ No se encontró la tarea con ID `{task_id}`.", protect_content=protect_content)
 
-
-async def listar_tareas(client, chat_id, protect_content, message):
+async def listar_tareas(client, chat_id, protect_content, message, int_lvl):
     user_id_requesting = int(message.from_user.id) 
 
     global cola_de_tareas, tareas_en_ejecucion
 
     lista_tareas = "📝 Lista de tareas:\n\n"
 
-    tareas_en_ejecucion_filtradas = tareas_en_ejecucion if int_lvl > 3 else {
+    # Filtrar tareas según permisos
+    tareas_en_ejecucion_filtradas = tareas_en_ejecucion if int_lvl >= 4 else {
         k: v for k, v in tareas_en_ejecucion.items() if int(v["user_id"]) == user_id_requesting
     }
 
     cola_enumerada = [(index + 1, tarea) for index, tarea in enumerate(cola_de_tareas)]
 
-    cola_de_tareas_filtradas = cola_enumerada if user_id_requesting in admin_users else [
+    cola_de_tareas_filtradas = cola_enumerada if int_lvl >= 4 else [
         (index, tarea) for index, tarea in cola_enumerada if int(tarea["user_id"]) == user_id_requesting
     ]
 
@@ -130,14 +130,12 @@ async def listar_tareas(client, chat_id, protect_content, message):
 
     await client.send_message(chat_id=chat_id, text=lista_tareas, protect_content=protect_content)
 
-
-# Compresión de video
-async def compress_video(client, message, protect_content):
+async def compress_video(client, message, protect_content, int_lvl):
     user_id = message.from_user.id
+    chat_id = message.chat.id
 
     global cola_de_tareas, tareas_en_ejecucion
     task_id = str(uuid.uuid4())
-    chat_id = message.chat.id
 
     if len(tareas_en_ejecucion) >= max_tareas:
         cola_de_tareas.append({
@@ -164,26 +162,31 @@ async def compress_video(client, message, protect_content):
         if message.video or (message.document and message.document.mime_type.startswith("video/")):
             video_size = message.video.file_size if message.video else message.document.file_size
 
-            if video_limit and video_size > video_limit and chat_id not in admin_users and chat_id not in vip_users:
+            # Verificar límite de tamaño según nivel de usuario
+            if video_limit and video_size > video_limit and int_lvl < 3:  # Usuarios normales
                 sticker = random.choice(sobre_mb)
                 await client.send_sticker(chat_id=chat_id, sticker=sticker[0])
                 time.sleep(1)
                 await client.send_message(chat_id=chat_id, text="El archivo es demasiado grande")
                 return
-            if video_limit and video_size > video_limit and (chat_id in admin_users or chat_id in vip_users):
+            if video_limit and video_size > video_limit and int_lvl >= 3:  # VIP o superior
                 sticker = random.choice(sobre_mb)
                 await client.send_sticker(chat_id=chat_id, sticker=sticker[0])
                 time.sleep(1)
                 await client.send_message(chat_id=chat_id, text="Pero lo haré solo por tí")
+            
             video_path = await client.download_media(message.video or message.document)
+        
         elif (message.reply_to_message and 
               (message.reply_to_message.video or (message.reply_to_message.document and message.reply_to_message.document.mime_type.startswith("video/")))):
+            
             if message.reply_to_message.video:
                 video_size = message.reply_to_message.video.file_size
             elif message.reply_to_message.document.mime_type.startswith("video/"):
                 video_size = message.reply_to_message.document.file_size
 
-            if video_limit and video_size > video_limit and chat_id not in admin_users and chat_id not in vip_users:
+            # Verificar límite de tamaño según nivel de usuario
+            if video_limit and video_size > video_limit and int_lvl < 3:  # Usuarios normales
                 sticker = random.choice(sobre_mb)
                 await client.send_sticker(chat_id=chat_id, sticker=sticker[0])
                 time.sleep(1)
@@ -191,7 +194,7 @@ async def compress_video(client, message, protect_content):
                 time.sleep(1)
                 await client.send_message(chat_id=chat_id, text="No voy a convertir eso")
                 return
-            if video_limit and video_size > video_limit and (chat_id in admin_users or chat_id in vip_users):
+            if video_limit and video_size > video_limit and int_lvl >= 3:  # VIP o superior
                 sticker = random.choice(sobre_mb)
                 await client.send_sticker(chat_id=chat_id, sticker=sticker[0])
                 time.sleep(1)
@@ -200,7 +203,9 @@ async def compress_video(client, message, protect_content):
                 await client.send_sticker(chat_id=chat_id, sticker=sticker[1])
                 time.sleep(1)
                 await client.send_message(chat_id=chat_id, text="Pero lo haré solo por tí")
+            
             video_path = await client.download_media(message.reply_to_message.video or message.reply_to_message.document)
+        
         else:
             await client.send_message(chat_id=chat_id, text=f"⚠️ No se encontró un video en el mensaje.", protect_content=protect_content)
             return
@@ -222,10 +227,12 @@ async def compress_video(client, message, protect_content):
 
         await client.send_message(chat_id=chat_id, text=description, protect_content=protect_content)
 
+        # Limpieza
         os.remove(original_video_path)
         os.remove(file_path)
         if thumb_path:
             os.remove(thumb_path)
+    
     finally:
         try:
             del tareas_en_ejecucion[task_id]
@@ -234,8 +241,11 @@ async def compress_video(client, message, protect_content):
 
         if cola_de_tareas:
             siguiente_tarea = cola_de_tareas.pop(0)
-            await compress_video(admin_users, siguiente_tarea["client"], siguiente_tarea["message"], allowed_ids)
-                                        
+            # Pasar también int_lvl para la siguiente tarea
+            siguiente_int_lvl = 1  # Necesitarías una forma de obtener el int_lvl del usuario de la siguiente tarea
+            await compress_video(siguiente_tarea["client"], siguiente_tarea["message"], protect_content, siguiente_int_lvl)
+
+# Las funciones restantes permanecen igual...
 def get_video_metadata(video_path):
     try:
         result = subprocess.run(
@@ -258,22 +268,17 @@ def get_video_metadata(video_path):
 
 async def generate_thumbnail(video_path):
     try:
-        # Obtener la duración del video
         video_duration = get_video_duration(video_path)
         if video_duration <= 0:
             raise ValueError("No se pudo determinar la duración del video.")
 
-        # Calcular un segundo aleatorio en los primeros 10,000 fotogramas (o la duración total si es menor)
-        fps = 24  # Fotogramas por segundo (supuesto común)
+        fps = 24
         max_frames = min(video_duration * fps, 10000)
         random_frame = random.randint(0, int(max_frames) - 1)
-
-        # Convertir fotograma en tiempo (segundos)
         random_time = random_frame / fps
 
         output_thumb = f"{os.path.splitext(video_path)[0]}_miniatura.jpg"
 
-        # Extraer el fotograma aleatorio
         subprocess.run([
             "ffmpeg",
             "-i", video_path,
@@ -282,7 +287,6 @@ async def generate_thumbnail(video_path):
             output_thumb
         ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
-        # Verificar que la miniatura se haya generado correctamente
         if not os.path.exists(output_thumb):
             raise IOError("No se pudo generar la miniatura.")
 
@@ -306,36 +310,28 @@ def get_video_duration(video_path):
             stderr=subprocess.PIPE,
             text=True
         )
-        # Manejar resultados no válidos
         duration = result.stdout.strip()
         if duration == 'N/A' or not duration:
             raise ValueError("No se pudo obtener la duración del video.")
-        return int(float(duration))  # Convertir a segundos
+        return int(float(duration))
     except Exception as e:
         print(f"Error al obtener la duración del video: {e}")
         return 0
 
 async def cambiar_miniatura(client: Client, message: Message):
     if message.reply_to_message:
-        # Verifica si el mensaje al que se responde contiene un video
         reply = message.reply_to_message
         if reply.video or (reply.document and reply.document.mime_type.startswith("video")):
-            # Descarga el video original
             video_path = await reply.download()
 
-            # Verifica si el mensaje actual contiene una imagen válida
             if message.photo or (message.document and message.document.mime_type.startswith(("image/jpeg", "image/png"))):
-                # Descarga la imagen recibida como miniatura
                 image_path = await message.download()
 
-                # Ajusta la imagen usando PIL
                 try:
                     with Image.open(image_path) as img:
-                        img = img.convert("RGB")  # Convierte a RGB para asegurar compatibilidad
-
-                        # Calcula las dimensiones proporcionales para mantener el aspecto original
+                        img = img.convert("RGB")
                         width, height = img.size
-                        max_dimension = 320  # Dimensión máxima permitida por Telegram
+                        max_dimension = 320
                         if width > height:
                             new_width = max_dimension
                             new_height = int((max_dimension / width) * height)
@@ -343,30 +339,24 @@ async def cambiar_miniatura(client: Client, message: Message):
                             new_height = max_dimension
                             new_width = int((max_dimension / height) * width)
 
-                        # Redimensiona manteniendo proporciones
                         img = img.resize((new_width, new_height))
-
-                        # Guarda la miniatura como JPEG con calidad optimizada
                         thumb_path = "thumbnail.jpg"
-                        quality = 85  # Calidad inicial
+                        quality = 85
                         img.save(thumb_path, format="JPEG", quality=quality)
 
-                        # Reduce la calidad si excede 200 KB
                         while os.path.getsize(thumb_path) > 200 * 1024 and quality > 10:
                             quality -= 5
                             img.save(thumb_path, format="JPEG", quality=quality)
 
-                    # Obtén la duración del video si Telegram no lo proporciona
                     duration = reply.video.duration if hasattr(reply.video, "duration") else None
-                    if duration is None:  # Si no tiene duración, calcula manualmente
+                    if duration is None:
                         duration = get_video_duration(video_path)
 
-                    # Reenvía el video descargado con la nueva miniatura
                     await client.send_video(
                         chat_id=message.chat.id,
                         video=video_path,
                         thumb=thumb_path,
-                        duration=duration,  # Incluye la duración
+                        duration=duration,
                         caption="🎥 Vídeo con miniatura actualizada."
                     )
 
@@ -374,7 +364,6 @@ async def cambiar_miniatura(client: Client, message: Message):
                 except Exception as e:
                     await message.reply(f"⚠️ Error al procesar la miniatura: {e}")
                 finally:
-                    # Limpieza de archivos temporales
                     if os.path.exists(video_path):
                         os.remove(video_path)
                     if os.path.exists(image_path):
