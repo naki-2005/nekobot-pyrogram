@@ -44,7 +44,8 @@ if args.bot_token:
 else:
     app = Client("my_bot", api_id=args.api_id, api_hash=args.api_hash, session_string=args.session_string)
 
-bot_is_sle1eping = False
+bot_is_sleeping = False
+
 sleep_duration = 0
 start_sleep_time = 0
 
