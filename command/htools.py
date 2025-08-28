@@ -8,6 +8,7 @@ import asyncio
 from PIL import Image
 from pyrogram.types import InputMediaPhoto
 from pyrogram.errors import FloodWait
+import unicodedata
 
 async def safe_call(func, *args, **kwargs):
     while True:
@@ -19,7 +20,7 @@ async def safe_call(func, *args, **kwargs):
         except Exception as e:
             print(f"❌ Error inesperado en {func.__name__}: {type(e).__name__}: {e}")
             raise
-            
+
 defaultselectionmap = {}
 
 def cambiar_default_selection(userid, nuevaseleccion):
@@ -30,7 +31,6 @@ def cambiar_default_selection(userid, nuevaseleccion):
         raise ValueError("Seleccion invalida: debe ser None, pdf, cbz o both")
     defaultselectionmap[userid] = nuevaseleccion
 
-import unicodedata
 async def descargarimagen_async(session, url, path):
     try:
         async with session.get(url, timeout=10) as resp:
@@ -41,7 +41,6 @@ async def descargarimagen_async(session, url, path):
     except Exception:
         pass
 
-#from command.get_files.nh_links import obtener_info_y_links
 from command.get_files.nh_website import obtener_info_y_links
 from command.get_files.h3_links import obtener_titulo_y_imagenes as obtener_info_y_links_h3
 
@@ -57,15 +56,6 @@ def obtenerporcli(codigo, tipo, cover):
     except Exception as e:
         print(f"❌ Error ejecutando función de extracción para {codigo}:", e)
         return {"texto": "", "imagenes": []}
-
-# Funciones tolerantes a FloodWait
-async def safe_call(func, *args, **kwargs):
-    while True:
-        try:
-            return await func(*args, **kwargs)
-        except FloodWait as e:
-            print(f"⏳ Esperando {e.value} seg para continuar")
-            await asyncio.sleep(e.value)
 
 def limpiarnombre(nombre: str) -> str:
     nombre = nombre.replace('\n', ' ').strip()
@@ -130,59 +120,55 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                     paths.append(path)
                 await asyncio.gather(*tasks)
 
-            if seleccion is None:
-                for i in range(0, len(paths), 10):
-                    grupo = paths[i:i+10]
-                    media_group = [InputMediaPhoto(media=path) for path in grupo]
-                    try:
-                        await safe_call(client.send_media_group,
-                            chat_id=message.chat.id,
-                            media=media_group
-                        )
-                    except Exception as e:
-                        await safe_call(message.reply, f"❌ Error al enviar grupo de imágenes: {type(e).__name__}: {e}")
-            else:
-                finalimage_path = os.path.join("command", "spam.png")
-                finalpage_path = os.path.join(tmpdir, f"{len(paths)+1:03d}.png")
-                shutil.copyfile(finalimage_path, finalpage_path)
-                paths.append(finalpage_path)
+            finalimage_path = os.path.join("command", "spam.png")
+            finalpage_path = os.path.join(tmpdir, f"{len(paths)+1:03d}.png")
+            shutil.copyfile(finalimage_path, finalpage_path)
+            paths.append(finalpage_path)
 
-                archivos = []
+            archivos = []
 
-                if seleccion in ["cbz", "both"]:
-                    cbzbase = f"{nombrebase}"
-                    cbzpath = f"{cbzbase}.cbz"
-                    shutil.make_archive(cbzbase, 'zip', tmpdir)
-                    os.rename(f"{cbzbase}.zip", cbzpath)
-                    archivos.append(cbzpath)
+            if seleccion in ["cbz", "both"]:
+                carpeta_raiz = os.path.abspath(nombrebase)
+                os.makedirs(carpeta_raiz, exist_ok=True)
+                for path in paths:
+                    shutil.move(path, os.path.join(carpeta_raiz, os.path.basename(path)))
 
-                if seleccion in ["pdf", "both"]:
-                    pdfpath = f"{nombrebase}.pdf"
-                    try:
-                        mainimages = []
-                        for path in paths:
-                            try:
-                                with Image.open(path) as im:
-                                    mainimages.append(im.convert("RGB"))
-                            except Exception:
-                                continue
-                        if mainimages:
-                            mainimages[0].save(pdfpath, save_all=True, append_images=mainimages[1:])
-                            archivos.append(pdfpath)
-                    except Exception:
-                        await safe_call(message.reply, f"❌ Error al generar PDF para {texto_titulo}")
+                cbzbase = f"{nombrebase}"
+                cbzpath = f"{cbzbase}.cbz"
+                shutil.make_archive(cbzbase, 'zip', os.path.dirname(carpeta_raiz), os.path.basename(carpeta_raiz))
+                os.rename(f"{cbzbase}.zip", cbzpath)
+                archivos.append(cbzpath)
 
-                for archivo in archivos:
-                    await safe_call(client.send_document,
-                        chat_id=message.chat.id,
-                        document=archivo,
-                        caption=texto_titulo,
-                        protect_content=proteger
-                    )
-                    os.remove(archivo)
+                for file in os.listdir(carpeta_raiz):
+                    os.remove(os.path.join(carpeta_raiz, file))
+                os.rmdir(carpeta_raiz)
+
+            if seleccion in ["pdf", "both"]:
+                pdfpath = f"{nombrebase}.pdf"
+                try:
+                    mainimages = []
+                    for path in paths:
+                        try:
+                            with Image.open(path) as im:
+                                mainimages.append(im.convert("RGB"))
+                        except Exception:
+                            continue
+                    if mainimages:
+                        mainimages[0].save(pdfpath, save_all=True, append_images=mainimages[1:])
+                        archivos.append(pdfpath)
+                except Exception:
+                    await safe_call(message.reply, f"❌ Error al generar PDF para {texto_titulo}")
+
+            for archivo in archivos:
+                await safe_call(client.send_document,
+                    chat_id=message.chat.id,
+                    document=archivo,
+                    caption=texto_titulo,
+                    protect_content=proteger
+                )
+                os.remove(archivo)
 
         await safe_call(progresomsg.delete)
-
 
 async def nh_combined_operation_txt(client, message, tipo, proteger, userid, operacion):
     if not message.reply_to_message or not message.reply_to_message.document:
