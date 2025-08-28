@@ -19,27 +19,21 @@ cola_de_tareas = []
 
 import copy
 
-async def update_video_settings(client, message, allowed_ids):
+async def update_video_settings(client, message, protect_content):
     user_id = message.from_user.id
-    protect_content = user_id not in allowed_ids
-
     global video_settings
     
-    # Si el usuario no tiene configuración propia, se le asigna la configuración por defecto
     if user_id not in video_settings:
         video_settings[user_id] = copy.deepcopy(video_settings.get('default', {}))
 
     try:
-        # Obtener los parámetros del comando
         command_params = message.text.split()[1:]
 
-        # Si no hay parámetros, devolver las configuraciones actuales en formato de comando
         if not command_params:
             configuracion_actual = "/calidad " + " ".join(f"{k}={v}" for k, v in video_settings[user_id].items())
             await message.reply_text(f"⚙️ Configuración actual:\n`{configuracion_actual}`", protect_content=protect_content)
             return
 
-        # Crear un diccionario con los parámetros, validando el formato clave=valor
         params = {}
         for item in command_params:
             if "=" not in item or len(item.split("=")) != 2:
@@ -47,7 +41,6 @@ async def update_video_settings(client, message, allowed_ids):
             key, value = item.split("=")
             params[key] = value
 
-        # Validar y actualizar configuraciones solo para los parámetros proporcionados
         for key, value in params.items():
             if key in video_settings[user_id]:
                 if key == 'resolution' and not re.match(r'^\d+x\d+$', value):
@@ -65,7 +58,6 @@ async def update_video_settings(client, message, allowed_ids):
 
                 video_settings[user_id][key] = value
 
-        # Convertir el diccionario act ualizado a texto para mostrar como respuesta
         configuracion_texto = "/calidad " + " ".join(f"{k}={v}" for k, v in video_settings[user_id].items())
         await message.reply_text(f"⚙️ Configuraciones de video actualizadas:\n`{configuracion_texto}`", protect_content=protect_content)
 
@@ -74,24 +66,21 @@ async def update_video_settings(client, message, allowed_ids):
     except Exception as e:
         await message.reply_text(f"❌ Error al procesar el comando:\n{e}", protect_content=protect_content)
 
-# Cancelar tareas
-async def cancelar_tarea(admin_users, client, task_id, chat_id, message, allowed_ids):
+async def cancelar_tarea(int_lvl, client, task_id, chat_id, message, protect_content):
     user_id_requesting = message.from_user.id
-    protect_content = user_id_requesting not in allowed_ids
 
     global cola_de_tareas, tareas_en_ejecucion
 
     if task_id in tareas_en_ejecucion:
         tarea = tareas_en_ejecucion[task_id]
-        if tarea["user_id"] == user_id_requesting or user_id_requesting in admin_users:
-            tarea["cancel"] = True  # Marcar la tarea como cancelada
-            del tareas_en_ejecucion[task_id]  # Eliminarla del diccionario
+        if tarea["user_id"] == user_id_requesting or int_lvl > 3 :
+            tarea["cancel"] = True 
+            del tareas_en_ejecucion[task_id]
             await client.send_message(chat_id=chat_id, text=f"❌ Tarea `{task_id}` cancelada.", protect_content=protect_content)
 
-            # Procesar la siguiente tarea en la cola, si existe
             if cola_de_tareas:
                 siguiente_tarea = cola_de_tareas.pop(0)
-                await compress_video(admin_users, siguiente_tarea["client"], siguiente_tarea["message"], allowed_ids)
+                await compress_video(siguiente_tarea["client"], siguiente_tarea["message"], protect_content)
         else:
             await client.send_message(chat_id=chat_id, text="⚠️ No tienes permiso para cancelar esta tarea.", protect_content=protect_content)
 
@@ -107,16 +96,14 @@ async def cancelar_tarea(admin_users, client, task_id, chat_id, message, allowed
         await client.send_message(chat_id=chat_id, text=f"⚠️ No se encontró la tarea con ID `{task_id}`.", protect_content=protect_content)
 
 
-# Listar tareas
-async def listar_tareas(client, chat_id, allowed_ids, message):
-    user_id_requesting = int(message.from_user.id)  # Asegurar tipo de dato consistente
-    protect_content = user_id_requesting not in allowed_ids
+async def listar_tareas(client, chat_id, protect_content, message):
+    user_id_requesting = int(message.from_user.id) 
 
     global cola_de_tareas, tareas_en_ejecucion
 
     lista_tareas = "📝 Lista de tareas:\n\n"
 
-    tareas_en_ejecucion_filtradas = tareas_en_ejecucion if user_id_requesting in admin_users else {
+    tareas_en_ejecucion_filtradas = tareas_en_ejecucion if int_lvl > 3 else {
         k: v for k, v in tareas_en_ejecucion.items() if int(v["user_id"]) == user_id_requesting
     }
 
@@ -145,9 +132,8 @@ async def listar_tareas(client, chat_id, allowed_ids, message):
 
 
 # Compresión de video
-async def compress_video(admin_users, client, message, allowed_ids):
+async def compress_video(client, message, protect_content):
     user_id = message.from_user.id
-    protect_content = user_id not in allowed_ids
 
     global cola_de_tareas, tareas_en_ejecucion
     task_id = str(uuid.uuid4())
@@ -250,8 +236,6 @@ async def compress_video(admin_users, client, message, allowed_ids):
             siguiente_tarea = cola_de_tareas.pop(0)
             await compress_video(admin_users, siguiente_tarea["client"], siguiente_tarea["message"], allowed_ids)
                                         
-
-# Función para obtener el número total de fotogramas
 def get_video_metadata(video_path):
     try:
         result = subprocess.run(
