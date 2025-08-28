@@ -3,9 +3,46 @@ import time
 import requests
 import hashlib
 import zipfile
+import re
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+
+def limpiar_nombre(nombre: str) -> str:
+    # Eliminar "Hitomi.la" y caracteres inválidos para nombres de archivo
+    nombre = nombre.replace(" | Hitomi.la", "")
+    nombre = re.sub(r'[\\/*?:"<>|]', '', nombre)
+    return nombre.strip()
+
+def obtener_titulo_y_autor(link_hitomi: str, chrome_path: str, driver_path: str) -> tuple[str, str]:
+    options = Options()
+    options.binary_location = chrome_path
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+
+    service = Service(driver_path)
+    driver = webdriver.Chrome(service=service, options=options)
+    driver.get(link_hitomi)
+    time.sleep(0.5)
+
+    titulo_completo = driver.title
+    driver.quit()
+
+    titulo_limpio = limpiar_nombre(titulo_completo)
+    partes = titulo_limpio.split(" by ")
+    if len(partes) == 2:
+        titulo = partes[0].strip()
+        autor = partes[1].strip()
+    else:
+        titulo = titulo_limpio
+        autor = "desconocido"
+
+    return titulo, autor
+
+def truncar_nombre(nombre: str, max_len: int = 30) -> str:
+    return nombre[:max_len - 4].strip() + ".cbz"
 
 def descargar_y_comprimir_hitomi(link_hitomi: str) -> str:
     # 📁 Preparar entorno
@@ -39,11 +76,18 @@ def descargar_y_comprimir_hitomi(link_hitomi: str) -> str:
     # 🧠 Configurar Selenium
     chrome_path = "selenium/chrome-linux64/chrome"
     driver_path = "selenium/chromedriver-linux64/chromedriver"
-    options = webdriver.ChromeOptions()
+
+    titulo, autor = obtener_titulo_y_autor(link_hitomi, chrome_path, driver_path)
+    nombre_final = f"{autor} - {titulo}".strip()
+    nombre_final = limpiar_nombre(nombre_final)
+    nombre_cbz = truncar_nombre(nombre_final)
+
+    options = Options()
+    options.binary_location = chrome_path
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    options.binary_location = chrome_path
+
     service = Service(executable_path=driver_path)
     driver = webdriver.Chrome(service=service, options=options)
 
@@ -85,7 +129,6 @@ def descargar_y_comprimir_hitomi(link_hitomi: str) -> str:
     driver.quit()
 
     # 📦 Comprimir a CBZ
-    nombre_cbz = f"hitomi_{int(time.time())}.cbz"
     ruta_cbz = os.path.abspath(nombre_cbz)
     with zipfile.ZipFile(ruta_cbz, 'w') as cbz:
         for nombre in sorted(os.listdir(carpeta_imagenes)):
