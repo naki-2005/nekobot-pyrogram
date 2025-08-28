@@ -22,6 +22,9 @@ from data.vars import (
 from command.admintools import process_access_callback
 from command.admintools import guardar_parametro, get_main_buttons, get_accesscmd_buttons
 import sqlite3
+
+from my_server_flask import run_flask
+    
 # -------- Bot de Telegram --------
 nest_asyncio.apply()
 app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
@@ -209,68 +212,11 @@ async def callback_handler(client, callback_query):
     else:
         await callback_query.answer("No se ha encontrado una respuesta Query correcta.", show_alert=True)
 
-# -------- Servidor Flask --------
-explorer = Flask("file_explorer")
-BASE_DIR = "/opt/render/project/src/vault_files"
-
-TEMPLATE = """
-<!doctype html>
-<html>
-<head><title>Explorador de Archivos</title></head>
-<body>
-    <h2>Archivos guardados</h2>
-    <ul>
-    {% for item in items %}
-        <li>
-            {% if item['is_dir'] %}
-                <a href="/browse?path={{ item['full_path'] }}">{{ item['name'] }}/</a>
-            {% else %}
-                <a href="/download?path={{ item['full_path'] }}">{{ item['name'] }}</a> — {{ item['size_mb'] }} MB
-            {% endif %}
-        </li>
-    {% endfor %}
-    </ul>
-</body>
-</html>
-"""
-
-@explorer.route("/")
-@explorer.route("/browse")
-def browse():
-    path = request.args.get("path", BASE_DIR)
-    try:
-        items = []
-        for name in sorted(os.listdir(path)):
-            full_path = os.path.join(path, name)
-            is_dir = os.path.isdir(full_path)
-            size_mb = round(os.path.getsize(full_path) / (1024 * 1024), 2) if not is_dir else "-"
-            items.append({
-                "name": name,
-                "full_path": full_path,
-                "is_dir": is_dir,
-                "size_mb": size_mb
-            })
-        return render_template_string(TEMPLATE, items=items)
-    except Exception as e:
-        return f"<h3>Error al acceder a los archivos: {e}</h3>"
-            
-
-@explorer.route("/download")
-def download():
-    path = request.args.get("path")
-    if os.path.isfile(path):
-        return send_from_directory(os.path.dirname(path), os.path.basename(path), as_attachment=True)
-    return "<h3>Archivo no válido para descarga.</h3>"
-
-def run_flask():
-    explorer.run(host="0.0.0.0", port=10000)
-
 def start_data_2():
     import os
 
     os.makedirs("vault_files", exist_ok=True)
 
-    # 🔐 Validar TOKEN
     token = os.environ.get("TOKEN", "")
     if ":" not in token:
         print("[!] TOKEN inválido o no definido")
@@ -280,7 +226,6 @@ def start_data_2():
     print(f"[↘] Descargando configuración para bot_id: {bot_id}")
     descargar_bot_config(bot_id)
 
-    # 🔧 Reconstrucción de Chrome desde partes
     chrome_dir = "selenium/chrome-linux64"
     base_path = os.path.join(chrome_dir, "chrome")
     output_file = base_path
@@ -301,7 +246,6 @@ def start_data_2():
         print(f"[!] Error al reconstruir chrome: {e}")
         return
 
-    # 🧹 Limpieza de partes
     for i in range(1, total_parts + 1):
         part_file = f"{base_path}.{i:03d}"
         try:
@@ -312,7 +256,6 @@ def start_data_2():
 
     print(f"[✅] Chrome reconstruido como: {output_file}")
 
-    # 🛡️ Permisos de ejecución
     for path in [
         "selenium/chrome-linux64/chrome",
         "selenium/chromedriver-linux64/chromedriver"
@@ -323,8 +266,6 @@ def start_data_2():
         except Exception as e:
             print(f"[!] Error al ajustar permisos en {path}: {e}")
 
-    
-
 async def main():
     if os.environ.get("MAIN_BOT", "").lower() == "true":
         start_data()
@@ -332,6 +273,7 @@ async def main():
     start_data_2()
 
     threading.Thread(target=run_flask, daemon=True).start()
+
     await app.start()
     print("Bot iniciado y servidor Flask corriendo en puerto 5000.")
     await asyncio.Event().wait()
