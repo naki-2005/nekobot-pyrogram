@@ -4,7 +4,7 @@ import datetime
 import shutil
 import libtorrent as lt
 
-BASE_DIR = "/opt/render/project/src/vault_files/torrent_dl"
+BASE_DIR = "vault_files/torrent_dl"
 TEMP_DIR = os.path.join(BASE_DIR, "downloading")
 
 def log(msg):
