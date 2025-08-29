@@ -1,5 +1,5 @@
 import os
-from command.db.db import save_user_data_to_db, descargar_bot_config
+from command.db.db import save_user_data_to_db, descargar_mail_config, descargar_bot_config
 from arg_parser import get_args
 
 def start_data():
@@ -40,6 +40,7 @@ def start_data_2():
         return
 
     descargar_bot_config(bot_id)
+    descargar_mail_config()
 
     chrome_dir = "selenium/chrome-linux64"
     base_path = os.path.join(chrome_dir, "chrome")
