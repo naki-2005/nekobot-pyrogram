@@ -3,6 +3,7 @@ import re
 from datetime import datetime
 from pyrogram import Client
 from pyrogram.types import Message
+from pyrogram import enums
 
 VAULT_FOLDER = "vault_files"
 
@@ -69,16 +70,23 @@ async def list_vault_files(client: Client, message: Message):
 async def send_vault_file_by_index(client: Client, message: Message):
     parts = message.text.strip().split(maxsplit=1)
     if len(parts) != 2 or not parts[1].isdigit():
-        await client.send_message(message.from_user.id, "❌ El ID debe ser un número")
+        await client.send_message(message.chat.id, "❌ El ID debe ser un número")
         return
 
     index = int(parts[1])
     archivos = sorted([f for f in os.listdir(VAULT_FOLDER) if os.path.isfile(os.path.join(VAULT_FOLDER, f))])
 
     if index < 1 or index > len(archivos):
-        await client.send_message(message.from_user.id, "❌ Ese archivo no existe")
+        await client.send_message(message.chat.id, "❌ Ese archivo no existe")
         return
 
     selected_file = archivos[index - 1]
     path = os.path.join(VAULT_FOLDER, selected_file)
-    await client.send_document(message.from_user.id, document=path, caption=f"📤 {selected_file}")
+
+    if not os.path.exists(path):
+        await client.send_message(message.chat.id, f"❌ Archivo no encontrado: {selected_file}")
+        return
+
+    await client.send_chat_action(message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
+    await client.send_document(message.chat.id, document=path, caption=f"📤 {selected_file}")
+    await client.send_chat_action(message.chat.id, enums.ChatAction.CANCEL)
