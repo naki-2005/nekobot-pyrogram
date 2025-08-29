@@ -68,6 +68,43 @@ def guardar_datos_correo(correo: str, contraseña: str, servidor: str) -> None:
     except:
         return
 
+def descargar_mail_config():
+    GIT_REPO = os.getenv("GIT_REPO")
+    GIT_API = os.getenv("GIT_API")
+    if not GIT_REPO or not GIT_API:
+        print("[!] Variables de entorno GIT_REPO o GIT_API no definidas")
+        return
+
+    file_path = "data/maildata.txt"
+    url = f"https://api.github.com/repos/{GIT_REPO}/contents/{file_path}"
+
+    headers = {
+        "Authorization": f"Bearer {GIT_API}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "python-urllib"
+    }
+
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read())
+            content_b64 = data.get("content")
+            if not content_b64:
+                print("[!] No se encontró contenido en el archivo remoto")
+                return
+
+            decoded = base64.b64decode(content_b64)
+            with open("maildata.txt", "wb") as f:
+                f.write(decoded)
+
+            print(f"[✓] Archivo descargado y guardado como maildata.txt")
+
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            print("[!] El archivo remoto no existe")
+        else:
+            raise RuntimeError(f"Error al descargar desde GitHub: {e.code} {e.reason}")
+            
                                                
 def subir_bot_config(bot_id: str):
     db_path = "bot_cmd.db"
