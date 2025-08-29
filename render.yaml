@@ -1,8 +1,8 @@
 services:
   - type: web
     name: telegram-bot
-    env: docker
-    plan: starter
+    env: python
+    plan: free
     region: oregon
     dockerfilePath: Dockerfile
     envVars:
