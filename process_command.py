@@ -91,7 +91,8 @@ async def process_command(
     chat_id: int,
     int_lvl: int
 ):
-    text = message.text.strip().lower() if message.text else ""
+    textori = message.text.strip() if message.text else ""
+    text = textori.lower()
     if message.from_user is None:
         return
 
@@ -528,7 +529,7 @@ async def process_command(
         if int_lvl < 6:
             return
 
-        args = text.split()[1:]
+        args = textori.split()[1:]
 
         if not args:
             await send_setting_editor(client, message)
