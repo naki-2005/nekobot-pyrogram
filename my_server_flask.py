@@ -1,5 +1,7 @@
 import os
 from flask import Flask, request, send_from_directory, render_template_string, redirect
+from threading import Thread
+from command.torrets_tools import download_from_magnet
 
 explorer = Flask("file_explorer")
 BASE_DIR = "/opt/render/project/src/vault_files"
@@ -38,8 +40,10 @@ TEMPLATE = """
             flex-direction: column;
             gap: 0.5em;
         }
-        input[type="file"] {
+        input[type="file"], input[type="text"] {
             max-width: 100%;
+            padding: 0.5em;
+            font-size: 1em;
         }
         button {
             padding: 0.6em;
@@ -76,6 +80,13 @@ TEMPLATE = """
             <input type="file" name="file">
             <button type="submit">Subir archivo</button>
         </form>
+
+        <h2>🔗 Descargar desde Magnet Link</h2>
+        <form action="/magnet" method="post">
+            <input type="text" name="magnet" placeholder="Pega aquí el magnet link o URL .torrent" required>
+            <button type="submit">Descargar</button>
+        </form>
+
         <ul>
         {% for item in items %}
             <li>
@@ -91,7 +102,6 @@ TEMPLATE = """
 </body>
 </html>
 """
-
 
 @explorer.route("/")
 @explorer.route("/browse")
@@ -131,6 +141,18 @@ def upload_file():
         file.save(save_path)
         return redirect("/")
     return "Archivo inválido.", 400
+
+@explorer.route("/magnet", methods=["POST"])
+def handle_magnet():
+    link = request.form.get("magnet", "").strip()
+    if not link:
+        return "<h3>❌ Magnet link vacío.</h3>", 400
+
+    try:
+        Thread(target=download_from_magnet, args=(link, BASE_DIR)).start()
+        return redirect("/")
+    except Exception as e:
+        return f"<h3>Error al iniciar descarga: {e}</h3>", 500
 
 def run_flask():
     explorer.run(host="0.0.0.0", port=10000)
