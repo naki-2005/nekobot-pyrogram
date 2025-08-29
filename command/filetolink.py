@@ -21,15 +21,16 @@ def secure_filename(fname: str) -> str:
 
 async def clear_vault_files(client: Client, message: Message):
     if not os.path.isdir(VAULT_FOLDER):
+        await message.reply("📁 La carpeta no existe.")
         return
-    for fname in os.listdir(VAULT_FOLDER):
-        fpath = os.path.join(VAULT_FOLDER, fname)
-        if os.path.isfile(fpath):
-            try:
-                os.remove(fpath)
-                await message.reply(f"✅ Archivos borrados")
-            except Exception:
-                pass
+
+    try:
+        shutil.rmtree(VAULT_FOLDER)
+        os.makedirs(VAULT_FOLDER, exist_ok=True)  # Recrea la carpeta vacía
+        await message.reply("✅ Todos los archivos y carpetas fueron eliminados.")
+    except Exception as e:
+        await message.reply(f"❌ Error al borrar: {e}")
+
 
 async def handle_up_command(client: Client, message: Message):
     if not message.reply_to_message or not message.reply_to_message.media:
