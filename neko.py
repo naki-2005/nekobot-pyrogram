@@ -71,7 +71,7 @@ def format_time(seconds):
 @app.on_message()
 async def handle_message(client, message):
     global cmd_list_initialized
-    if not cmd_list_initialized:
+    if not cmd_list_initialized and args.bot_token is not None:
         await lista_cmd(app)
         cmd_list_initialized = True
     
