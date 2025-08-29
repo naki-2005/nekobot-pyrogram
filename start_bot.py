@@ -22,8 +22,8 @@ def start_data():
         lvl = "6" if i == 0 else "5"
         save_user_data_to_db(user_id, "lvl", lvl)
 
-args = get_args()
-def start_data_2(args):
+def start_data_2():
+    args = get_args()
     os.makedirs("vault_files", exist_ok=True)
 
     if args.session_string:
