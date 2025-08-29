@@ -115,6 +115,32 @@ async def process_command(
     elif command == "/help":
         await asyncio.create_task(handle_help(client, message))
         return
+                
+    elif command == "/magnet":
+        if cmd("torrent", int_lvl):
+            parts = text.split(maxsplit=1)
+            arg_text = parts[1] if len(parts) > 1 else ""
+
+            if not arg_text:
+                await message.reply("❗ Debes proporcionar un enlace magnet o .torrent.")
+                return
+
+            files = await handle_torrent_command(client, message)
+
+            if not files:
+                await message.reply("❌ No se descargaron archivos.")
+                return
+
+            for rel_path in files:
+                path = os.path.join(BASE_DIR, rel_path)
+                try:
+                    await client.send_chat_action(chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
+                    await client.send_document(chat_id, document=path)
+                    await client.send_chat_action(chat_id, enums.ChatAction.CANCEL)
+                    os.remove(path)
+                except Exception as e:
+                    await message.reply(f"⚠️ Error al enviar {rel_path}: {e}")
+                            
         
     elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt", "/dltxt"):
         if cmd("htools", int_lvl):
