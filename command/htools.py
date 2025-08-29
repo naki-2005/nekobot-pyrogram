@@ -21,6 +21,70 @@ async def safe_call(func, *args, **kwargs):
             print(f"❌ Error inesperado en {func.__name__}: {type(e).__name__}: {e}")
             raise
 
+async def crear_cbz_desde_fuente(codigo: str, tipo: str) -> str:
+    import os, shutil, tempfile, unicodedata, re, aiohttp, asyncio
+    from PIL import Image
+    from command.get_files.hitomi import descargar_y_comprimir_hitomi
+    from command.get_files.nh_website import obtener_info_y_links
+    from command.get_files.h3_links import obtener_titulo_y_imagenes as obtener_info_y_links_h3
+
+    BASE_DIR = "vault_files"
+    os.makedirs(BASE_DIR, exist_ok=True)
+
+    def limpiarnombre(nombre: str) -> str:
+        nombre = nombre.replace('\n', ' ').strip()
+        nombre = unicodedata.normalize('NFC', nombre)
+        return re.sub(r'[^a-zA-Z0-9ñÑáéíóúÁÉÍÓÚ ]', '', nombre)
+
+    async def descargarimagen_async(session, url, path, referer):
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Referer": referer
+        }
+        async with session.get(url, headers=headers) as resp:
+            if resp.status == 200:
+                with open(path, 'wb') as f:
+                    f.write(await resp.read())
+
+    if tipo == "hito":
+        cbz_path = descargar_y_comprimir_hitomi(codigo)
+        final_path = os.path.join(BASE_DIR, os.path.basename(cbz_path))
+        shutil.move(cbz_path, final_path)
+        return final_path
+
+    if tipo == "nh":
+        datos = obtener_info_y_links(codigo, cover=False)
+        referer = "https://nhentai.net/"
+    else:
+        datos = obtener_info_y_links_h3(codigo, cover=False)
+        referer = "https://3hentai.net/"
+
+    texto = datos.get("texto", "").strip()
+    imagenes = datos.get("imagenes", [])
+    if not imagenes:
+        raise ValueError(f"No se encontraron imágenes para {codigo}")
+
+    nombrelimpio = limpiarnombre(texto)
+    nombrebase = f"{codigo} {nombrelimpio}" if nombrelimpio else f"{tipo} {codigo}"
+    nombrebase = nombrebase.strip()
+    cbz_filename = f"{nombrebase}.cbz"
+    cbz_path = os.path.join(BASE_DIR, cbz_filename)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        async with aiohttp.ClientSession() as session:
+            tasks = []
+            for idx, url in enumerate(imagenes):
+                ext = os.path.splitext(url)[1].lower()
+                if ext not in [".jpg", ".jpeg", ".png"]:
+                    ext = ".jpg"
+                path = os.path.join(tmpdir, f"{idx+1:03d}{ext}")
+                tasks.append(descargarimagen_async(session, url, path, referer))
+            await asyncio.gather(*tasks)
+
+        shutil.make_archive(nombrebase, 'zip', tmpdir)
+        os.rename(f"{nombrebase}.zip", cbz_path)
+        return cbz_path
+        
 defaultselectionmap = {}
 
 def cambiar_default_selection(userid, nuevaseleccion):
