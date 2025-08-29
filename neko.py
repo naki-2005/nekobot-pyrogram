@@ -32,6 +32,7 @@ if args.bot_token:
 else:
     app = Client("my_bot", api_id=args.api_id, api_hash=args.api_hash, session_string=args.session_string)
 
+cmd_list_initialized = False
 bot_is_sleeping = False
 
 sleep_duration = 0
@@ -70,6 +71,11 @@ def format_time(seconds):
 
 @app.on_message()
 async def handle_message(client, message):
+    global cmd_list_initialized
+    if not cmd_list_initialized:
+        await lista_cmd(app)
+        cmd_list_initialized = True
+    
     await lista_cmd(app)
     global bot_is_sleeping, start_sleep_time, sleep_duration
     user_id = message.from_user.id if message.from_user else ""
