@@ -72,10 +72,16 @@ def format_time(seconds):
 async def handle_message(client, message):
     global cmd_list_initialized
     if not cmd_list_initialized and args.bot_token is not None:
-        await lista_cmd(app)
-        cmd_list_initialized = True
-    
-    await lista_cmd(app)
+        try:
+            await lista_cmd(app)
+            cmd_list_initialized = True
+        except Exception as e:
+            if "USER_BOT_REQUIRED" in str(e):
+                print("[WARN] USER_BOT_REQUIRED: Ignorando set_bot_commands para User Bot")
+                cmd_list_initialized = True
+            else:
+                raise 
+
     global bot_is_sleeping, start_sleep_time, sleep_duration
     user_id = message.from_user.id if message.from_user else ""
     username = message.from_user.username if message.from_user else ""
