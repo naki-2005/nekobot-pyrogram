@@ -23,21 +23,9 @@ from process_query import process_query
 
 nest_asyncio.apply()
 
-parser = argparse.ArgumentParser(description="Inicializa el bot con credenciales")
+from arg_parser import get_args
 
-parser.add_argument("-a", "--api_id", required=True, help="API ID de Telegram")
-parser.add_argument("-H", "--api_hash", required=True, help="API Hash de Telegram")
-parser.add_argument("-t", "--bot_token", help="Token del bot")
-parser.add_argument("-ss", "--session_string", help="Session string del usuario")
-
-args = parser.parse_args()
-
-if args.bot_token and args.session_string:
-    print("❌ No puedes usar -t y -ss al mismo tiempo. Usa solo uno.")
-    sys.exit(1)
-elif not args.bot_token and not args.session_string:
-    print("❌ Debes proporcionar -t o -ss. Uno de los dos es obligatorio.")
-    sys.exit(1)
+args = get_args()
 
 if args.bot_token:
     app = Client("my_bot", api_id=args.api_id, api_hash=args.api_hash, bot_token=args.bot_token)
