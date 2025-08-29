@@ -3,7 +3,7 @@ import asyncio
 from flask import Flask, request, send_from_directory, render_template_string, redirect
 from threading import Thread
 from command.torrets_tools import download_from_magnet
-from command.htools import crear_cbz_desde_fuente 
+from command.htools import crear_cbz_desde_fuente
 
 explorer = Flask("file_explorer")
 BASE_DIR = "vault_files"
@@ -48,7 +48,7 @@ TEMPLATE = """
 
         <h2>🔞 Descargar Doujin</h2>
         <form action="/crear_cbz" method="post">
-            <input type="text" name="codigo" placeholder="Código del doujin" required>
+            <input type="text" name="codigo" placeholder="Código o URL del doujin" required>
             <select name="tipo" required>
                 <option value="nh">NHentai</option>
                 <option value="h3">3Hentai</option>
