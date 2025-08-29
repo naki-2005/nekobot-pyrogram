@@ -68,6 +68,15 @@ TEMPLATE = """
         a:hover {
             text-decoration: underline;
         }
+        .delete-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 0.4em 0.8em;
+            margin-left: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -94,6 +103,10 @@ TEMPLATE = """
                     📂 <a href="/browse?path={{ item['full_path'] }}">{{ item['name'] }}/</a>
                 {% else %}
                     📄 <a href="/download?path={{ item['full_path'] }}">{{ item['name'] }}</a> — {{ item['size_mb'] }} MB
+                    <form action="/delete" method="post" style="display:inline;">
+                        <input type="hidden" name="path" value="{{ item['full_path'] }}">
+                        <button class="delete-btn" onclick="return confirm('¿Eliminar {{ item['name'] }}?')">Eliminar</button>
+                    </form>
                 {% endif %}
             </li>
         {% endfor %}
@@ -153,6 +166,17 @@ def handle_magnet():
         return redirect("/")
     except Exception as e:
         return f"<h3>Error al iniciar descarga: {e}</h3>", 500
+
+@explorer.route("/delete", methods=["POST"])
+def delete_file():
+    path = request.form.get("path")
+    if not path or not os.path.isfile(path):
+        return "<h3>❌ Archivo no válido para eliminar.</h3>", 400
+    try:
+        os.remove(path)
+        return redirect("/")
+    except Exception as e:
+        return f"<h3>Error al eliminar archivo: {e}</h3>", 500
 
 def run_flask():
     explorer.run(host="0.0.0.0", port=10000)
