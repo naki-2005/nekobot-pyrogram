@@ -544,21 +544,17 @@ async def process_command(
                 await message.reply("⚠️ Falta el valor para 'imgapi'")
             return
 
-        if args[0] == "mail" and len(args) >= 3:
-            subcomando = args[1]
-            valor = " ".join(args[2:])
+        if args[0] == "mail" and len(args) >= 4:
+            from command.db.db import guardar_datos_correo
 
-            if subcomando == "acc":
-                guardar_parametro("maildir", valor)
-                await message.reply(f"✅ Dirección de correo guardada como 'maildir': '{valor}'")
-            elif subcomando == "pass":
-                guardar_parametro("mailpass", valor)
-                await message.reply(f"✅ Contraseña guardada como 'mailpass'")
-            elif subcomando == "serv":
-                guardar_parametro("mailserv", valor)
-                await message.reply(f"✅ Servidor guardado como 'mailserv': '{valor}'")
-            else:
-                await message.reply(f"⚠️ Subcomando desconocido para 'mail': '{subcomando}'")
+            correo = args[1]
+            contraseña = args[2]
+            servidor = " ".join(args[3:])
+            guardar_datos_correo(correo, contraseña, servidor)
+            await message.reply("✅ Datos de correo guardados correctamente en 'maildata.txt'")
+            return
+        elif args[0] == "mail":
+            await message.reply("⚠️ Uso incorrecto. Formato esperado: /settings mail <correo> <contraseña> <servidor>")
             return
 
         if "public" in args:
@@ -568,6 +564,7 @@ async def process_command(
         else:
             await send_setting_editor(client, message)
         return
+
 
     elif command == "/edituser" and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
         await send_access_editor(client, message)
