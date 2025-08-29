@@ -22,19 +22,18 @@ from start_bot import start_data, start_data_2
 from process_query import process_query
 
 nest_asyncio.apply()
-
 from arg_parser import get_args
 
 args = get_args()
 
 if args.bot_token:
     app = Client("my_bot", api_id=args.api_id, api_hash=args.api_hash, bot_token=args.bot_token)
+    cmd_list_initialized = False  # Bot Token → comandos permitidos
 else:
     app = Client("my_bot", api_id=args.api_id, api_hash=args.api_hash, session_string=args.session_string)
+    cmd_list_initialized = True  # Session String → comandos deshabilitados
 
-cmd_list_initialized = False
 bot_is_sleeping = False
-
 sleep_duration = 0
 start_sleep_time = 0
 
