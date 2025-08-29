@@ -164,36 +164,61 @@ def get_user_delay(user_id):
     return user_delays.get(user_id, int(os.getenv('MAIL_DELAY', 30)))
 
 def send_ver(destino, asunto, contenido=None, adjunto=False):
-    import os
     import smtplib
     from email.message import EmailMessage
+    import os
+    from command.db.db import cargar_datos_correo
+
+    datos = cargar_datos_correo()
+    if not datos:
+        print("[!] No se pudo cargar la configuración del correo")
+        return
+
+    correo, contraseña, servidor = datos
+    partes = servidor.split(":")
+    if len(partes) < 2:
+        print("[!] Formato de servidor inválido. Se esperaba host:puerto[:tls]")
+        return
+
+    smtp_host = partes[0]
+    try:
+        smtp_port = int(partes[1])
+    except ValueError:
+        print("[!] El puerto SMTP no es válido")
+        return
+
+    usar_tls = len(partes) > 2 and partes[2].lower() == "tls"
 
     msg = EmailMessage()
     msg['Subject'] = asunto
-    msg['From'] = f"Neko Bot <{os.getenv('MAILDIR')}>"
+    msg['From'] = f"Neko Bot <{correo}>"
     msg['To'] = destino
 
     if adjunto:
-        with open(adjunto, 'rb') as f:
-            msg.add_attachment(
-                f.read(),
-                maintype='application',
-                subtype='octet-stream',
-                filename=os.path.basename(adjunto)
-            )
+        try:
+            with open(adjunto, 'rb') as f:
+                msg.add_attachment(
+                    f.read(),
+                    maintype='application',
+                    subtype='octet-stream',
+                    filename=os.path.basename(adjunto)
+                )
+        except Exception as e:
+            print(f"[!] Error al adjuntar archivo: {e}")
+            return
     else:
         msg.set_content(contenido if contenido else asunto)
 
-    server_details = os.getenv('MAIL_SERVER').split(':')
-    smtp_host = server_details[0]
-    smtp_port = int(server_details[1])
-    security_enabled = len(server_details) > 2 and server_details[2].lower() == 'tls'
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            if usar_tls:
+                server.starttls()
+            server.login(correo, contraseña)
+            server.send_message(msg)
+            print("[✓] Verificación enviada correctamente")
+    except Exception as e:
+        print(f"[!] Error al enviar verificación: {e}")
 
-    with smtplib.SMTP(smtp_host, smtp_port) as server:
-        if security_enabled:
-            server.starttls()
-        server.login(os.getenv('MAILDIR'), os.getenv('MAILPASS'))
-        server.send_message(msg)
 
 async def set_mail(client, message, int_lvl):
     try:
