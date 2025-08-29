@@ -1,12 +1,10 @@
 services:
   - type: web
     name: telegram-bot
-    env: python
+    env: docker
     plan: starter
     region: oregon
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "sh start.sh"
-    pythonVersion: 3.10.12
+    dockerfilePath: Dockerfile
     envVars:
       - key: BOT_TOKEN
         sync: false
