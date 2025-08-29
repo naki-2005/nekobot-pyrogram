@@ -1,7 +1,9 @@
 import os
+import asyncio
 from flask import Flask, request, send_from_directory, render_template_string, redirect
 from threading import Thread
 from command.torrets_tools import download_from_magnet
+from command.htools import crear_cbz_desde_fuente 
 
 explorer = Flask("file_explorer")
 BASE_DIR = "vault_files"
@@ -13,70 +15,18 @@ TEMPLATE = """
     <title>Explorador de Archivos</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        .header {
-            background-color: #007BFF;
-            color: white;
-            padding: 1em;
-            text-align: center;
-            font-size: 1.2em;
-        }
-        .header a {
-            color: white;
-            text-decoration: underline;
-            font-weight: bold;
-        }
-        .content {
-            padding: 1em;
-        }
-        form {
-            margin-bottom: 1em;
-            display: flex;
-            flex-direction: column;
-            gap: 0.5em;
-        }
-        input[type="file"], input[type="text"] {
-            max-width: 100%;
-            padding: 0.5em;
-            font-size: 1em;
-        }
-        button {
-            padding: 0.6em;
-            font-size: 1em;
-            background-color: #007BFF;
-            color: white;
-            border: none;
-            border-radius: 4px;
-        }
-        ul {
-            list-style-type: none;
-            padding: 0;
-        }
-        li {
-            margin: 0.5em 0;
-            word-break: break-word;
-        }
-        a {
-            text-decoration: none;
-            color: #007BFF;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-        .delete-btn {
-            background-color: #dc3545;
-            color: white;
-            border: none;
-            padding: 0.4em 0.8em;
-            margin-left: 10px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; box-sizing: border-box; }
+        .header { background-color: #007BFF; color: white; padding: 1em; text-align: center; font-size: 1.2em; }
+        .header a { color: white; text-decoration: underline; font-weight: bold; }
+        .content { padding: 1em; }
+        form { margin-bottom: 1em; display: flex; flex-direction: column; gap: 0.5em; }
+        input[type="file"], input[type="text"], select { max-width: 100%; padding: 0.5em; font-size: 1em; }
+        button { padding: 0.6em; font-size: 1em; background-color: #007BFF; color: white; border: none; border-radius: 4px; }
+        ul { list-style-type: none; padding: 0; }
+        li { margin: 0.5em 0; word-break: break-word; }
+        a { text-decoration: none; color: #007BFF; }
+        a:hover { text-decoration: underline; }
+        .delete-btn { background-color: #dc3545; color: white; border: none; padding: 0.4em 0.8em; margin-left: 10px; border-radius: 4px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -94,6 +44,17 @@ TEMPLATE = """
         <form action="/magnet" method="post">
             <input type="text" name="magnet" placeholder="Pega aquí el magnet link o URL .torrent" required>
             <button type="submit">Descargar</button>
+        </form>
+
+        <h2>🔞 Descargar Doujin</h2>
+        <form action="/crear_cbz" method="post">
+            <input type="text" name="codigo" placeholder="Código del doujin" required>
+            <select name="tipo" required>
+                <option value="nh">NHentai</option>
+                <option value="h3">3Hentai</option>
+                <option value="hito">Hitomi.la</option>
+            </select>
+            <button type="submit">Crear CBZ</button>
         </form>
 
         <ul>
@@ -123,7 +84,6 @@ def browse():
     abs_base = os.path.abspath(BASE_DIR)
     abs_requested = os.path.abspath(requested_path)
 
-    # Verifica que el path solicitado esté dentro de BASE_DIR
     if not abs_requested.startswith(abs_base):
         return "<h3>❌ Acceso denegado: ruta fuera de 'vault_files'.</h3>", 403
 
@@ -149,6 +109,22 @@ def download():
     if os.path.isfile(path):
         return send_from_directory(os.path.dirname(path), os.path.basename(path), as_attachment=True)
     return "<h3>Archivo no válido para descarga.</h3>"
+
+@explorer.route("/crear_cbz", methods=["POST"])
+def crear_cbz():
+    codigo = request.form.get("codigo", "").strip()
+    tipo = request.form.get("tipo", "").strip()
+
+    if not codigo or tipo not in ["nh", "h3", "hito"]:
+        return "<h3>❌ Código o tipo inválido.</h3>", 400
+
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        cbz_path = loop.run_until_complete(crear_cbz_desde_fuente(codigo, tipo))
+        return f"<h3>✅ CBZ creado: <a href='/download?path={cbz_path}'>{os.path.basename(cbz_path)}</a></h3>"
+    except Exception as e:
+        return f"<h3>❌ Error al crear CBZ: {e}</h3>", 500
 
 @explorer.route("/upload", methods=["POST"])
 def upload_file():
