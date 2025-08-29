@@ -90,3 +90,30 @@ def download_from_magnet(link, save_path=BASE_DIR):
 
     except Exception as e:
         log(f"❌ Error en descarga: {e}")
+
+
+async def handle_torrent_command(client, message):
+    try:
+        parts = message.text.strip().split(maxsplit=1)
+        if len(parts) < 2:
+            message.reply("❗ Debes proporcionar un enlace después del comando.")
+            return []
+
+        link = parts[1]
+        log(f"📥 Comando recibido con link: {link}")
+        download_from_magnet(link)
+
+        moved_files = []
+        for root, _, files in os.walk(BASE_DIR):
+            for file in files:
+                full_path = os.path.join(root, file)
+                rel_path = os.path.relpath(full_path, BASE_DIR)
+                moved_files.append(rel_path)
+
+        return moved_files
+
+    except Exception as e:
+        log(f"❌ Error en handle_torrent_command: {e}")
+        message.reply(f"❌ Error al procesar el comando: {e}")
+        return []
+        
