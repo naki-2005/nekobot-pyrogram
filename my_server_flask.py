@@ -119,11 +119,18 @@ TEMPLATE = """
 @explorer.route("/")
 @explorer.route("/browse")
 def browse():
-    path = request.args.get("path", BASE_DIR)
+    requested_path = request.args.get("path", BASE_DIR)
+    abs_base = os.path.abspath(BASE_DIR)
+    abs_requested = os.path.abspath(requested_path)
+
+    # Verifica que el path solicitado esté dentro de BASE_DIR
+    if not abs_requested.startswith(abs_base):
+        return "<h3>❌ Acceso denegado: ruta fuera de 'vault_files'.</h3>", 403
+
     try:
         items = []
-        for name in sorted(os.listdir(path)):
-            full_path = os.path.join(path, name)
+        for name in sorted(os.listdir(abs_requested)):
+            full_path = os.path.join(abs_requested, name)
             is_dir = os.path.isdir(full_path)
             size_mb = round(os.path.getsize(full_path) / (1024 * 1024), 2) if not is_dir else "-"
             items.append({
@@ -134,7 +141,7 @@ def browse():
             })
         return render_template_string(TEMPLATE, items=items)
     except Exception as e:
-        return f"<h3>Error al acceder a los archivos: {e}</h3>"
+        return f"<h3>Error al acceder a los archivos: {e}</h3>", 500
 
 @explorer.route("/download")
 def download():
