@@ -6,7 +6,6 @@ import urllib.request
 from datetime import datetime
 
 MAILDATA_FILE = "maildata.txt"
-MAILDATA_FILE = "maildata.txt"
 
 def guardar_datos_correo(correo: str, contraseña: str, servidor: str) -> None:
     if not os.path.exists(MAILDATA_FILE):
@@ -104,7 +103,26 @@ def descargar_mail_config():
             print("[!] El archivo remoto no existe")
         else:
             raise RuntimeError(f"Error al descargar desde GitHub: {e.code} {e.reason}")
-            
+
+def cargar_datos_correo():
+    archivo = "maildata.txt"
+    if not os.path.exists(archivo):
+        print("[!] El archivo maildata.txt no existe")
+        return None
+
+    try:
+        with open(archivo, "r", encoding="utf-8") as f:
+            lineas = [line.strip() for line in f.readlines()]
+    except Exception as e:
+        print(f"[!] Error al leer maildata.txt: {e}")
+        return None
+
+    if len(lineas) < 3 or not all(lineas[:3]):
+        print("[!] El archivo maildata.txt está incompleto o tiene datos faltantes")
+        return None
+
+    return lineas[0], lineas[1], lineas[2]
+    
                                                
 def subir_bot_config(bot_id: str):
     db_path = "bot_cmd.db"
