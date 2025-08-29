@@ -1,1 +1,14 @@
-pythonVersion: 3.10
+services:
+  - type: web
+    name: telegram-bot
+    env: python
+    plan: starter
+    region: oregon
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "sh start.sh"
+    pythonVersion: 3.10.12
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: SESSION_STRING
+        sync: false
