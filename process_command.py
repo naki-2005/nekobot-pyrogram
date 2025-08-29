@@ -17,6 +17,7 @@ from command.filetools import handle_compress, rename, set_size, caption
 from command.telegramtools import get_file_id, send_file_by_id
 from command.help import handle_help, handle_help_callback 
 from command.get_files.txt_a_cbz import txt_a_cbz
+from command.torrets_tools import handle_torrent_command
 from command.filetolink import handle_up_command, clear_vault_files, list_vault_files, send_vault_file_by_index
 from command.get_files.hitomi import descargar_y_comprimir_hitomi
 from pyrogram.enums import ChatType
