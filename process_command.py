@@ -21,6 +21,7 @@ from command.torrets_tools import handle_torrent_command
 from command.filetolink import handle_up_command, clear_vault_files, list_vault_files, send_vault_file_by_index
 from command.get_files.hitomi import descargar_y_comprimir_hitomi
 from pyrogram.enums import ChatType
+from pyrogram import enums
 nest_asyncio.apply()
 
 BASE_DIR = "/opt/render/project/src/vault_files/torrent_dl"
