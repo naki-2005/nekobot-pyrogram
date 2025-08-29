@@ -17,12 +17,11 @@ from command.filetools import handle_compress, rename, set_size, caption
 from command.telegramtools import get_file_id, send_file_by_id
 from command.help import handle_help, handle_help_callback 
 from command.get_files.txt_a_cbz import txt_a_cbz
-from command.filetolink import handle_up_command, clear_vault_files
+from command.filetolink import handle_up_command, clear_vault_files, list_vault_files, send_vault_file_by_index
 from command.get_files.hitomi import descargar_y_comprimir_hitomi
 from pyrogram.enums import ChatType
 nest_asyncio.apply()
-
-
+            
 def is_bot_protect() -> bool:
     ruta_db = os.path.join(os.getcwd(), 'bot_cmd.db')
     if not os.path.exists(ruta_db):
@@ -409,7 +408,7 @@ async def process_command(
                 await asyncio.create_task(compress_video(client, message, protect_content, int_lvl))
         return
 
-    elif command in ("/upfile", "/clearfiles"):
+    elif command in ("/upfile", "/clearfiles", "/listfiles", "/sendfile"):
         if cmd("filetolink", int_lvl):
             reply = message.reply_to_message
 
@@ -418,6 +417,12 @@ async def process_command(
 
             elif command == "/clearfiles":
                 await clear_vault_files(client, message)
+
+            elif command == "/listfiles":
+                await list_vault_files(client, message)
+
+            elif command == "/sendfile":
+                await send_vault_file_by_index(client, message)
                 
 
     elif command in ("/scan", "/multiscan", "/resumecodes", "/resumetxtcodes", "/codesplit"):
