@@ -4,7 +4,7 @@ from threading import Thread
 from command.torrets_tools import download_from_magnet
 
 explorer = Flask("file_explorer")
-BASE_DIR = "/opt/render/project/src/vault_files"
+BASE_DIR = "vault_files"
 
 TEMPLATE = """
 <!doctype html>
