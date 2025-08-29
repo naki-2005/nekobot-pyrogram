@@ -1,9 +1,11 @@
 import os
 import time
 import datetime
+import shutil
 import libtorrent as lt
 
 BASE_DIR = "/opt/render/project/src/vault_files"
+TEMP_DIR = os.path.join(BASE_DIR, "downloading")
 
 def log(msg):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}")
@@ -16,7 +18,7 @@ def get_magnet_from_torrent(torrent_path):
 def download_torrent(link):
     if link.endswith('.torrent'):
         import wget
-        temp_path = os.path.join(BASE_DIR, "temp.torrent")
+        temp_path = os.path.join(TEMP_DIR, "temp.torrent")
         if os.path.exists(temp_path):
             os.remove(temp_path)
         log("Descargando archivo .torrent...")
@@ -54,12 +56,26 @@ def monitor_download(handle):
         log(f"{s.progress * 100:.2f}% | ↓ {s.download_rate / 1000:.1f} kB/s | ↑ {s.upload_rate / 1000:.1f} kB/s | peers: {s.num_peers} | estado: {state_str[s.state]}")
         time.sleep(5)
 
+def move_completed_files(temp_path, final_path):
+    for root, _, files in os.walk(temp_path):
+        for file in files:
+            src = os.path.join(root, file)
+            rel_path = os.path.relpath(src, temp_path)
+            dst = os.path.join(final_path, rel_path)
+
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.move(src, dst)
+            log(f"📦 Archivo movido: {rel_path}")
+
 def download_from_magnet(link, save_path=BASE_DIR):
     try:
+        os.makedirs(TEMP_DIR, exist_ok=True)
+
         link = download_torrent(link)
         log(f"Usando magnet link: {link}")
+
         ses = start_session()
-        handle = add_torrent(ses, link, save_path)
+        handle = add_torrent(ses, link, TEMP_DIR)
 
         begin = time.time()
         wait_for_metadata(handle)
@@ -69,6 +85,8 @@ def download_from_magnet(link, save_path=BASE_DIR):
 
         log(f"✅ {handle.name()} COMPLETADO")
         log(f"⏱️ Tiempo total: {int((end - begin) // 60)} min {int((end - begin) % 60)} seg")
+
+        move_completed_files(TEMP_DIR, save_path)
+
     except Exception as e:
         log(f"❌ Error en descarga: {e}")
-  
