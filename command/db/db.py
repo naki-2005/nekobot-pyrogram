@@ -5,6 +5,70 @@ import json
 import urllib.request
 from datetime import datetime
 
+MAILDATA_FILE = "maildata.txt"
+MAILDATA_FILE = "maildata.txt"
+
+def guardar_datos_correo(correo: str, contraseña: str, servidor: str) -> None:
+    if not os.path.exists(MAILDATA_FILE):
+        with open(MAILDATA_FILE, "w", encoding="utf-8") as f:
+            f.write("")
+
+    try:
+        with open(MAILDATA_FILE, "w", encoding="utf-8") as f:
+            f.write(f"{correo}\n{contraseña}\n{servidor}\n")
+    except:
+        return
+
+    GIT_REPO = os.getenv("GIT_REPO")
+    GIT_API = os.getenv("GIT_API")
+    if not GIT_REPO or not GIT_API:
+        return
+
+    file_path = "data/maildata.txt"
+    url = f"https://api.github.com/repos/{GIT_REPO}/contents/{file_path}"
+
+    headers = {
+        "Authorization": f"Bearer {GIT_API}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "python-urllib"
+    }
+
+    sha = None
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req) as response:
+            existing = json.loads(response.read())
+            sha = existing.get("sha")
+    except urllib.error.HTTPError as e:
+        if e.code != 404:
+            return
+
+    with open(MAILDATA_FILE, "rb") as f:
+        encoded_content = base64.b64encode(f.read()).decode("utf-8")
+
+    payload = {
+        "message": "Actualización de datos de correo",
+        "content": encoded_content,
+        "branch": "main"
+    }
+    if sha:
+        payload["sha"] = sha
+
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={**headers, "Content-Type": "application/json"},
+        method="PUT"
+    )
+
+    try:
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read())
+            return result.get("content", {}).get("download_url", "Subido sin URL")
+    except:
+        return
+
+                                               
 def subir_bot_config(bot_id: str):
     db_path = "bot_cmd.db"
     if not os.path.exists(db_path):
