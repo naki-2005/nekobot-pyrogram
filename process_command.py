@@ -24,7 +24,7 @@ from pyrogram.enums import ChatType
 from pyrogram import enums
 nest_asyncio.apply()
 
-BASE_DIR = "/opt/render/project/src/vault_files/torrent_dl"
+BASE_DIR = "vault_files/torrent_dl"
 
 def is_bot_protect() -> bool:
     ruta_db = os.path.join(os.getcwd(), 'bot_cmd.db')
