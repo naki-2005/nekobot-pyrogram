@@ -1,5 +1,6 @@
 import os
 from command.db.db import save_user_data_to_db, descargar_bot_config
+from arg_parser import get_args
 
 def start_data():
     admin_users = list(map(int, os.getenv('ADMINS', '').split(','))) if os.getenv('ADMINS') else []
@@ -21,17 +22,23 @@ def start_data():
         lvl = "6" if i == 0 else "5"
         save_user_data_to_db(user_id, "lvl", lvl)
 
-
-def start_data_2():
+args = get_args()
+def start_data_2(args):
     os.makedirs("vault_files", exist_ok=True)
 
-    token = os.environ.get("TOKEN", "")
-    if ":" not in token:
-        print("[!] TOKEN inválido o no definido")
+    if args.session_string:
+        bot_id = args.id
+        print(f"[↘] Descargando configuración para bot_id (por -id): {bot_id}")
+    elif args.bot_token:
+        if ":" not in args.bot_token:
+            print("[!] Token inválido, formato incorrecto")
+            return
+        bot_id = args.bot_token.split(":")[0]
+        print(f"[↘] Descargando configuración para bot_id (desde token): {bot_id}")
+    else:
+        print("[!] No se proporcionó ni -t ni -ss, abortando")
         return
 
-    bot_id = token.split(":")[0]
-    print(f"[↘] Descargando configuración para bot_id: {bot_id}")
     descargar_bot_config(bot_id)
 
     chrome_dir = "selenium/chrome-linux64"
@@ -73,4 +80,3 @@ def start_data_2():
             print(f"[🔓] Permisos ajustados: {path}")
         except Exception as e:
             print(f"[!] Error al ajustar permisos en {path}: {e}")
-          
