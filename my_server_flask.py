@@ -9,14 +9,20 @@ TEMPLATE = """
 <html>
 <head>
     <title>Explorador de Archivos</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
         .header {
             background-color: #007BFF;
             color: white;
-            padding: 15px 20px;
+            padding: 1em;
             text-align: center;
-            font-size: 20px;
+            font-size: 1.2em;
         }
         .header a {
             color: white;
@@ -24,12 +30,40 @@ TEMPLATE = """
             font-weight: bold;
         }
         .content {
-            padding: 20px;
+            padding: 1em;
         }
-        ul { list-style-type: none; padding: 0; }
-        li { margin: 8px 0; }
-        a { text-decoration: none; color: #007BFF; }
-        a:hover { text-decoration: underline; }
+        form {
+            margin-bottom: 1em;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5em;
+        }
+        input[type="file"] {
+            max-width: 100%;
+        }
+        button {
+            padding: 0.6em;
+            font-size: 1em;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        li {
+            margin: 0.5em 0;
+            word-break: break-word;
+        }
+        a {
+            text-decoration: none;
+            color: #007BFF;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
