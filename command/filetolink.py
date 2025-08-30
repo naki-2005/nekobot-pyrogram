@@ -49,33 +49,45 @@ async def handle_up_command(client: Client, message: Message):
     os.makedirs(os.path.dirname(full_path), exist_ok=True)
     await client.download_media(message.reply_to_message, full_path)
     await message.reply(f"✅ Archivo guardado como `{relative_path}` en `{VAULT_FOLDER}`.")
-
+    
 async def list_vault_files(client: Client, message: Message):
     if not os.path.isdir(VAULT_FOLDER):
         await client.send_message(message.from_user.id, "📁 La carpeta está vacía o no existe.")
         return
+
     texto = "📄 Archivos disponibles:\n\n"
     folder_map = {}
+
     for root, dirs, files in os.walk(VAULT_FOLDER):
         rel_root = os.path.relpath(root, VAULT_FOLDER)
         if rel_root == ".":
-            rel_root = ""
+            rel_root = "Root"
         folder_map.setdefault(rel_root, []).extend(sorted(files))
-    idx_folder = 1
-    for folder, items in folder_map.items():
-        for idx_file, fname in enumerate(items, start=1):
-            fpath = os.path.join(VAULT_FOLDER, folder, fname) if folder else os.path.join(VAULT_FOLDER, fname)
+
+    folder_keys = sorted(folder_map.keys())
+    for folder_idx, folder in enumerate(folder_keys, start=1):
+        texto += f"{folder}:\n"
+        for file_idx, fname in enumerate(folder_map[folder], start=1):
+            fpath = os.path.join(VAULT_FOLDER, folder if folder != "Root" else "", fname)
             size_mb = os.path.getsize(fpath) / (1024 * 1024)
-            label = f"{idx_folder}.{idx_file}" if folder else f"{idx_file}"
+            label = f"{folder_idx}.{file_idx}" if folder != "Root" else f"{file_idx}"
             texto += f"{label}. {fname} — {size_mb:.2f} MB\n"
-        idx_folder += 1
+        texto += "\n"
+
     await client.send_message(message.from_user.id, texto.strip())
+
 
 def parse_nested_indices(text):
     result = []
     for part in text.split(","):
         part = part.strip()
-        if "-" in part:
+        if part.endswith(".*"):
+            try:
+                folder_idx = int(part[:-2])
+                result.append((folder_idx, None))  # carpeta completa
+            except:
+                continue
+        elif "-" in part:
             try:
                 start, end = part.split("-")
                 f_start, i_start = map(int, start.split("."))
