@@ -59,15 +59,15 @@ def get_main_buttons():
         InlineKeyboardButton("Guardar", callback_data="save_config"),
     ]
     return InlineKeyboardMarkup([botones[i:i+2] for i in range(0, len(botones), 2)])
-
-
+    
 def get_accesscmd_buttons(parametro):
     botones = [
         InlineKeyboardButton("Usuarios", callback_data=f"access_{parametro}_1"),
         InlineKeyboardButton("Usuarios especiales", callback_data=f"access_{parametro}_2"),
         InlineKeyboardButton("Nadie", callback_data=f"access_{parametro}_3"),
     ]
-    return InlineKeyboardMarkup([botones])
+    volver = [InlineKeyboardButton("🔙 Volver", callback_data="config_back")]
+    return InlineKeyboardMarkup([botones, volver])
 
 def get_public_buttons():
     botones = [
