@@ -3,6 +3,7 @@ import asyncio
 import nest_asyncio
 import re
 import sqlite3
+import subprocess
 from pyrogram import Client
 from pyrogram.types import Message
 from command.moodleclient import upload_token
