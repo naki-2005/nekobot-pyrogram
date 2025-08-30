@@ -311,8 +311,8 @@ async def process_command(
             return
 
         mega_url = text.split()[1]
-        desmega_path = os.path.join("command", "desmega")
-        desmega_path = os.path.join(os.getcwd(), "command", "desmega")
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        desmega_path = os.path.join(script_dir, "command", "desmega")
         output_dir = "vault_files"
         os.makedirs(output_dir, exist_ok=True)
 
