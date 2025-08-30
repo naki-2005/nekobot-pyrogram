@@ -69,48 +69,68 @@ async def list_vault_files(client: Client, message: Message):
 
     await client.send_message(message.from_user.id, texto.strip())
 
+import os
+import re
 import subprocess
+from pyrogram import Client, enums
+from pyrogram.types import Message
+
+VAULT_FOLDER = "vault_files"
 SEVEN_ZIP_EXE = os.path.join("7z", "7zz")
 MAX_SIZE_MB = 2000
 
 def parse_indices(text):
     indices = set()
     for part in text.split(","):
+        part = part.strip()
         if "-" in part:
-            start, end = part.split("-")
-            if start.isdigit() and end.isdigit():
-                indices.update(range(int(start), int(end) + 1))
-        elif part.strip().isdigit():
-            indices.add(int(part.strip()))
+            try:
+                start, end = map(int, part.split("-"))
+                indices.update(range(start, end + 1))
+            except:
+                continue
+        elif part.isdigit():
+            indices.add(int(part))
     return sorted(indices)
 
 async def send_vault_file_by_index(client: Client, message: Message):
     text = message.text.strip()
-    args = text.split(maxsplit=1)
-    if len(args) != 2:
+    args = text.split()
+
+    if len(args) < 2:
         await client.send_message(message.chat.id, "❌ Debes especificar los índices")
         return
 
     mode = None
-    content = args[1]
-    if content.startswith("-z "):
-        mode = "auto_compress"
-        content = content[3:].strip()
-    elif content.startswith("-Z "):
-        mode = "named_compress"
-        content = content[3:].strip()
+    delete_after = False
+    index_str = ""
+    custom_name = ""
+
+    # Analizar flags
+    flags = [arg for arg in args if arg.startswith("-")]
+    for flag in flags:
+        if flag == "-z":
+            mode = "auto_compress"
+        elif flag == "-Z":
+            mode = "named_compress"
+        elif flag == "-d":
+            delete_after = True
+
+    # Extraer argumentos restantes
+    non_flags = [arg for arg in args if not arg.startswith("-")]
+    if not non_flags:
+        await client.send_message(message.chat.id, "❌ No se especificaron índices")
+        return
+
+    index_str = non_flags[0]
+    if mode == "named_compress" and len(non_flags) > 1:
+        custom_name = " ".join(non_flags[1:])
 
     archivos = sorted([f for f in os.listdir(VAULT_FOLDER) if os.path.isfile(os.path.join(VAULT_FOLDER, f))])
     if not archivos:
         await client.send_message(message.chat.id, "❌ No hay archivos en el servidor")
         return
 
-    match = re.match(r"([\d\-,]+)(?:\s+(.*))?", content)
-    if not match:
-        await client.send_message(message.chat.id, "❌ Formato incorrecto. Usa: /sendfiles 1-3,5 o /sendfiles -Z 1-3 Nombre")
-        return
-
-    index_str, custom_name = match.groups()
     indices = parse_indices(index_str)
     selected_files = []
 
@@ -135,18 +155,36 @@ async def send_vault_file_by_index(client: Client, message: Message):
 
         try:
             subprocess.run(cmd_args, check=True)
+
             base_name = os.path.splitext(archive_path)[0]
+            sent_files = []
+
             for f in sorted(os.listdir(VAULT_FOLDER)):
-                if f.startswith(os.path.basename(base_name)) and f.endswith(".7z") or f.endswith(".7z.001"):
+                if f.startswith(os.path.basename(base_name)) and (f.endswith(".7z") or f.endswith(".7z.001")):
                     full_path = os.path.join(VAULT_FOLDER, f)
                     await client.send_chat_action(message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
                     await client.send_document(message.chat.id, document=full_path, caption=f"📦 {f}")
-            await client.send_chat_action(message.chat.id, enums.ChatAction.CANCEL)
+                    await client.send_chat_action(message.chat.id, enums.ChatAction.CANCEL)
+                    sent_files.append(full_path)
+
+            if delete_after:
+                for f in selected_files:
+                    if os.path.exists(f):
+                        os.remove(f)
+                for f in sent_files:
+                    if os.path.exists(f):
+                        os.remove(f)
+
         except Exception as e:
             await client.send_message(message.chat.id, f"❌ Error al comprimir: {e}")
         return
 
     for path in selected_files:
-        await client.send_chat_action(message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
-        await client.send_document(message.chat.id, document=path, caption=f"📤 {os.path.basename(path)}")
-    await client.send_chat_action(message.chat.id, enums.ChatAction.CANCEL)
+        try:
+            await client.send_chat_action(message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
+            await client.send_document(message.chat.id, document=path, caption=f"📤 {os.path.basename(path)}")
+            await client.send_chat_action(message.chat.id, enums.ChatAction.CANCEL)
+            if delete_after and os.path.exists(path):
+                os.remove(path)
+        except Exception as e:
+            await client.send_message(message.chat.id, f"⚠️ Error al enviar `{os.path.basename(path)}`: {e}")
