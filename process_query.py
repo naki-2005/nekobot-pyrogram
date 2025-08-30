@@ -1,6 +1,6 @@
 from command.mailtools.send import mail_query
 from command.help import handle_help_callback
-from command.admintools import send_setting_editor, process_access_callback, guardar_parametro, get_accesscmd_buttons
+from command.admintools import send_setting_editor, process_access_callback, guardar_parametro, get_accesscmd_buttons, get_main_buttons
 from command.db.db import subir_bot_config
 
 async def process_query(client, callback_query):
@@ -23,7 +23,14 @@ async def process_query(client, callback_query):
         await process_access_callback(client, callback_query)
 
     elif data == "config_back":
-        await send_setting_editor(client, callback_query.message)
+        bot_info = await client.get_me()
+        bot_id = bot_info.id
+        texto = f"Editar la configuración del bot {bot_id}"
+        await callback_query.message.edit_text(
+            texto,
+            reply_markup=get_main_buttons()
+        )
+
     elif data.startswith("config_"):
         parametro = data.split("_")[1]
         texto = f"Editar acceso a los comandos de {parametro}"
