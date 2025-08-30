@@ -7,7 +7,7 @@ from datetime import datetime
 import urllib.error
 
 MAILDATA_FILE = "maildata.txt"
-WEBACCESS_FILE = "data/web_access.json"
+WEBACCESS_FILE = "web_access.json"
 
 def descargar_web_config():
     GIT_REPO = os.getenv("GIT_REPO")
