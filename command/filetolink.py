@@ -17,7 +17,7 @@ def get_info(msg: Message):
 
 def secure_filename(fname: str) -> str:
     fname = os.path.basename(fname)
-    fname = re.sub(r"[^a-zA-Z0-9_.\- ]", "", fname)  # Conserva espacios
+    fname = re.sub(r"[^a-zA-Z0-9_.\- ]", "", fname)
     return fname or "file"
 
 async def clear_vault_files(client: Client, message: Message):
@@ -27,7 +27,7 @@ async def clear_vault_files(client: Client, message: Message):
 
     try:
         shutil.rmtree(VAULT_FOLDER)
-        os.makedirs(VAULT_FOLDER, exist_ok=True)  # Recrea la carpeta vacía
+        os.makedirs(VAULT_FOLDER, exist_ok=True)
         await message.reply("✅ Todos los archivos y carpetas fueron eliminados.")
     except Exception as e:
         await message.reply(f"❌ Error al borrar: {e}")
@@ -69,26 +69,85 @@ async def list_vault_files(client: Client, message: Message):
 
     await client.send_message(message.from_user.id, texto.strip())
 
+import subprocess
+
+SEVEN_ZIP_EXE = os.path.join("7z", "7zz")
+MAX_SIZE_MB = 2000
+
+def parse_indices(text):
+    indices = set()
+    for part in text.split(","):
+        if "-" in part:
+            start, end = part.split("-")
+            if start.isdigit() and end.isdigit():
+                indices.update(range(int(start), int(end) + 1))
+        elif part.strip().isdigit():
+            indices.add(int(part.strip()))
+    return sorted(indices)
+
 async def send_vault_file_by_index(client: Client, message: Message):
-    parts = message.text.strip().split(maxsplit=1)
-    if len(parts) != 2 or not parts[1].isdigit():
-        await client.send_message(message.chat.id, "❌ El ID debe ser un número")
+    text = message.text.strip()
+    args = text.split(maxsplit=1)
+    if len(args) != 2:
+        await client.send_message(message.chat.id, "❌ Debes especificar los índices")
         return
 
-    index = int(parts[1])
+    mode = None
+    content = args[1]
+    if content.startswith("-z "):
+        mode = "auto_compress"
+        content = content[3:].strip()
+    elif content.startswith("-Z "):
+        mode = "named_compress"
+        content = content[3:].strip()
+
     archivos = sorted([f for f in os.listdir(VAULT_FOLDER) if os.path.isfile(os.path.join(VAULT_FOLDER, f))])
-
-    if index < 1 or index > len(archivos):
-        await client.send_message(message.chat.id, "❌ Ese archivo no existe")
+    if not archivos:
+        await client.send_message(message.chat.id, "❌ No hay archivos en el servidor")
         return
 
-    selected_file = archivos[index - 1]
-    path = os.path.join(VAULT_FOLDER, selected_file)
-
-    if not os.path.exists(path):
-        await client.send_message(message.chat.id, f"❌ Archivo no encontrado: {selected_file}")
+    match = re.match(r"([\d\-,]+)(?:\s+(.*))?", content)
+    if not match:
+        await client.send_message(message.chat.id, "❌ Formato incorrecto. Usa: /sendfiles 1-3,5")
         return
 
-    await client.send_chat_action(message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
-    await client.send_document(message.chat.id, document=path, caption=f"📤 {selected_file}")
+    index_str, custom_name = match.groups()
+    indices = parse_indices(index_str)
+    selected_files = []
+
+    for i in indices:
+        if 1 <= i <= len(archivos):
+            selected_files.append(os.path.join(VAULT_FOLDER, archivos[i - 1]))
+
+    if not selected_files:
+        await client.send_message(message.chat.id, "❌ No se encontraron archivos válidos")
+        return
+
+    if mode in ["auto_compress", "named_compress"]:
+        archive_name = custom_name if mode == "named_compress" and custom_name else "archivos_comprimidos"
+        archive_path = os.path.join(VAULT_FOLDER, f"{archive_name}.7z")
+
+        total_size_mb = sum(os.path.getsize(f) for f in selected_files) / (1024 * 1024)
+        volume_flag = []
+        if total_size_mb > MAX_SIZE_MB:
+            volume_flag = [f"-v{MAX_SIZE_MB}m"]
+
+        cmd_args = [SEVEN_ZIP_EXE, "a", "-mx=0"] + volume_flag + [archive_path] + selected_files
+
+        try:
+            subprocess.run(cmd_args, check=True)
+            base_name = os.path.splitext(archive_path)[0]
+            for f in sorted(os.listdir(VAULT_FOLDER)):
+                if f.startswith(os.path.basename(base_name)) and f.endswith(".7z"):
+                    full_path = os.path.join(VAULT_FOLDER, f)
+                    await client.send_chat_action(message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
+                    await client.send_document(message.chat.id, document=full_path, caption=f"📦 {f}")
+            await client.send_chat_action(message.chat.id, enums.ChatAction.CANCEL)
+        except Exception as e:
+            await client.send_message(message.chat.id, f"❌ Error al comprimir: {e}")
+        return
+
+    for path in selected_files:
+        await client.send_chat_action(message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
+        await client.send_document(message.chat.id, document=path, caption=f"📤 {os.path.basename(path)}")
     await client.send_chat_action(message.chat.id, enums.ChatAction.CANCEL)
