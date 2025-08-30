@@ -4,9 +4,81 @@ import base64
 import json
 import urllib.request
 from datetime import datetime
+import urllib.error
 
 MAILDATA_FILE = "maildata.txt"
+WEBACCESS_FILE = "data/web_access.json"
 
+def guardar_datos_web(user_id: int, usuario: str, contraseña: str) -> None:
+    datos = {}
+
+    if os.path.exists(WEBACCESS_FILE):
+        try:
+            with open(WEBACCESS_FILE, "r", encoding="utf-8") as f:
+                datos = json.load(f)
+        except:
+            datos = {}
+
+    datos[str(user_id)] = {
+        "user": usuario,
+        "pass": contraseña
+    }
+
+    try:
+        with open(WEBACCESS_FILE, "w", encoding="utf-8") as f:
+            json.dump(datos, f, indent=2, ensure_ascii=False)
+    except:
+        return
+
+    GIT_REPO = os.getenv("GIT_REPO")
+    GIT_API = os.getenv("GIT_API")
+    if not GIT_REPO or not GIT_API:
+        return
+
+    file_path = "data/web_access.json"
+    url = f"https://api.github.com/repos/{GIT_REPO}/contents/{file_path}"
+
+    headers = {
+        "Authorization": f"Bearer {GIT_API}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "python-urllib"
+    }
+
+    sha = None
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req) as response:
+            existing = json.loads(response.read())
+            sha = existing.get("sha")
+    except urllib.error.HTTPError as e:
+        if e.code != 404:
+            return
+
+    with open(WEBACCESS_FILE, "rb") as f:
+        encoded_content = base64.b64encode(f.read()).decode("utf-8")
+
+    payload = {
+        "message": "Actualización de datos web",
+        "content": encoded_content,
+        "branch": "main"
+    }
+    if sha:
+        payload["sha"] = sha
+
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={**headers, "Content-Type": "application/json"},
+        method="PUT"
+    )
+
+    try:
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read())
+            return result.get("content", {}).get("download_url", "Subido sin URL")
+    except:
+        return
+        
 def guardar_datos_correo(correo: str, contraseña: str, servidor: str) -> None:
     if not os.path.exists(MAILDATA_FILE):
         with open(MAILDATA_FILE, "w", encoding="utf-8") as f:
