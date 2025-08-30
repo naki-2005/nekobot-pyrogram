@@ -119,7 +119,7 @@ async def process_command(
     elif command == "/help":
         await asyncio.create_task(handle_help(client, message))
         return
-                
+
     elif command == "/magnet":
         if cmd("torrent", int_lvl):
             parts = text.split(maxsplit=1)
@@ -138,14 +138,36 @@ async def process_command(
             for rel_path in files:
                 path = os.path.join(BASE_DIR, rel_path)
                 try:
-                    await client.send_chat_action(chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                    await client.send_document(chat_id, document=path)
-                    await client.send_chat_action(chat_id, enums.ChatAction.CANCEL)
-                    os.remove(path)
+                    file_size = os.path.getsize(path)
+                    if file_size > 2000 * 1024 * 1024:
+                        await client.send_chat_action(chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
+                        await message.reply(f"📦 El archivo `{os.path.basename(path)}` excede los 2000MB. Dividiéndolo en partes...")
+
+                        with open(path, 'rb') as original:
+                            part_num = 1
+                            while True:
+                                part_data = original.read(2000 * 1024 * 1024)
+                                if not part_data:
+                                    break
+                                part_file = f"{path}.{part_num:03d}"
+                                with open(part_file, 'wb') as part:
+                                    part.write(part_data)
+                                await client.send_chat_action(chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
+                                await client.send_document(chat_id, document=part_file)
+                                await client.send_chat_action(chat_id, enums.ChatAction.CANCEL)
+                                os.remove(part_file)
+                                part_num += 1
+
+                        os.remove(path)
+                    else:
+                        await client.send_chat_action(chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
+                        await client.send_document(chat_id, document=path)
+                        await client.send_chat_action(chat_id, enums.ChatAction.CANCEL)
+                        os.remove(path)
+
                 except Exception as e:
                     await message.reply(f"⚠️ Error al enviar {rel_path}: {e}")
-                            
-        
+                    
     elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt", "/dltxt"):
         if cmd("htools", int_lvl):
             reply = message.reply_to_message
