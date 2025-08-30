@@ -22,6 +22,8 @@ async def process_query(client, callback_query):
     elif data.startswith("id_") and "#" in data:
         await process_access_callback(client, callback_query)
 
+    elif data == "config_back":
+        await send_setting_editor(client, callback_query.message)
     elif data.startswith("config_"):
         parametro = data.split("_")[1]
         texto = f"Editar acceso a los comandos de {parametro}"
@@ -41,6 +43,8 @@ async def process_query(client, callback_query):
         subir_bot_config(bot_id)
         await callback_query.answer("📤 Configuración subida al repositorio", show_alert=True)
 
+    elif data == "config_type":
+        await send_setting_public(client, callback_query.message)
+
     else:
         await callback_query.answer("No se ha encontrado una respuesta Query correcta.", show_alert=True)
-      
