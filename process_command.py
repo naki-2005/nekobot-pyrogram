@@ -538,6 +538,14 @@ async def process_command(
         if args[0] == "web":
             if not is_admin:
                 return
+
+            if len(args) >= 2 and args[1].lower() == "reload":
+                from command.db.db import descargar_web_config
+
+                descargar_web_config()
+                await message.reply("🔄 Archivo 'web_access.json' recargado desde GitHub")
+                return
+
             if len(args) >= 3:
                 from command.db.db import guardar_datos_web
 
@@ -582,7 +590,6 @@ async def process_command(
         else:
             await send_setting_editor(client, message)
         return
-        
 
     elif command == "/edituser" and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
         await send_access_editor(client, message)
