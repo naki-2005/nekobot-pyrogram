@@ -32,6 +32,16 @@ def secure_filename(fname: str) -> str:
     fname = re.sub(r"[^a-zA-Z0-9_.\- ]", "", fname)
     return fname or "file"
 
+def get_all_vault_files():
+    all_files = []
+    for root, _, files in os.walk(VAULT_FOLDER):
+        rel_root = os.path.relpath(root, VAULT_FOLDER)
+        rel_root = "" if rel_root == "." else rel_root
+        for fname in sorted(files):
+            fpath = os.path.join(root, fname)
+            all_files.append((rel_root, fname, fpath))
+    return all_files
+
 async def clear_vault_files(client: Client, message: Message):
     if not os.path.isdir(VAULT_FOLDER):
         await message.reply("📁 La carpeta no existe.")
@@ -63,14 +73,7 @@ async def list_vault_files(client: Client, message: Message):
         return
 
     texto = "📄 Archivos disponibles:\n\n"
-    all_files = []
-
-    for root, _, files in os.walk(VAULT_FOLDER):
-        rel_root = os.path.relpath(root, VAULT_FOLDER)
-        rel_root = "" if rel_root == "." else rel_root
-        for fname in sorted(files):
-            fpath = os.path.join(root, fname)
-            all_files.append((rel_root, fname, fpath))
+    all_files = get_all_vault_files()
 
     for idx, (folder, fname, fpath) in enumerate(all_files, start=1):
         size_mb = os.path.getsize(fpath) / (1024 * 1024)
@@ -78,7 +81,7 @@ async def list_vault_files(client: Client, message: Message):
         texto += f"{idx}. {fname} — {size_mb:.2f} MB ({ruta})\n"
 
     await client.send_message(message.from_user.id, texto.strip())
-    
+
 async def send_vault_file_by_index(client: Client, message: Message):
     text = message.text.strip()
     args = text.split()
@@ -99,20 +102,13 @@ async def send_vault_file_by_index(client: Client, message: Message):
             delete_after = True
 
     non_flags = [arg for arg in args if not arg.startswith("-")]
-    index_str = non_flags[0]
-    if mode == "named_compress" and len(non_flags) > 1:
-        custom_name = " ".join(non_flags[1:])
+    index_str = non_flags[1] if len(non_flags) > 1 else non_flags[0]
+    if mode == "named_compress" and len(non_flags) > 2:
+        custom_name = " ".join(non_flags[2:])
 
-    # Usar el mismo sistema de listado que list_vault_files
-    all_files = []
-    for root, _, files in os.walk(VAULT_FOLDER):
-        rel_root = os.path.relpath(root, VAULT_FOLDER)
-        rel_root = "" if rel_root == "." else rel_root
-        for fname in sorted(files):
-            fpath = os.path.join(root, fname)
-            all_files.append((rel_root, fname, fpath))
-
+    all_files = get_all_vault_files()
     selected_files = []
+
     for idx in parse_nested_indices(index_str):
         if idx == "ALL":
             selected_files = [f[2] for f in all_files]
