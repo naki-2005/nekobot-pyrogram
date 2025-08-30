@@ -70,6 +70,7 @@ async def list_vault_files(client: Client, message: Message):
     await client.send_message(message.from_user.id, texto.strip())
 
 import subprocess
+
 SEVEN_ZIP_EXE = os.path.join("7z", "7zz")
 MAX_SIZE_MB = 2000
 
@@ -105,10 +106,9 @@ async def send_vault_file_by_index(client: Client, message: Message):
         await client.send_message(message.chat.id, "❌ No hay archivos en el servidor")
         return
 
-    # Captura índices y nombre (si existe)
     match = re.match(r"([\d\-,]+)(?:\s+(.*))?", content)
     if not match:
-        await client.send_message(message.chat.id, "❌ Formato incorrecto. Usa: /sendfiles 1-3,5 o /sendfiles -Z 1-3 Nombre")
+        await client.send_message(message.chat.id, "❌ Formato incorrecto. Usa: /sendfiles 1-3,5")
         return
 
     index_str, custom_name = match.groups()
@@ -124,7 +124,7 @@ async def send_vault_file_by_index(client: Client, message: Message):
         return
 
     if mode in ["auto_compress", "named_compress"]:
-        archive_name = custom_name.strip() if mode == "named_compress" and custom_name else "archivos_comprimidos"
+        archive_name = custom_name if mode == "named_compress" and custom_name else "archivos_comprimidos"
         archive_path = os.path.join(VAULT_FOLDER, f"{archive_name}.7z")
 
         total_size_mb = sum(os.path.getsize(f) for f in selected_files) / (1024 * 1024)
@@ -138,7 +138,7 @@ async def send_vault_file_by_index(client: Client, message: Message):
             subprocess.run(cmd_args, check=True)
             base_name = os.path.splitext(archive_path)[0]
             for f in sorted(os.listdir(VAULT_FOLDER)):
-                if f.startswith(os.path.basename(base_name)) and f.endswith(".7z") or f.endswith(".7z.001"):
+                if f.startswith(os.path.basename(base_name)) and f.endswith(".7z"):
                     full_path = os.path.join(VAULT_FOLDER, f)
                     await client.send_chat_action(message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
                     await client.send_document(message.chat.id, document=full_path, caption=f"📦 {f}")
@@ -147,7 +147,6 @@ async def send_vault_file_by_index(client: Client, message: Message):
             await client.send_message(message.chat.id, f"❌ Error al comprimir: {e}")
         return
 
-    # Envío directo sin compresión
     for path in selected_files:
         await client.send_chat_action(message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
         await client.send_document(message.chat.id, document=path, caption=f"📤 {os.path.basename(path)}")
