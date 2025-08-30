@@ -77,7 +77,9 @@ def start_data_2():
     for path in [
         "selenium/chrome-linux64/chrome",
         "selenium/chromedriver-linux64/chromedriver",
-        "7z/7zz"
+        "7z/7zz",
+        "command/desmega"
+        
     ]:
         try:
             os.chmod(path, 0o755)
