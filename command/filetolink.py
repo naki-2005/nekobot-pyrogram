@@ -10,6 +10,16 @@ VAULT_FOLDER = "vault_files"
 SEVEN_ZIP_EXE = os.path.join("7z", "7zz")
 MAX_SIZE_MB = 2000
 
+def parse_nested_indices(text):
+    result = []
+    for part in text.split(","):
+        part = part.strip()
+        if part == "*":
+            result.append("ALL")
+        elif part.isdigit():
+            result.append(int(part))
+    return result
+
 def get_info(msg: Message):
     media = next((m for m in [msg.document, msg.photo, msg.audio, msg.video, msg.voice, msg.animation, msg.sticker] if m), None)
     fname = getattr(media, "file_name", None) or media.file_id if media else None
@@ -68,17 +78,7 @@ async def list_vault_files(client: Client, message: Message):
         texto += f"{idx}. {fname} — {size_mb:.2f} MB ({ruta})\n"
 
     await client.send_message(message.from_user.id, texto.strip())
-
-def parse_nested_indices(text):
-    result = []
-    for part in text.split(","):
-        part = part.strip()
-        if part == "*":
-            result.append("ALL")
-        elif part.isdigit():
-            result.append(int(part))
-    return result
-
+    
 async def send_vault_file_by_index(client: Client, message: Message):
     text = message.text.strip()
     args = text.split()
@@ -88,7 +88,6 @@ async def send_vault_file_by_index(client: Client, message: Message):
 
     mode = None
     delete_after = False
-    index_str = ""
     custom_name = ""
     flags = [arg for arg in args if arg.startswith("-")]
     for flag in flags:
@@ -98,26 +97,28 @@ async def send_vault_file_by_index(client: Client, message: Message):
             mode = "named_compress"
         elif flag == "-d":
             delete_after = True
+
     non_flags = [arg for arg in args if not arg.startswith("-")]
     index_str = non_flags[0]
     if mode == "named_compress" and len(non_flags) > 1:
         custom_name = " ".join(non_flags[1:])
 
+    # Usar el mismo sistema de listado que list_vault_files
     all_files = []
     for root, _, files in os.walk(VAULT_FOLDER):
         rel_root = os.path.relpath(root, VAULT_FOLDER)
         rel_root = "" if rel_root == "." else rel_root
         for fname in sorted(files):
             fpath = os.path.join(root, fname)
-            all_files.append(fpath)
+            all_files.append((rel_root, fname, fpath))
 
     selected_files = []
     for idx in parse_nested_indices(index_str):
         if idx == "ALL":
-            selected_files = all_files[:]
+            selected_files = [f[2] for f in all_files]
             break
         elif isinstance(idx, int) and 1 <= idx <= len(all_files):
-            selected_files.append(all_files[idx - 1])
+            selected_files.append(all_files[idx - 1][2])
 
     if not selected_files:
         await client.send_message(message.chat.id, "❌ No se encontraron archivos válidos")
@@ -157,4 +158,3 @@ async def send_vault_file_by_index(client: Client, message: Message):
                 os.remove(path)
         except Exception as e:
             await client.send_message(message.chat.id, f"⚠️ Error al enviar `{os.path.basename(path)}`: {e}")
-    
