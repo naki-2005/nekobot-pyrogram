@@ -45,7 +45,7 @@ def descargar_web_config():
             print("[!] El archivo remoto no existe")
         else:
             raise RuntimeError(f"Error al descargar desde GitHub: {e.code} {e.reason}")
-            
+
 def guardar_datos_web(user_id: int, usuario: str, contraseña: str) -> None:
     datos = {}
 
@@ -55,6 +55,9 @@ def guardar_datos_web(user_id: int, usuario: str, contraseña: str) -> None:
                 datos = json.load(f)
         except:
             datos = {}
+    for entry in datos.values():
+        if entry.get("user") == usuario:
+            raise ValueError(f"❌ El usuario '{usuario}' ya está registrado.")
 
     datos[str(user_id)] = {
         "user": usuario,
