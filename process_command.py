@@ -301,6 +301,41 @@ async def process_command(
                         document=path_cbz,
                                )
 
+    elif command == "/megadl":
+        if not cmd("download", int_lvl):
+            await message.reply("⛔ No tienes permiso para usar este comando.")
+            return
+
+        if len(text.split()) < 2:
+            await message.reply("❌ Debes proporcionar un enlace de MEGA.")
+            return
+
+        mega_url = text.split()[1]
+        desmega_path = os.path.join("command", "desmega")
+        output_dir = "/content/downloads"
+        os.makedirs(output_dir, exist_ok=True)
+
+        try:
+            result = subprocess.run(
+                [desmega_path, mega_url],
+                cwd=output_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+
+            files = os.listdir(output_dir)
+            if not files:
+                await message.reply("⚠️ No se encontró ningún archivo descargado.")
+                return
+
+            file_path = os.path.join(output_dir, files[0])
+            await client.send_document(chat_id, InputFile(file_path))
+            await message.reply("✅ Archivo enviado correctamente.")
+
+        except Exception as e:
+            await message.reply(f"❌ Error al descargar: {str(e)}")
+
     elif command == "/hito":
         if cmd("htools", int_lvl):
             parts = text.split(maxsplit=1)
