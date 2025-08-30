@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import subprocess
 from flask import Flask, request, send_from_directory, render_template_string, redirect, session
 from threading import Thread
 from command.torrets_tools import download_from_magnet
@@ -18,19 +19,17 @@ def login_required(f):
         return f(*args, **kwargs)
     wrapper.__name__ = f.__name__
     return wrapper
-    
+
 @explorer.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         u = request.form.get("username", "").strip()
         p = request.form.get("password", "").strip()
-
         try:
             with open(WEBACCESS_FILE, "r", encoding="utf-8") as f:
                 users = json.load(f)
         except:
             users = {}
-
         for uid, creds in users.items():
             if creds.get("user") == u and creds.get("pass") == p:
                 session["logged_in"] = True
@@ -39,29 +38,22 @@ def login():
 
     return render_template_string("""
     <!doctype html>
-    <html>
-    <head>
-        <title>Login</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-            body { font-family: Arial, sans-serif; background-color: #f0f0f0; padding: 2em; }
-            form { max-width: 300px; margin: auto; background: white; padding: 2em; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-            input { width: 100%; padding: 0.5em; margin-bottom: 1em; border: 1px solid #ccc; border-radius: 4px; }
-            input[type="submit"] { background-color: #007BFF; color: white; border: none; cursor: pointer; }
-            input[type="submit"]:hover { background-color: #0056b3; }
-        </style>
-    </head>
-    <body>
-        <form method="post">
-            <h2 style="text-align:center;">🔐 Iniciar sesión</h2>
-            <input name="username" placeholder="Usuario" required>
-            <input type="password" name="password" placeholder="Contraseña" required>
-            <input type="submit" value="Ingresar">
-        </form>
-    </body>
-    </html>
+    <html><head><title>Login</title><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Arial; background-color: #f0f0f0; padding: 2em; }
+        form { max-width: 300px; margin: auto; background: white; padding: 2em; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        input { width: 100%; padding: 0.5em; margin-bottom: 1em; border: 1px solid #ccc; border-radius: 4px; }
+        input[type="submit"] { background-color: #007BFF; color: white; border: none; cursor: pointer; }
+        input[type="submit"]:hover { background-color: #0056b3; }
+    </style></head>
+    <body><form method="post">
+        <h2 style="text-align:center;">🔐 Iniciar sesión</h2>
+        <input name="username" placeholder="Usuario" required>
+        <input type="password" name="password" placeholder="Contraseña" required>
+        <input type="submit" value="Ingresar">
+    </form></body></html>
     """)
-    
+
 TEMPLATE = """
 <!doctype html>
 <html>
@@ -69,19 +61,31 @@ TEMPLATE = """
     <title>Explorador de Archivos</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial; margin: 0; padding: 0; box-sizing: border-box; }
         .header { background-color: #007BFF; color: white; padding: 1em; text-align: center; font-size: 1.2em; }
         .header a { color: white; text-decoration: underline; font-weight: bold; }
         .content { padding: 1em; }
         form { margin-bottom: 1em; display: flex; flex-direction: column; gap: 0.5em; }
-        input[type="file"], input[type="text"], select { max-width: 100%; padding: 0.5em; font-size: 1em; }
-        button { padding: 0.6em; font-size: 1em; background-color: #007BFF; color: white; border: none; border-radius: 4px; }
+        input[type="file"], input[type="text"], select { padding: 0.5em; font-size: 1em; }
+        button { padding: 0.6em; font-size: 1em; background-color: #007BFF; color: white; border: none; border-radius: 4px; cursor: pointer; }
         ul { list-style-type: none; padding: 0; }
         li { margin: 0.5em 0; word-break: break-word; }
         a { text-decoration: none; color: #007BFF; }
         a:hover { text-decoration: underline; }
-        .delete-btn { background-color: #dc3545; color: white; border: none; padding: 0.4em 0.8em; margin-left: 10px; border-radius: 4px; cursor: pointer; }
+        .delete-btn, .rename-btn { background-color: #dc3545; color: white; border: none; padding: 0.4em 0.8em; margin-left: 10px; border-radius: 4px; cursor: pointer; }
+        .rename-btn { background-color: #ffc107; color: black; }
+        .compress-toggle { margin-top: 1em; }
     </style>
+    <script>
+        function toggleCompress() {
+            const section = document.getElementById("compress-section");
+            section.style.display = section.style.display === "none" ? "block" : "none";
+        }
+        function toggleRename(id) {
+            const input = document.getElementById("rename-" + id);
+            input.style.display = input.style.display === "none" ? "inline" : "none";
+        }
+    </script>
 </head>
 <body>
     <div class="header">
@@ -96,7 +100,7 @@ TEMPLATE = """
 
         <h2>🔗 Descargar desde Magnet Link</h2>
         <form action="/magnet" method="post">
-            <input type="text" name="magnet" placeholder="Pega aquí el magnet link o URL .torrent" required>
+            <input type="text" name="magnet" placeholder="Magnet link o URL .torrent" required>
             <button type="submit">Descargar</button>
         </form>
 
@@ -111,6 +115,26 @@ TEMPLATE = """
             <button type="submit">Crear CBZ</button>
         </form>
 
+        <button class="compress-toggle" onclick="toggleCompress()">Comprimir</button>
+        <div id="compress-section" style="display:none;">
+            <form action="/compress" method="post">
+                <input type="text" name="archive_name" placeholder="Nombre del archivo .7z" required>
+                <ul>
+                {% for item in items %}
+                    <li>
+                        <input type="checkbox" name="selected" value="{{ item['full_path'] }}">
+                        {% if item['is_dir'] %}
+                            📂 {{ item['name'] }}/
+                        {% else %}
+                            📄 {{ item['name'] }} — {{ item['size_mb'] }} MB
+                        {% endif %}
+                    </li>
+                {% endfor %}
+                </ul>
+                <button type="submit">Comprimir</button>
+            </form>
+        </div>
+
         <ul>
         {% for item in items %}
             <li>
@@ -118,11 +142,17 @@ TEMPLATE = """
                     📂 <a href="/browse?path={{ item['full_path'] }}">{{ item['name'] }}/</a>
                 {% else %}
                     📄 <a href="/download?path={{ item['full_path'] }}">{{ item['name'] }}</a> — {{ item['size_mb'] }} MB
-                    <form action="/delete" method="post" style="display:inline;">
-                        <input type="hidden" name="path" value="{{ item['full_path'] }}">
-                        <button class="delete-btn" onclick="return confirm('¿Eliminar {{ item['name'] }}?')">Eliminar</button>
-                    </form>
                 {% endif %}
+                <form action="/delete" method="post" style="display:inline;">
+                    <input type="hidden" name="path" value="{{ item['full_path'] }}">
+                    <button class="delete-btn" onclick="return confirm('¿Eliminar {{ item['name'] }}?')">Eliminar</button>
+                </form>
+                <button class="rename-btn" onclick="toggleRename('{{ loop.index }}')">✏️</button>
+                <form action="/rename" method="post" style="display:inline;">
+                    <input type="hidden" name="old_path" value="{{ item['full_path'] }}">
+                    <input type="text" name="new_name" id="rename-{{ loop.index }}" style="display:none;" placeholder="Nuevo nombre">
+                    <button type="submit" style="display:none;" id="rename-{{ loop.index }}-btn">Renombrar</button>
+                </form>
             </li>
         {% endfor %}
         </ul>
@@ -217,5 +247,51 @@ def delete_file():
     except Exception as e:
         return f"<h3>Error al eliminar archivo: {e}</h3>", 500
 
+@explorer.route("/rename", methods=["POST"])
+@login_required
+def rename_item():
+    old_path = request.form.get("old_path")
+    new_name = request.form.get("new_name")
+    if not old_path or not new_name:
+        return "<h3>❌ Datos inválidos para renombrar.</h3>", 400
+    try:
+        new_path = os.path.join(os.path.dirname(old_path), new_name)
+        os.rename(old_path, new_path)
+        return redirect("/")
+    except Exception as e:
+        return f"<h3>Error al renombrar: {e}</h3>", 500
+
+@explorer.route("/compress", methods=["POST"])
+@login_required
+def compress_items():
+    archive_name = request.form.get("archive_name", "").strip()
+    selected = request.form.getlist("selected")
+    if not archive_name or not selected:
+        return "<h3>❌ Debes proporcionar un nombre y seleccionar archivos.</h3>", 400
+
+    archive_path = os.path.join(BASE_DIR, f"{archive_name}.7z")
+    try:
+        cmd_args = [
+            os.path.join("7z", "7zz"),
+            'a',
+            '-mx=0',
+            '-v2000m',
+            archive_path
+        ] + selected
+        subprocess.run(cmd_args, check=True)
+
+        for path in selected:
+            if os.path.exists(path):
+                if os.path.isfile(path):
+                    os.remove(path)
+                elif os.path.isdir(path):
+                    import shutil
+                    shutil.rmtree(path)
+
+        return redirect("/")
+    except Exception as e:
+        return f"<h3>❌ Error al comprimir: {e}</h3>", 500
+
 def run_flask():
     explorer.run(host="0.0.0.0", port=10000)
+    
