@@ -1,6 +1,6 @@
 from command.mailtools.send import mail_query
 from command.help import handle_help_callback
-from command.admintools import process_access_callback, guardar_parametro, get_accesscmd_buttons
+from command.admintools import send_setting_editor, process_access_callback, guardar_parametro, get_accesscmd_buttons
 from command.db.db import subir_bot_config
 
 async def process_query(client, callback_query):
