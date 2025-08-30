@@ -53,23 +53,19 @@ async def list_vault_files(client: Client, message: Message):
         return
 
     texto = "📄 Archivos disponibles:\n\n"
-    folder_map = {}
+    all_files = []
 
-    for root, dirs, files in os.walk(VAULT_FOLDER):
+    for root, _, files in os.walk(VAULT_FOLDER):
         rel_root = os.path.relpath(root, VAULT_FOLDER)
-        if rel_root == ".":
-            rel_root = ""
-        folder_map.setdefault(rel_root, []).extend(sorted(files))
+        rel_root = "" if rel_root == "." else rel_root
+        for fname in sorted(files):
+            fpath = os.path.join(root, fname)
+            all_files.append((rel_root, fname, fpath))
 
-    folder_keys = sorted(folder_map.keys())
-    for folder_idx, folder in enumerate(folder_keys, start=1):
-        texto += f"{folder if folder else 'Root'}:\n"
-        for file_idx, fname in enumerate(folder_map[folder], start=1):
-            fpath = os.path.join(VAULT_FOLDER, folder, fname) if folder else os.path.join(VAULT_FOLDER, fname)
-            size_mb = os.path.getsize(fpath) / (1024 * 1024)
-            label = f"{folder_idx}.{file_idx}" if folder else f"{file_idx}"
-            texto += f"{label}. {fname} — {size_mb:.2f} MB\n"
-        texto += "\n"
+    for idx, (folder, fname, fpath) in enumerate(all_files, start=1):
+        size_mb = os.path.getsize(fpath) / (1024 * 1024)
+        ruta = folder if folder else "Root"
+        texto += f"{idx}. {fname} — {size_mb:.2f} MB ({ruta})\n"
 
     await client.send_message(message.from_user.id, texto.strip())
 
@@ -78,31 +74,9 @@ def parse_nested_indices(text):
     for part in text.split(","):
         part = part.strip()
         if part == "*":
-            result.append(("ALL", None))
-        elif part.endswith(".*"):
-            try:
-                folder_idx = int(part[:-2])
-                result.append((folder_idx, None))
-            except:
-                continue
-        elif "-" in part:
-            try:
-                start, end = part.split("-")
-                f_start, i_start = map(int, start.split("."))
-                f_end, i_end = map(int, end.split("."))
-                if f_start == f_end:
-                    for i in range(i_start, i_end + 1):
-                        result.append((f_start, i))
-            except:
-                continue
-        elif "." in part:
-            try:
-                f_idx, i_idx = map(int, part.split("."))
-                result.append((f_idx, i_idx))
-            except:
-                continue
+            result.append("ALL")
         elif part.isdigit():
-            result.append((0, int(part)))
+            result.append(int(part))
     return result
 
 async def send_vault_file_by_index(client: Client, message: Message):
@@ -129,41 +103,21 @@ async def send_vault_file_by_index(client: Client, message: Message):
     if mode == "named_compress" and len(non_flags) > 1:
         custom_name = " ".join(non_flags[1:])
 
-    folder_map = {}
-    for root, dirs, files in os.walk(VAULT_FOLDER):
+    all_files = []
+    for root, _, files in os.walk(VAULT_FOLDER):
         rel_root = os.path.relpath(root, VAULT_FOLDER)
-        if rel_root == ".":
-            rel_root = ""
-        folder_map.setdefault(rel_root, []).extend(sorted(files))
+        rel_root = "" if rel_root == "." else rel_root
+        for fname in sorted(files):
+            fpath = os.path.join(root, fname)
+            all_files.append(fpath)
 
-    folder_keys = sorted(folder_map.keys())
     selected_files = []
-
-    for item in parse_nested_indices(index_str):
-        folder_idx, file_idx = item
-        if folder_idx == "ALL":
-            for folder in folder_keys:
-                for fname in folder_map[folder]:
-                    fpath = os.path.join(VAULT_FOLDER, folder, fname) if folder else os.path.join(VAULT_FOLDER, fname)
-                    selected_files.append(fpath)
-        elif folder_idx == 0:
-            folder = ""
-            files = folder_map.get(folder, [])
-            if 1 <= file_idx <= len(files):
-                fname = files[file_idx - 1]
-                fpath = os.path.join(VAULT_FOLDER, fname)
-                selected_files.append(fpath)
-        elif 1 <= folder_idx <= len(folder_keys):
-            folder = folder_keys[folder_idx - 1]
-            files = folder_map[folder]
-            if file_idx is None:
-                for fname in files:
-                    fpath = os.path.join(VAULT_FOLDER, folder, fname)
-                    selected_files.append(fpath)
-            elif 1 <= file_idx <= len(files):
-                fname = files[file_idx - 1]
-                fpath = os.path.join(VAULT_FOLDER, folder, fname)
-                selected_files.append(fpath)
+    for idx in parse_nested_indices(index_str):
+        if idx == "ALL":
+            selected_files = all_files[:]
+            break
+        elif isinstance(idx, int) and 1 <= idx <= len(all_files):
+            selected_files.append(all_files[idx - 1])
 
     if not selected_files:
         await client.send_message(message.chat.id, "❌ No se encontraron archivos válidos")
@@ -203,3 +157,4 @@ async def send_vault_file_by_index(client: Client, message: Message):
                 os.remove(path)
         except Exception as e:
             await client.send_message(message.chat.id, f"⚠️ Error al enviar `{os.path.basename(path)}`: {e}")
+    
