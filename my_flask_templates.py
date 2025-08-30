@@ -24,7 +24,7 @@ MAIN_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body { font-family: Arial; margin: 0; padding: 0; box-sizing: border-box; }
-        .header { background-color: #007BFF; color: white; padding: 1em; text-align: center; }
+        .header { background-color: #007BFF; color: white; padding: 1em; text-align: center; position: relative; }
         .header-title { font-size: 1.2em; margin-bottom: 10px; }
         .header a { color: white; text-decoration: underline; font-weight: bold; }
         .header-buttons { display: flex; justify-content: center; gap: 10px; }
@@ -39,6 +39,19 @@ MAIN_TEMPLATE = """
         .utils-btn:hover {
             background-color: #218838;
         }
+        .floating-btn { 
+            position: absolute; 
+            top: 10px; 
+            right: 10px; 
+            width: 12px; 
+            height: 12px; 
+            background: white; 
+            border-radius: 50%; 
+            cursor: pointer; 
+            opacity: 0.7;
+            animation: bounce 3s infinite, fadeOut 10s forwards;
+            z-index: 1000;
+        }
         .content { padding: 1em; }
         form { margin-bottom: 1em; display: flex; flex-direction: column; gap: 0.5em; }
         input[type="file"], input[type="text"], select { padding: 0.5em; font-size: 1em; }
@@ -50,6 +63,18 @@ MAIN_TEMPLATE = """
         .delete-btn, .rename-btn { background-color: #dc3545; color: white; border: none; padding: 0.4em 0.8em; margin-left: 10px; border-radius: 4px; cursor: pointer; }
         .rename-btn { background-color: #ffc107; color: black; }
         .compress-toggle { margin-top: 1em; }
+        
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% {transform: translateY(0);}
+            40% {transform: translateY(-15px);}
+            60% {transform: translateY(-7px);}
+        }
+        
+        @keyframes fadeOut {
+            0% { opacity: 0.7; }
+            90% { opacity: 0.7; }
+            100% { opacity: 0.2; }
+        }
     </style>
     <script>
         function toggleCompress() {
@@ -61,10 +86,18 @@ MAIN_TEMPLATE = """
             const input = document.getElementById("rename-" + id);
             input.style.display = input.style.display === "none" ? "inline" : "none";
         }
+        
+        // Mostrar el botón flotante después de que la página cargue
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(function() {
+                document.getElementById('floating-btn').style.animation = 'bounce 3s infinite, fadeOut 10s forwards';
+            }, 500);
+        });
     </script>
 </head>
 <body>
     <div class="header">
+        <div id="floating-btn" class="floating-btn"></div>
         <div class="header-title">
             Servidor Flask de Neko Bot creado por <a href="https://t.me/nakigeplayer" target="_blank">Naki</a>
         </div>
@@ -133,7 +166,7 @@ UTILS_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body { font-family: Arial; margin: 0; padding: 0; box-sizing: border-box; }
-        .header { background-color: #007BFF; color: white; padding: 1em; text-align: center; }
+        .header { background-color: #007BFF; color: white; padding: 1em; text-align: center; position: relative; }
         .header-title { font-size: 1.2em; margin-bottom: 10px; }
         .header a { color: white; text-decoration: underline; font-weight: bold; }
         .header-buttons { display: flex; justify-content: center; gap: 10px; }
@@ -148,15 +181,49 @@ UTILS_TEMPLATE = """
         .back-btn:hover {
             background-color: #5a6268;
         }
+        .floating-btn { 
+            position: absolute; 
+            top: 10px; 
+            left: 10px; 
+            width: 12px; 
+            height: 12px; 
+            background: white; 
+            border-radius: 50%; 
+            cursor: pointer; 
+            opacity: 0.7;
+            animation: bounce 3s infinite, fadeOut 10s forwards;
+            z-index: 1000;
+        }
         .content { padding: 1em; }
         form { margin-bottom: 2em; display: flex; flex-direction: column; gap: 0.5em; max-width: 500px; }
         input[type="text"], select { padding: 0.5em; font-size: 1em; }
         button { padding: 0.6em; font-size: 1em; background-color: #007BFF; color: white; border: none; border-radius: 4px; cursor: pointer; }
         h2 { border-bottom: 2px solid #007BFF; padding-bottom: 0.5em; }
+        
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% {transform: translateY(0);}
+            40% {transform: translateY(-15px);}
+            60% {transform: translateY(-7px);}
+        }
+        
+        @keyframes fadeOut {
+            0% { opacity: 0.7; }
+            90% { opacity: 0.7; }
+            100% { opacity: 0.2; }
+        }
     </style>
+    <script>
+        // Mostrar el botón flotante después de que la página cargue
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(function() {
+                document.getElementById('floating-btn').style.animation = 'bounce 3s infinite, fadeOut 10s forwards';
+            }, 500);
+        });
+    </script>
 </head>
 <body>
     <div class="header">
+        <div id="floating-btn" class="floating-btn"></div>
         <div class="header-title">
             Utilidades - Servidor Flask de Neko Bot
         </div>
