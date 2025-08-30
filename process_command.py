@@ -312,7 +312,7 @@ async def process_command(
 
         mega_url = text.split()[1]
         desmega_path = os.path.join("command", "desmega")
-        output_dir = "/content/downloads"
+        output_dir = "vault_files"
         os.makedirs(output_dir, exist_ok=True)
 
         try:
