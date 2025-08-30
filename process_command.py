@@ -135,6 +135,41 @@ async def process_command(
                 await message.reply("❌ No se descargaron archivos.")
                 return
 
+            if arg_text.strip() == "-z":
+                try:
+                    await client.send_chat_action(chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
+                    await message.reply("🗜️ Comprimiendo archivos en partes de 2000MB con 7z...")
+
+                    archive_path = os.path.join(BASE_DIR, "compressed.7z")
+                    seven_zip_exe = os.path.join("7z", "7zz")
+                    cmd_args = [
+                        seven_zip_exe,
+                        'a',
+                        '-mx=0', 
+                        '-v2000m', 
+                        archive_path,
+                        os.path.join(BASE_DIR, '*')
+                    ]
+
+                    subprocess.run(cmd_args, check=True)
+
+                    for rel_path in files:
+                        path = os.path.join(BASE_DIR, rel_path)
+                        if os.path.exists(path):
+                            os.remove(path)
+
+                    for part_file in sorted(os.listdir(BASE_DIR)):
+                        full_path = os.path.join(BASE_DIR, part_file)
+                        if part_file.startswith("compressed.7z"):
+                            await client.send_chat_action(chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
+                            await client.send_document(chat_id, document=full_path)
+                            await client.send_chat_action(chat_id, enums.ChatAction.CANCEL)
+                            os.remove(full_path)
+
+                except Exception as e:
+                    await message.reply(f"⚠️ Error al comprimir y enviar archivos: {e}")
+                return
+
             for rel_path in files:
                 path = os.path.join(BASE_DIR, rel_path)
                 try:
