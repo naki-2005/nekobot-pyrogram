@@ -39,17 +39,14 @@ async def handle_up_command(client: Client, message: Message):
         return
     fname, fid, size_mb = get_info(message.reply_to_message)
     parts = message.text.strip().split(maxsplit=1)
-    if len(parts) == 2:
-        raw_path = parts[1].strip()
-    else:
-        raw_path = fname or "archivo"
+    raw_path = parts[1].strip() if len(parts) == 2 else fname or "archivo"
     safe_parts = [secure_filename(p) for p in raw_path.split("/")]
     relative_path = os.path.join(*safe_parts)
     full_path = os.path.join(VAULT_FOLDER, relative_path)
     os.makedirs(os.path.dirname(full_path), exist_ok=True)
     await client.download_media(message.reply_to_message, full_path)
     await message.reply(f"✅ Archivo guardado como `{relative_path}` en `{VAULT_FOLDER}`.")
-    
+
 async def list_vault_files(client: Client, message: Message):
     if not os.path.isdir(VAULT_FOLDER):
         await client.send_message(message.from_user.id, "📁 La carpeta está vacía o no existe.")
@@ -61,30 +58,31 @@ async def list_vault_files(client: Client, message: Message):
     for root, dirs, files in os.walk(VAULT_FOLDER):
         rel_root = os.path.relpath(root, VAULT_FOLDER)
         if rel_root == ".":
-            rel_root = "Root"
+            rel_root = ""
         folder_map.setdefault(rel_root, []).extend(sorted(files))
 
     folder_keys = sorted(folder_map.keys())
     for folder_idx, folder in enumerate(folder_keys, start=1):
-        texto += f"{folder}:\n"
+        texto += f"{folder if folder else 'Root'}:\n"
         for file_idx, fname in enumerate(folder_map[folder], start=1):
-            fpath = os.path.join(VAULT_FOLDER, folder if folder != "Root" else "", fname)
+            fpath = os.path.join(VAULT_FOLDER, folder, fname) if folder else os.path.join(VAULT_FOLDER, fname)
             size_mb = os.path.getsize(fpath) / (1024 * 1024)
-            label = f"{folder_idx}.{file_idx}" if folder != "Root" else f"{file_idx}"
+            label = f"{folder_idx}.{file_idx}" if folder else f"{file_idx}"
             texto += f"{label}. {fname} — {size_mb:.2f} MB\n"
         texto += "\n"
 
     await client.send_message(message.from_user.id, texto.strip())
 
-
 def parse_nested_indices(text):
     result = []
     for part in text.split(","):
         part = part.strip()
-        if part.endswith(".*"):
+        if part == "*":
+            result.append(("ALL", None))
+        elif part.endswith(".*"):
             try:
                 folder_idx = int(part[:-2])
-                result.append((folder_idx, None))  # carpeta completa
+                result.append((folder_idx, None))
             except:
                 continue
         elif "-" in part:
@@ -104,7 +102,7 @@ def parse_nested_indices(text):
             except:
                 continue
         elif part.isdigit():
-            result.append((int(part), None))
+            result.append((0, int(part)))
     return result
 
 async def send_vault_file_by_index(client: Client, message: Message):
@@ -113,6 +111,7 @@ async def send_vault_file_by_index(client: Client, message: Message):
     if len(args) < 2:
         await client.send_message(message.chat.id, "❌ Debes especificar los índices")
         return
+
     mode = None
     delete_after = False
     index_str = ""
@@ -129,37 +128,52 @@ async def send_vault_file_by_index(client: Client, message: Message):
     index_str = non_flags[0]
     if mode == "named_compress" and len(non_flags) > 1:
         custom_name = " ".join(non_flags[1:])
+
     folder_map = {}
     for root, dirs, files in os.walk(VAULT_FOLDER):
         rel_root = os.path.relpath(root, VAULT_FOLDER)
         if rel_root == ".":
             rel_root = ""
         folder_map.setdefault(rel_root, []).extend(sorted(files))
+
     folder_keys = sorted(folder_map.keys())
     selected_files = []
+
     for item in parse_nested_indices(index_str):
         folder_idx, file_idx = item
-        if 1 <= folder_idx <= len(folder_keys):
+        if folder_idx == "ALL":
+            for folder in folder_keys:
+                for fname in folder_map[folder]:
+                    fpath = os.path.join(VAULT_FOLDER, folder, fname) if folder else os.path.join(VAULT_FOLDER, fname)
+                    selected_files.append(fpath)
+        elif folder_idx == 0:
+            folder = ""
+            files = folder_map.get(folder, [])
+            if 1 <= file_idx <= len(files):
+                fname = files[file_idx - 1]
+                fpath = os.path.join(VAULT_FOLDER, fname)
+                selected_files.append(fpath)
+        elif 1 <= folder_idx <= len(folder_keys):
             folder = folder_keys[folder_idx - 1]
             files = folder_map[folder]
             if file_idx is None:
                 for fname in files:
-                    fpath = os.path.join(VAULT_FOLDER, folder, fname) if folder else os.path.join(VAULT_FOLDER, fname)
+                    fpath = os.path.join(VAULT_FOLDER, folder, fname)
                     selected_files.append(fpath)
             elif 1 <= file_idx <= len(files):
                 fname = files[file_idx - 1]
-                fpath = os.path.join(VAULT_FOLDER, folder, fname) if folder else os.path.join(VAULT_FOLDER, fname)
+                fpath = os.path.join(VAULT_FOLDER, folder, fname)
                 selected_files.append(fpath)
+
     if not selected_files:
         await client.send_message(message.chat.id, "❌ No se encontraron archivos válidos")
         return
+
     if mode in ["auto_compress", "named_compress"]:
         archive_name = custom_name.strip() if mode == "named_compress" and custom_name else "archivos_comprimidos"
         archive_path = os.path.join(VAULT_FOLDER, f"{archive_name}.7z")
         total_size_mb = sum(os.path.getsize(f) for f in selected_files) / (1024 * 1024)
-        volume_flag = []
-        if total_size_mb > MAX_SIZE_MB:
-            volume_flag = [f"-v{MAX_SIZE_MB}m"]
+        volume_flag = [f"-v{MAX_SIZE_MB}m"] if total_size_mb > MAX_SIZE_MB else []
         cmd_args = [SEVEN_ZIP_EXE, "a", "-mx=0"] + volume_flag + [archive_path] + selected_files
         try:
             subprocess.run(cmd_args, check=True)
@@ -179,6 +193,7 @@ async def send_vault_file_by_index(client: Client, message: Message):
         except Exception as e:
             await client.send_message(message.chat.id, f"❌ Error al comprimir: {e}")
         return
+
     for path in selected_files:
         try:
             await client.send_chat_action(message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
