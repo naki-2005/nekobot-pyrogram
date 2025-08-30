@@ -9,7 +9,7 @@ from command.htools import crear_cbz_desde_fuente
 explorer = Flask("file_explorer")
 explorer.secret_key = os.getenv("FLASK_SECRET", "supersecretkey")
 BASE_DIR = "vault_files"
-WEBACCESS_FILE = "data/web_access.json"
+WEBACCESS_FILE = "web_access.json"
 
 def login_required(f):
     def wrapper(*args, **kwargs):
