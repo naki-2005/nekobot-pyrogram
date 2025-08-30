@@ -526,13 +526,30 @@ async def process_command(
                 os.remove(file_path)
 
     elif command == "/settings" and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
-        if int_lvl < 6:
-            return
-
         args = textori.split()[1:]
 
         if not args:
-            await send_setting_editor(client, message)
+            if is_owner:
+                await send_setting_editor(client, message)
+            else:
+                return
+            return
+
+        if args[0] == "web":
+            if not is_admin:
+                return
+            if len(args) >= 3:
+                from command.db.db import guardar_datos_web
+
+                usuario = args[1]
+                contraseña = args[2]
+                guardar_datos_web(user_id, usuario, contraseña)
+                await message.reply("✅ Datos web guardados correctamente en 'web_access.json'")
+            else:
+                await message.reply("⚠️ Uso incorrecto. Formato esperado: /settings web <usuario> <contraseña>")
+            return
+
+        if not is_owner:
             return
 
         if "imgapi" in args:
@@ -565,7 +582,7 @@ async def process_command(
         else:
             await send_setting_editor(client, message)
         return
-
+        
 
     elif command == "/edituser" and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
         await send_access_editor(client, message)
