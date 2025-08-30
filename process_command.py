@@ -562,10 +562,14 @@ async def process_command(
 
         if args[0] == "copy" and len(args) >= 2:
             from command.db.db import descargar_web_config, descargar_bot_config
+            from command.db.db import subir_bot_config
 
             bot_id = args[1]
             descargar_web_config()
             descargar_bot_config(bot_id)
+            bot_info = await client.get_me()
+            me_bot_id = str(bot_info.id)
+            subir_bot_config(me_bot_id)
             await message.reply(f"📥 Configuración del bot {bot_id} copiada correctamente")
             return
 
