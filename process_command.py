@@ -125,6 +125,16 @@ async def process_command(
             parts = text.split(maxsplit=1)
             arg_text = parts[1] if len(parts) > 1 else ""
 
+            if not arg_text:
+                await message.reply("❗ Debes proporcionar un enlace magnet o .torrent.")
+                return
+
+            files = await handle_torrent_command(client, message)
+
+            if not files:
+                await message.reply("❌ No se descargaron archivos.")
+                return
+
             if arg_text.strip() == "-z":
                 try:
                     await client.send_chat_action(chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
@@ -136,19 +146,17 @@ async def process_command(
                     cmd_args = [
                         seven_zip_exe,
                         'a',
-                        '-mx=0',      
-                        '-v2000m',     
+                        '-mx=0',
+                        '-v2000m',
                         archive_path,
                         os.path.join(BASE_DIR, '*')
                     ]
 
                     subprocess.run(cmd_args, check=True)
-
-                    for item in os.listdir(BASE_DIR):
-                        full_path = os.path.join(BASE_DIR, item)
-                        if not item.startswith("compressed.7z") and os.path.isfile(full_path):
-                            os.remove(full_path)
-
+                    for rel_path in files:
+                        path = os.path.join(BASE_DIR, rel_path)
+                        if os.path.exists(path):
+                            os.remove(path)
                     for part_file in sorted(os.listdir(BASE_DIR)):
                         full_path = os.path.join(BASE_DIR, part_file)
                         if part_file.startswith("compressed.7z"):
@@ -159,16 +167,6 @@ async def process_command(
 
                 except Exception as e:
                     await message.reply(f"⚠️ Error al comprimir y enviar archivos: {e}")
-                return
-
-            if not arg_text:
-                await message.reply("❗ Debes proporcionar un enlace magnet o .torrent.")
-                return
-
-            files = await handle_torrent_command(client, message)
-
-            if not files:
-                await message.reply("❌ No se descargaron archivos.")
                 return
 
             for rel_path in files:
@@ -203,7 +201,6 @@ async def process_command(
 
                 except Exception as e:
                     await message.reply(f"⚠️ Error al enviar {rel_path}: {e}")
-
                     
     elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt", "/dltxt"):
         if cmd("htools", int_lvl):
