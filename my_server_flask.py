@@ -1,12 +1,15 @@
 import os
+import json
 import asyncio
-from flask import Flask, request, send_from_directory, render_template_string, redirect
+from flask import Flask, request, send_from_directory, render_template_string, redirect, session
 from threading import Thread
 from command.torrets_tools import download_from_magnet
 from command.htools import crear_cbz_desde_fuente
 
 explorer = Flask("file_explorer")
+explorer.secret_key = os.getenv("FLASK_SECRET", "supersecretkey")
 BASE_DIR = "vault_files"
+WEBACCESS_FILE = "data/web_access.json"
 
 TEMPLATE = """
 <!doctype html>
