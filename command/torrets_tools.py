@@ -94,12 +94,19 @@ def download_from_magnet(link, save_path=BASE_DIR):
 
 async def handle_torrent_command(client, message):
     try:
-        parts = message.text.strip().split(maxsplit=1)
+        parts = message.text.strip().split(maxsplit=2)
+
         if len(parts) < 2:
-            message.reply("❗ Debes proporcionar un enlace después del comando.")
+            await message.reply("❗ Debes proporcionar un enlace después del comando.")
             return []
 
-        link = parts[1]
+        arg1 = parts[1]
+        link = parts[2] if arg1 == "-z" and len(parts) > 2 else arg1
+
+        if not (link.startswith("magnet:") or link.endswith(".torrent")):
+            await message.reply("❗ El enlace debe ser un magnet o un archivo .torrent.")
+            return []
+
         log(f"📥 Comando recibido con link: {link}")
         download_from_magnet(link)
 
@@ -114,6 +121,5 @@ async def handle_torrent_command(client, message):
 
     except Exception as e:
         log(f"❌ Error en handle_torrent_command: {e}")
-        message.reply(f"❌ Error al procesar el comando: {e}")
+        await message.reply(f"❌ Error al procesar el comando: {e}")
         return []
-        
