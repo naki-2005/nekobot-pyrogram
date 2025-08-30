@@ -122,23 +122,36 @@ async def process_command(
 
     elif command == "/magnet":
         if cmd("torrent", int_lvl):
-            parts = text.split(maxsplit=1)
-            arg_text = parts[1] if len(parts) > 1 else ""
-
-            if not arg_text:
+            parts = text.strip().split(maxsplit=2)
+            if len(parts) < 2:
                 await message.reply("❗ Debes proporcionar un enlace magnet o .torrent.")
                 return
 
+            use_compression = False
+            if parts[1] == "-z":
+                use_compression = True
+                if len(parts) < 3:
+                    await message.reply("❗ Debes proporcionar un enlace después de -z.")
+                    return
+                arg_text = parts[2]
+            else:
+                arg_text = parts[1]
+
+            if not (arg_text.startswith("magnet:") or arg_text.endswith(".torrent")):
+                await message.reply("❗ El enlace debe ser un magnet o un archivo .torrent.")
+                return
+
+            message.text = f"/magnet {arg_text}"  # Reescribir para que handle_torrent_command lo entienda
             files = await handle_torrent_command(client, message)
 
             if not files:
                 await message.reply("❌ No se descargaron archivos.")
                 return
 
-            if arg_text.strip() == "-z":
+            if use_compression:
                 try:
                     await client.send_chat_action(chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                    await message.reply("🗜️ Comprimiendo archivos en partes de 2000MB con 7z...")
+                    await message.reply("🗜️ Comprimiendo archivos en partes de 2000MB con 7z...") 
 
                     archive_path = os.path.join(BASE_DIR, "compressed.7z")
                     seven_zip_exe = os.path.join("7z", "7zz")
@@ -153,10 +166,12 @@ async def process_command(
                     ]
 
                     subprocess.run(cmd_args, check=True)
+
                     for rel_path in files:
                         path = os.path.join(BASE_DIR, rel_path)
                         if os.path.exists(path):
                             os.remove(path)
+
                     for part_file in sorted(os.listdir(BASE_DIR)):
                         full_path = os.path.join(BASE_DIR, part_file)
                         if part_file.startswith("compressed.7z"):
@@ -201,6 +216,7 @@ async def process_command(
 
                 except Exception as e:
                     await message.reply(f"⚠️ Error al enviar {rel_path}: {e}")
+
                     
     elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt", "/dltxt"):
         if cmd("htools", int_lvl):
