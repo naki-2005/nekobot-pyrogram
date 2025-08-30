@@ -184,3 +184,4 @@ UTILS_TEMPLATE = """
     </div>
 </body>
 </html>
+"""
