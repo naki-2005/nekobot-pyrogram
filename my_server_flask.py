@@ -11,6 +11,57 @@ explorer.secret_key = os.getenv("FLASK_SECRET", "supersecretkey")
 BASE_DIR = "vault_files"
 WEBACCESS_FILE = "data/web_access.json"
 
+def login_required(f):
+    def wrapper(*args, **kwargs):
+        if not session.get("logged_in"):
+            return redirect("/login")
+        return f(*args, **kwargs)
+    wrapper.__name__ = f.__name__
+    return wrapper
+    
+@explorer.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        u = request.form.get("username", "").strip()
+        p = request.form.get("password", "").strip()
+
+        try:
+            with open(WEBACCESS_FILE, "r", encoding="utf-8") as f:
+                users = json.load(f)
+        except:
+            users = {}
+
+        for uid, creds in users.items():
+            if creds.get("user") == u and creds.get("pass") == p:
+                session["logged_in"] = True
+                return redirect("/")
+        return "<h3 style='color:red;'>❌ Credenciales incorrectas</h3>", 403
+
+    return render_template_string("""
+    <!doctype html>
+    <html>
+    <head>
+        <title>Login</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body { font-family: Arial, sans-serif; background-color: #f0f0f0; padding: 2em; }
+            form { max-width: 300px; margin: auto; background: white; padding: 2em; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+            input { width: 100%; padding: 0.5em; margin-bottom: 1em; border: 1px solid #ccc; border-radius: 4px; }
+            input[type="submit"] { background-color: #007BFF; color: white; border: none; cursor: pointer; }
+            input[type="submit"]:hover { background-color: #0056b3; }
+        </style>
+    </head>
+    <body>
+        <form method="post">
+            <h2 style="text-align:center;">🔐 Iniciar sesión</h2>
+            <input name="username" placeholder="Usuario" required>
+            <input type="password" name="password" placeholder="Contraseña" required>
+            <input type="submit" value="Ingresar">
+        </form>
+    </body>
+    </html>
+    """)
+    
 TEMPLATE = """
 <!doctype html>
 <html>
@@ -82,6 +133,7 @@ TEMPLATE = """
 
 @explorer.route("/")
 @explorer.route("/browse")
+@login_required
 def browse():
     requested_path = request.args.get("path", BASE_DIR)
     abs_base = os.path.abspath(BASE_DIR)
@@ -154,6 +206,7 @@ def handle_magnet():
         return f"<h3>Error al iniciar descarga: {e}</h3>", 500
 
 @explorer.route("/delete", methods=["POST"])
+@login_required
 def delete_file():
     path = request.form.get("path")
     if not path or not os.path.isfile(path):
