@@ -560,6 +560,15 @@ async def process_command(
         if not is_owner:
             return
 
+        if args[0] == "copy" and len(args) >= 2:
+            from command.db.db import descargar_web_config, descargar_bot_config
+
+            bot_id = args[1]
+            descargar_web_config()
+            descargar_bot_config(bot_id)
+            await message.reply(f"📥 Configuración del bot {bot_id} copiada correctamente")
+            return
+
         if "imgapi" in args:
             idx = args.index("imgapi")
             if len(args) > idx + 1:
@@ -590,6 +599,7 @@ async def process_command(
         else:
             await send_setting_editor(client, message)
         return
+
 
     elif command == "/edituser" and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
         await send_access_editor(client, message)
