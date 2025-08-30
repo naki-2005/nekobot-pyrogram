@@ -1,6 +1,7 @@
 import os
 from command.db.db import save_user_data_to_db, descargar_mail_config, descargar_bot_config
 from arg_parser import get_args
+from command.db.db import descargar_web_config
 
 def start_data():
     admin_users = list(map(int, os.getenv('ADMINS', '').split(','))) if os.getenv('ADMINS') else []
@@ -41,6 +42,7 @@ def start_data_2():
 
     descargar_bot_config(bot_id)
     descargar_mail_config()
+    descargar_web_config()  
 
     chrome_dir = "selenium/chrome-linux64"
     base_path = os.path.join(chrome_dir, "chrome")
