@@ -27,7 +27,8 @@ MAIN_TEMPLATE = """
         .header { background-color: #007BFF; color: white; padding: 1em; text-align: center; position: relative; }
         .header-title { font-size: 1.2em; margin-bottom: 10px; }
         .header a { color: white; text-decoration: underline; font-weight: bold; }
-        .header-buttons { display: flex; justify-content: center; gap: 10px; }
+        .header-buttons { display: flex; justify-content: center; gap: 10px; opacity: 0; height: 0; overflow: hidden; transition: all 0.3s ease; }
+        .header-buttons.show { opacity: 1; height: auto; }
         .utils-btn { 
             background-color: #28a745; 
             padding: 0.5em 1em; 
@@ -87,6 +88,16 @@ MAIN_TEMPLATE = """
             input.style.display = input.style.display === "none" ? "inline" : "none";
         }
         
+        function showUtilsButton() {
+            const buttons = document.getElementById('header-buttons');
+            buttons.classList.add('show');
+            
+            // Ocultar después de 3 segundos
+            setTimeout(function() {
+                buttons.classList.remove('show');
+            }, 3000);
+        }
+        
         // Mostrar el botón flotante después de que la página cargue
         document.addEventListener('DOMContentLoaded', function() {
             setTimeout(function() {
@@ -97,11 +108,11 @@ MAIN_TEMPLATE = """
 </head>
 <body>
     <div class="header">
-        <div id="floating-btn" class="floating-btn"></div>
+        <div id="floating-btn" class="floating-btn" onclick="showUtilsButton()"></div>
         <div class="header-title">
             Servidor Flask de Neko Bot creado por <a href="https://t.me/nakigeplayer" target="_blank">Naki</a>
         </div>
-        <div class="header-buttons">
+        <div id="header-buttons" class="header-buttons">
             <a href="/utils" class="utils-btn">⚙️ Utilidades</a>
         </div>
     </div>
@@ -169,7 +180,8 @@ UTILS_TEMPLATE = """
         .header { background-color: #007BFF; color: white; padding: 1em; text-align: center; position: relative; }
         .header-title { font-size: 1.2em; margin-bottom: 10px; }
         .header a { color: white; text-decoration: underline; font-weight: bold; }
-        .header-buttons { display: flex; justify-content: center; gap: 10px; }
+        .header-buttons { display: flex; justify-content: center; gap: 10px; opacity: 0; height: 0; overflow: hidden; transition: all 0.3s ease; }
+        .header-buttons.show { opacity: 1; height: auto; }
         .back-btn { 
             background-color: #6c757d; 
             padding: 0.5em 1em; 
@@ -213,6 +225,16 @@ UTILS_TEMPLATE = """
         }
     </style>
     <script>
+        function showBackButton() {
+            const buttons = document.getElementById('header-buttons');
+            buttons.classList.add('show');
+            
+            // Ocultar después de 3 segundos
+            setTimeout(function() {
+                buttons.classList.remove('show');
+            }, 3000);
+        }
+        
         // Mostrar el botón flotante después de que la página cargue
         document.addEventListener('DOMContentLoaded', function() {
             setTimeout(function() {
@@ -223,11 +245,11 @@ UTILS_TEMPLATE = """
 </head>
 <body>
     <div class="header">
-        <div id="floating-btn" class="floating-btn"></div>
+        <div id="floating-btn" class="floating-btn" onclick="showBackButton()"></div>
         <div class="header-title">
             Utilidades - Servidor Flask de Neko Bot
         </div>
-        <div class="header-buttons">
+        <div id="header-buttons" class="header-buttons">
             <a href="/" class="back-btn">← Volver al Inicio</a>
         </div>
     </div>
