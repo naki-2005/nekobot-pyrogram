@@ -120,37 +120,39 @@ async def send_vault_file_by_index(client: Client, message: Message):
         await client.send_message(message.chat.id, "❌ No se encontraron archivos válidos")
         return
 
-    if mode in ["auto_compress", "named_compress"]:
-        archive_name = custom_name.strip() if mode == "named_compress" and custom_name else "archivos_comprimidos"
-        archive_path = os.path.join(VAULT_FOLDER, f"{archive_name}.7z")
-        total_size_mb = sum(os.path.getsize(f) for f in selected_files) / (1024 * 1024)
-        volume_flag = [f"-v{MAX_SIZE_MB}m"] if total_size_mb > MAX_SIZE_MB else []
-        cmd_args = [SEVEN_ZIP_EXE, "a", "-mx=0"] + volume_flag + [archive_path] + selected_files
-        try:
-            subprocess.run(cmd_args, check=True)
-            base_name = os.path.splitext(archive_path)[0]
-            sent_files = []
-            for f in sorted(os.listdir(VAULT_FOLDER)):
-                if f.startswith(os.path.basename(base_name)) and (f.endswith(".7z") or f.endswith(".7z.001")):
-                    full_path = os.path.join(VAULT_FOLDER, f)
-                    await client.send_chat_action(message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
-                    await client.send_document(message.chat.id, document=full_path, caption=f"📦 {f}")
-                    await client.send_chat_action(message.chat.id, enums.ChatAction.CANCEL)
-                    sent_files.append(full_path)
-            if delete_after:
-                for f in selected_files + sent_files:
-                    if os.path.exists(f):
-                        os.remove(f)
-        except Exception as e:
-            await client.send_message(message.chat.id, f"❌ Error al comprimir: {e}")
-        return
-
     for path in selected_files:
         try:
-            await client.send_chat_action(message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
-            await client.send_document(message.chat.id, document=path, caption=f"📤 {os.path.basename(path)}")
-            await client.send_chat_action(message.chat.id, enums.ChatAction.CANCEL)
-            if delete_after and os.path.exists(path):
-                os.remove(path)
+            size_mb = os.path.getsize(path) / (1024 * 1024)
+            if size_mb > MAX_SIZE_MB:
+                base_name = os.path.splitext(os.path.basename(path))[0]
+                archive_path = os.path.join(VAULT_FOLDER, f"{base_name}_auto.7z")
+                cmd_args = [SEVEN_ZIP_EXE, "a", "-mx=0", f"-v{MAX_SIZE_MB}m", archive_path, path]
+                subprocess.run(cmd_args, check=True)
+
+                archive_base = os.path.splitext(archive_path)[0]
+                archive_parts = sorted([
+                    f for f in os.listdir(VAULT_FOLDER)
+                    if f.startswith(os.path.basename(archive_base)) and (f.endswith(".7z") or f.endswith(".7z.001"))
+                ])
+
+                for part in archive_parts:
+                    part_path = os.path.join(VAULT_FOLDER, part)
+                    await client.send_chat_action(message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
+                    await client.send_document(message.chat.id, document=part_path, caption=f"📦 {part}")
+                    await client.send_chat_action(message.chat.id, enums.ChatAction.CANCEL)
+                    if delete_after and os.path.exists(part_path):
+                        os.remove(part_path)
+
+                if delete_after and os.path.exists(path):
+                    os.remove(path)
+
+            else:
+                await client.send_chat_action(message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
+                await client.send_document(message.chat.id, document=path, caption=f"📤 {os.path.basename(path)}")
+                await client.send_chat_action(message.chat.id, enums.ChatAction.CANCEL)
+                if delete_after and os.path.exists(path):
+                    os.remove(path)
+
         except Exception as e:
             await client.send_message(message.chat.id, f"⚠️ Error al enviar `{os.path.basename(path)}`: {e}")
+
