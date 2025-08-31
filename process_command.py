@@ -357,52 +357,57 @@ async def process_command(
                 await message.reply("⚠️ No se encontró ningún archivo descargado.")
                 return
 
-            if len(files) == 1 and os.path.isfile(os.path.join(output_dir, files[0])):
-                file_path = os.path.join(output_dir, files[0])
-                await client.send_document(chat_id, document=file_path)
-                os.remove(file_path)
-                await message.reply("✅ Archivo enviado correctamente.")
-                return
-
             seven_zip_exe = os.path.join("7z", "7zz")
-            archive_path = os.path.join(output_dir, "mega_dl_archive.7z")
-            cmd_args = [
-                seven_zip_exe,
-                'a',
-                '-mx=0',
-                '-v2000m',
-                archive_path,
-                os.path.join(output_dir, '*')
-            ]
 
-            zip_result = subprocess.run(
-                cmd_args,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
+            for file_name in files:
+                file_path = os.path.join(output_dir, file_name)
+                if not os.path.isfile(file_path):
+                    continue
 
-            if zip_result.returncode != 0:
-                await message.reply(f"❌ Error al comprimir archivos:\n{zip_result.stderr}")
-                return
+                file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
 
-            for item in files:
-                item_path = os.path.join(output_dir, item)
-                if os.path.isfile(item_path):
-                    os.remove(item_path)
+                if file_size_mb > 2000:
+                    archive_base = os.path.join(output_dir, f"{file_name}_archive.7z")
+                    cmd_args = [
+                        seven_zip_exe,
+                        'a',
+                        '-mx=0',
+                        f'-v2000m',
+                        archive_base,
+                        file_path
+                    ]
+
+                    zip_result = subprocess.run(
+                        cmd_args,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True
+                    )
+
+                    if zip_result.returncode != 0:
+                        await message.reply(f"❌ Error al comprimir {file_name}:\n{zip_result.stderr}")
+                        continue
+
+                    os.remove(file_path)
+
+                    archive_parts = sorted([
+                        f for f in os.listdir(output_dir)
+                        if f.startswith(f"{file_name}_archive.7z")
+                    ])
+                    for part in archive_parts:
+                        part_path = os.path.join(output_dir, part)
+                        await client.send_document(chat_id, document=part_path)
+                        os.remove(part_path)
+
                 else:
-                    shutil.rmtree(item_path)
+                    await client.send_document(chat_id, document=file_path)
+                    os.remove(file_path)
 
-            archive_parts = sorted([f for f in os.listdir(output_dir) if f.startswith("mega_dl_archive.7z")])
-            for part in archive_parts:
-                part_path = os.path.join(output_dir, part)
-                await client.send_document(chat_id, document=part_path)
-                os.remove(part_path)
-
-            await message.reply("✅ Archivos comprimidos enviados correctamente.")
+            await message.reply("✅ Archivos enviados correctamente.")
 
         except Exception as e:
             await message.reply(f"❌ Error inesperado: {str(e)}")
+
 
     elif command == "/hito":
         if cmd("htools", int_lvl):
