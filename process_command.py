@@ -311,19 +311,22 @@ async def process_command(
             return
 
         mega_url = text.split()[1]
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        desmega_path = os.path.join(script_dir, "command", "desmega")
+        desmega_path = os.path.join("command", "desmega")  # Ruta relativa desde el directorio de ejecución
         output_dir = "vault_files"
         os.makedirs(output_dir, exist_ok=True)
 
         try:
             result = subprocess.run(
-                [desmega_path, mega_url],
-                cwd=output_dir,
+                [desmega_path, mega_url, "--path", output_dir],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True
             )
+
+            # Depuración opcional
+            if result.returncode != 0:
+                await message.reply(f"❌ Error al ejecutar desmega:\n{result.stderr}")
+                return
 
             files = os.listdir(output_dir)
             if not files:
@@ -335,7 +338,8 @@ async def process_command(
             await message.reply("✅ Archivo enviado correctamente.")
 
         except Exception as e:
-            await message.reply(f"❌ Error al descargar: {str(e)}")
+            await message.reply(f"❌ Error inesperado: {str(e)}")
+
 
     elif command == "/hito":
         if cmd("htools", int_lvl):
