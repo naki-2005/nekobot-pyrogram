@@ -310,8 +310,8 @@ async def process_command(
             await message.reply("❌ Debes proporcionar un enlace de MEGA.")
             return
 
-        mega_url = text.split()[1]
-        desmega_path = os.path.join("command", "desmega")  # Ruta relativa desde el directorio de ejecución
+        mega_url = textori.split()[1]
+        desmega_path = os.path.join("command", "desmega")
         output_dir = "vault_files"
         os.makedirs(output_dir, exist_ok=True)
 
@@ -323,7 +323,6 @@ async def process_command(
                 text=True
             )
 
-            # Depuración opcional
             if result.returncode != 0:
                 await message.reply(f"❌ Error al ejecutar desmega:\n{result.stderr}")
                 return
