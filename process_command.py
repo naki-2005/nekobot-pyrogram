@@ -142,8 +142,31 @@ async def process_command(
                 await message.reply("❗ El enlace debe ser un magnet o un archivo .torrent.")
                 return
 
-            message.text = f"/magnet {arg_text}"  # Reescribir para que handle_torrent_command lo entienda
-            files = await handle_torrent_command(client, message)
+            message.text = f"/magnet {arg_text}"
+            status_msg = await message.reply("⏳ Iniciando descarga...")
+
+            start_time = time.time()
+            progress_data = {"filename": "", "percent": 0, "speed": 0.0}
+
+            async def update_progress():
+                while progress_data["percent"] < 100:
+                    elapsed = int(time.time() - start_time)
+                    h, m, s = elapsed // 3600, (elapsed % 3600) // 60, elapsed % 60
+                    speed_mb = round(progress_data["speed"] / 1024, 2)
+                    await status_msg.edit_text(
+                        f"📥 Descargando: {progress_data['filename']}\n"
+                        f"📊 Progreso: {progress_data['percent']}%\n"
+                        f"⏱️ Tiempo: {h:02d}:{m:02d}:{s:02d}\n"
+                        f"🚀 Velocidad: {speed_mb} MB/s"
+                    )
+                    await asyncio.sleep(10)
+
+            progress_task = asyncio.create_task(update_progress())
+            files = await handle_torrent_command(client, message, progress_data)
+            progress_data["percent"] = 100
+            await progress_task
+            await asyncio.sleep(5)
+            await status_msg.delete()
 
             if not files:
                 await message.reply("❌ No se descargaron archivos.")
@@ -152,7 +175,7 @@ async def process_command(
             if use_compression:
                 try:
                     await client.send_chat_action(chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                    await message.reply("🗜️ Comprimiendo archivos en partes de 2000MB con 7z...") 
+                    await message.reply("🗜️ Comprimiendo archivos en partes de 2000MB con 7z...")
 
                     archive_path = os.path.join(BASE_DIR, "compressed.7z")
                     seven_zip_exe = os.path.join("7z", "7zz")
@@ -217,6 +240,7 @@ async def process_command(
 
                 except Exception as e:
                     await message.reply(f"⚠️ Error al enviar {rel_path}: {e}")
+
 
                     
     elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt", "/dltxt"):
