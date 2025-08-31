@@ -3,6 +3,7 @@ import time
 import datetime
 import shutil
 import libtorrent as lt
+import asyncio
 
 BASE_DIR = "vault_files/torrent_dl"
 TEMP_DIR = os.path.join(BASE_DIR, "downloading")
@@ -48,7 +49,8 @@ def wait_for_metadata(handle):
         time.sleep(1)
     log("Metadata obtenida")
 
-def monitor_download(handle, progress_data=None):
+
+async def monitor_download(handle, progress_data=None):
     state_str = ['queued', 'checking', 'downloading metadata',
                  'downloading', 'finished', 'seeding', 'allocating']
     while handle.status().state != lt.torrent_status.seeding:
@@ -56,9 +58,10 @@ def monitor_download(handle, progress_data=None):
         log(f"{s.progress * 100:.2f}% | ↓ {s.download_rate / 1000:.1f} kB/s | ↑ {s.upload_rate / 1000:.1f} kB/s | peers: {s.num_peers} | estado: {state_str[s.state]}")
         if progress_data is not None:
             progress_data["percent"] = round(s.progress * 100, 2)
-            progress_data["speed"] = s.download_rate / 1000  # kB/s
+            progress_data["speed"] = s.download_rate / 1000
             progress_data["state"] = state_str[s.state]
-        time.sleep(5)
+        await asyncio.sleep(5)
+
 
 def move_completed_files(temp_path, final_path):
     for root, _, files in os.walk(temp_path):
@@ -71,7 +74,7 @@ def move_completed_files(temp_path, final_path):
             shutil.move(src, dst)
             log(f"📦 Archivo movido: {rel_path}")
 
-def download_from_magnet(link, save_path=BASE_DIR, progress_data=None):
+async def download_from_magnet(link, save_path=BASE_DIR, progress_data=None):
     try:
         os.makedirs(TEMP_DIR, exist_ok=True)
 
@@ -88,7 +91,7 @@ def download_from_magnet(link, save_path=BASE_DIR, progress_data=None):
         if progress_data is not None:
             progress_data["filename"] = handle.name()
 
-        monitor_download(handle, progress_data)
+        await monitor_download(handle, progress_data)
         end = time.time()
 
         log(f"✅ {handle.name()} COMPLETADO")
@@ -115,7 +118,7 @@ async def handle_torrent_command(client, message, progress_data=None):
             return []
 
         log(f"📥 Comando recibido con link: {link}")
-        download_from_magnet(link, BASE_DIR, progress_data)
+        await download_from_magnet(link, BASE_DIR, progress_data)
 
         moved_files = []
         for root, _, files in os.walk(BASE_DIR):
