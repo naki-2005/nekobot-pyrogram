@@ -23,6 +23,7 @@ from command.filetolink import handle_up_command, clear_vault_files, list_vault_
 from command.get_files.hitomi import descargar_y_comprimir_hitomi
 from pyrogram.enums import ChatType
 from pyrogram import enums
+import time
 nest_asyncio.apply()
 
 BASE_DIR = "vault_files/torrent_dl"
