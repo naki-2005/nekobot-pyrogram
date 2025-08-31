@@ -22,7 +22,6 @@ from command.torrets_tools import handle_torrent_command
 from command.filetolink import handle_up_command, clear_vault_files, list_vault_files, send_vault_file_by_index
 from command.get_files.hitomi import descargar_y_comprimir_hitomi
 from pyrogram.enums import ChatType
-from pyrogram.types import InputFile
 from pyrogram import enums
 nest_asyncio.apply()
 
@@ -313,7 +312,7 @@ async def process_command(
 
         mega_url = textori.split()[1]
         desmega_path = os.path.join("command", "desmega")
-        output_dir = "vault_files"
+        output_dir = os.path.join("vault_files", "mega_dl")
         os.makedirs(output_dir, exist_ok=True)
 
         try:
@@ -333,13 +332,52 @@ async def process_command(
                 await message.reply("⚠️ No se encontró ningún archivo descargado.")
                 return
 
-            file_path = os.path.join(output_dir, files[0])
-            await client.send_document(chat_id, InputFile(file_path))
-            await message.reply("✅ Archivo enviado correctamente.")
+            if len(files) == 1 and os.path.isfile(os.path.join(output_dir, files[0])):
+                file_path = os.path.join(output_dir, files[0])
+                await client.send_document(chat_id, document=file_path)
+                os.remove(file_path)
+                await message.reply("✅ Archivo enviado correctamente.")
+                return
+
+            seven_zip_exe = os.path.join("7z", "7zz")
+            archive_path = os.path.join(output_dir, "mega_dl_archive.7z")
+            cmd_args = [
+                seven_zip_exe,
+                'a',
+                '-mx=0',
+                '-v2000m',
+                archive_path,
+                os.path.join(output_dir, '*')
+            ]
+
+            zip_result = subprocess.run(
+                cmd_args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+
+            if zip_result.returncode != 0:
+                await message.reply(f"❌ Error al comprimir archivos:\n{zip_result.stderr}")
+                return
+
+            for item in files:
+                item_path = os.path.join(output_dir, item)
+                if os.path.isfile(item_path):
+                    os.remove(item_path)
+                else:
+                    shutil.rmtree(item_path)
+
+            archive_parts = sorted([f for f in os.listdir(output_dir) if f.startswith("mega_dl_archive.7z")])
+            for part in archive_parts:
+                part_path = os.path.join(output_dir, part)
+                await client.send_document(chat_id, document=part_path)
+                os.remove(part_path)
+
+            await message.reply("✅ Archivos comprimidos enviados correctamente.")
 
         except Exception as e:
             await message.reply(f"❌ Error inesperado: {str(e)}")
-
 
     elif command == "/hito":
         if cmd("htools", int_lvl):
