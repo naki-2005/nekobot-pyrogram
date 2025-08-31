@@ -48,12 +48,16 @@ def wait_for_metadata(handle):
         time.sleep(1)
     log("Metadata obtenida")
 
-def monitor_download(handle):
+def monitor_download(handle, progress_data=None):
     state_str = ['queued', 'checking', 'downloading metadata',
                  'downloading', 'finished', 'seeding', 'allocating']
     while handle.status().state != lt.torrent_status.seeding:
         s = handle.status()
         log(f"{s.progress * 100:.2f}% | ↓ {s.download_rate / 1000:.1f} kB/s | ↑ {s.upload_rate / 1000:.1f} kB/s | peers: {s.num_peers} | estado: {state_str[s.state]}")
+        if progress_data is not None:
+            progress_data["percent"] = round(s.progress * 100, 2)
+            progress_data["speed"] = s.download_rate / 1000  # kB/s
+            progress_data["state"] = state_str[s.state]
         time.sleep(5)
 
 def move_completed_files(temp_path, final_path):
@@ -67,7 +71,7 @@ def move_completed_files(temp_path, final_path):
             shutil.move(src, dst)
             log(f"📦 Archivo movido: {rel_path}")
 
-def download_from_magnet(link, save_path=BASE_DIR):
+def download_from_magnet(link, save_path=BASE_DIR, progress_data=None):
     try:
         os.makedirs(TEMP_DIR, exist_ok=True)
 
@@ -80,7 +84,11 @@ def download_from_magnet(link, save_path=BASE_DIR):
         begin = time.time()
         wait_for_metadata(handle)
         log(f"Iniciando descarga: {handle.name()}")
-        monitor_download(handle)
+
+        if progress_data is not None:
+            progress_data["filename"] = handle.name()
+
+        monitor_download(handle, progress_data)
         end = time.time()
 
         log(f"✅ {handle.name()} COMPLETADO")
@@ -91,8 +99,7 @@ def download_from_magnet(link, save_path=BASE_DIR):
     except Exception as e:
         log(f"❌ Error en descarga: {e}")
 
-
-async def handle_torrent_command(client, message):
+async def handle_torrent_command(client, message, progress_data=None):
     try:
         parts = message.text.strip().split(maxsplit=2)
 
@@ -108,7 +115,7 @@ async def handle_torrent_command(client, message):
             return []
 
         log(f"📥 Comando recibido con link: {link}")
-        download_from_magnet(link)
+        download_from_magnet(link, BASE_DIR, progress_data)
 
         moved_files = []
         for root, _, files in os.walk(BASE_DIR):
