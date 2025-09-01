@@ -5,6 +5,8 @@ import shutil
 import libtorrent as lt
 import asyncio
 import subprocess
+import aiohttp
+import aiofiles
 from pyrogram import enums
 
 SEVEN_ZIP_EXE = os.path.join("7z", "7zz")
@@ -19,16 +21,27 @@ def get_magnet_from_torrent(torrent_path):
     t = Torrent.read(torrent_path)
     return str(t.magnet(name=True, size=False, trackers=False, tracker=False))
 
-def download_torrent(link):
+async def download_torrent(link):
     if link.endswith('.torrent'):
-        import wget
         temp_path = os.path.join(TEMP_DIR, "temp.torrent")
         if os.path.exists(temp_path):
             os.remove(temp_path)
+        
         log("Descargando archivo .torrent...")
-        wget.download(link, temp_path)
-        link = get_magnet_from_torrent(temp_path)
-        log("Convertido a magnet link")
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(link) as response:
+                    if response.status == 200:
+                        async with aiofiles.open(temp_path, 'wb') as f:
+                            await f.write(await response.read())
+                        log("Archivo .torrent descargado")
+                        link = get_magnet_from_torrent(temp_path)
+                        log("Convertido a magnet link")
+                    else:
+                        log(f"Error al descargar torrent: {response.status}")
+        except Exception as e:
+            log(f"Error en descarga torrent: {e}")
+    
     return link
 
 def start_session():
@@ -46,10 +59,10 @@ def add_torrent(ses, magnet_uri, save_path):
     handle.set_sequential_download(False)
     return handle
 
-def wait_for_metadata(handle):
+async def wait_for_metadata(handle):
     log("Descargando metadata...")
     while not handle.has_metadata():
-        time.sleep(1)
+        await asyncio.sleep(1)
     log("Metadata obtenida")
 
 async def monitor_download(handle, progress_data=None):
@@ -83,14 +96,14 @@ async def download_from_magnet(link, save_path=BASE_DIR, progress_data=None):
     try:
         os.makedirs(TEMP_DIR, exist_ok=True)
 
-        link = download_torrent(link)
+        link = await download_torrent(link)
         log(f"Usando magnet link: {link}")
 
         ses = start_session()
         handle = add_torrent(ses, link, TEMP_DIR)
 
         begin = time.time()
-        wait_for_metadata(handle)
+        await wait_for_metadata(handle)
         log(f"Iniciando descarga: {handle.name()}")
 
         if progress_data is not None:
