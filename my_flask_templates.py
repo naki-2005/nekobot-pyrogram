@@ -599,7 +599,6 @@ DOWNLOADS_TEMPLATE = """
             <a href="/downloads">📥 Descargas</a>
         </div>
 
-        <!-- Formulario para nueva descarga al principio -->
         <div class="new-download-form">
             <h3>➕ Nueva descarga Torrent/Magnet</h3>
             <form action="/magnet" method="post">
@@ -653,6 +652,7 @@ DOWNLOADS_TEMPLATE = """
                 </div>
             {% endfor %}
         {% else %}
+
             <div style="text-align: center; padding: 40px; color: #6c757d;">
                 <h3>📭 No hay descargas activas</h3>
                 <p>Inicia una nueva descarga usando el formulario superior</p>
@@ -671,28 +671,20 @@ DOWNLOADS_TEMPLATE = """
 
     <script>
         let autoRefreshInterval;
-        
+
         function toggleAutoRefresh() {
             if (document.getElementById('autoRefresh').checked) {
                 autoRefreshInterval = setInterval(() => {
                     location.reload();
-                }, 2000); // 2 segundos
+                }, 5000); // 5 segundos
             } else {
                 clearInterval(autoRefreshInterval);
             }
         }
-        
-        // Auto-actualizar si hay descargas activas
+
+        // No auto-activación al cargar la página
         document.addEventListener('DOMContentLoaded', function() {
-            {% if downloads %}
-            const hasActiveDownloads = Object.values({{ downloads|tojson }}).some(d => 
-                d.state !== 'completed' && d.state !== 'error'
-            );
-            if (hasActiveDownloads) {
-                document.getElementById('autoRefresh').checked = true;
-                toggleAutoRefresh();
-            }
-            {% endif %}
+            // El checkbox está desactivado por defecto
         });
     </script>
 </body>
