@@ -4,7 +4,7 @@ import asyncio
 import subprocess
 from flask import Flask, request, send_from_directory, render_template_string, redirect, session
 from threading import Thread
-from command.torrets_tools import download_from_magnet
+from command.torrent_tools import download_from_magnet
 from command.htools import crear_cbz_desde_fuente
 from my_flask_templates import LOGIN_TEMPLATE, MAIN_TEMPLATE, UTILS_TEMPLATE
 
@@ -113,7 +113,15 @@ def handle_magnet():
         return "<h3>❌ Magnet link vacío.</h3>", 400
 
     try:
-        Thread(target=download_from_magnet, args=(link, BASE_DIR)).start()
+        def run_async_download():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(download_from_magnet(link, BASE_DIR))
+            finally:
+                loop.close()
+
+        Thread(target=run_async_download).start()
         return redirect("/utils")
     except Exception as e:
         return f"<h3>Error al iniciar descarga: {e}</h3>", 500
