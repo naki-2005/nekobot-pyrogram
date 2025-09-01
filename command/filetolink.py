@@ -81,7 +81,7 @@ async def list_vault_files(client: Client, message: Message):
         texto += f"{idx}. {fname} — {size_mb:.2f} MB ({ruta})\n"
 
     await client.send_message(message.from_user.id, texto.strip())
-    
+
 async def send_vault_file_by_index(client, message):
     import os
     import asyncio
@@ -144,15 +144,18 @@ async def send_vault_file_by_index(client, message):
     sent_count = 0
     total_mb = sum(os.path.getsize(p) for p in selected_files) / (1024 * 1024)
     sent_mb = 0
+    current_file_mb = 0
+    estimated_speed = 2.5  # MB/s (ajusta según tu conexión)
 
     async def update_progress():
         while sent_count < total_files:
             elapsed = int(time.time() - start_time)
+            estimated_sent = sent_mb + min(current_file_mb, estimated_speed * (elapsed - last_file_start))
             await safe_call(progress_msg.edit_text,
                 f"📦 Enviando archivos...\n"
                 f"🕒 Tiempo: {elapsed}s\n"
                 f"📁 Archivos: {sent_count}/{total_files}\n"
-                f"📊 Progreso: {sent_mb:.2f} MB / {total_mb:.2f} MB"
+                f"📊 Progreso: {estimated_sent:.2f} MB / {total_mb:.2f} MB"
             )
             await asyncio.sleep(10)
 
@@ -161,8 +164,10 @@ async def send_vault_file_by_index(client, message):
     try:
         for path in selected_files:
             try:
-                size_mb = os.path.getsize(path) / (1024 * 1024)
-                if size_mb > MAX_SIZE_MB:
+                current_file_mb = os.path.getsize(path) / (1024 * 1024)
+                last_file_start = int(time.time())
+
+                if current_file_mb > MAX_SIZE_MB:
                     base_name = os.path.splitext(os.path.basename(path))[0]
                     archive_path = os.path.join(VAULT_FOLDER, f"{base_name}_auto.7z")
                     cmd_args = [SEVEN_ZIP_EXE, "a", "-mx=0", f"-v{MAX_SIZE_MB}m", archive_path, path]
@@ -177,6 +182,8 @@ async def send_vault_file_by_index(client, message):
                     for part in archive_parts:
                         part_path = os.path.join(VAULT_FOLDER, part)
                         part_size = os.path.getsize(part_path) / (1024 * 1024)
+                        last_file_start = int(time.time())
+                        current_file_mb = part_size
                         await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
                         await safe_call(client.send_document, message.chat.id, document=part_path, caption=f"📦 {part}")
                         await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.CANCEL)
@@ -188,10 +195,12 @@ async def send_vault_file_by_index(client, message):
                         os.remove(path)
 
                 else:
+                    last_file_start = int(time.time())
+                    current_file_mb = os.path.getsize(path) / (1024 * 1024)
                     await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
                     await safe_call(client.send_document, message.chat.id, document=path, caption=f"📤 {os.path.basename(path)}")
                     await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.CANCEL)
-                    sent_mb += size_mb
+                    sent_mb += current_file_mb
                     if delete_after and os.path.exists(path):
                         os.remove(path)
 
@@ -204,3 +213,4 @@ async def send_vault_file_by_index(client, message):
         updater_task.cancel()
         await safe_call(progress_msg.delete)
         await safe_call(client.send_message, message.chat.id, "✅ Todos los archivos han sido enviados.")
+                        
