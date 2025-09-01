@@ -17,7 +17,7 @@ import os
 def guardar_parametro(parametro: str, valor: str):
     permitidos = {
         'videotools', 'mailtools', 'filetools', 'filetolink',
-        'htools', 'webtools', 'imgtools', 'public', 'protect', 'maildir', 'mailpass', 'mailserv', 'imgapi', 'torrent'
+        'htools', 'webtools', 'imgtools', 'public', 'protect', 'maildir', 'mailpass', 'mailserv', 'imgapi', 'torrent', 'download'
     }
 
     if parametro not in permitidos:
@@ -56,6 +56,7 @@ def get_main_buttons():
         InlineKeyboardButton("Imágenes", callback_data="config_imgtools"),
         InlineKeyboardButton("File to Link", callback_data="config_filetolink"),
         InlineKeyboardButton("Torrent", callback_data="config_torrent"),
+        InlineKeyboardButton("Descargas", callback_data="config_download"),
         InlineKeyboardButton("Guardar", callback_data="save_config"),
     ]
     return InlineKeyboardMarkup([botones[i:i+2] for i in range(0, len(botones), 2)])
