@@ -145,11 +145,12 @@ async def send_vault_file_by_index(client, message):
     total_mb = sum(os.path.getsize(p) for p in selected_files) / (1024 * 1024)
     sent_mb = 0
     current_file_name = ""
+    current_mb_sent = 0
 
     async def update_progress():
         while sent_count < total_files:
             elapsed = int(time.time() - start_time)
-            estimated_ratio = sent_mb / total_mb if total_mb else 0
+            estimated_ratio = (sent_mb + current_mb_sent) / total_mb if total_mb else 0
             bar_length = 20
             filled_length = int(bar_length * estimated_ratio)
             bar = "█" * filled_length + "▒" * (bar_length - filled_length)
@@ -158,7 +159,7 @@ async def send_vault_file_by_index(client, message):
                 f"📦 Enviando archivos...\n"
                 f"🕒 Tiempo: {elapsed}s\n"
                 f"📁 Archivos: {sent_count}/{total_files}\n"
-                f"📊 Progreso: {sent_mb:.2f} MB / {total_mb:.2f} MB\n"
+                f"📊 Progreso: {sent_mb + current_mb_sent:.2f} MB / {total_mb:.2f} MB\n"
                 f"📉 [{bar}] {estimated_ratio*100:.1f}%\n"
                 f"📄 Archivo actual: {current_file_name}"
             )
@@ -171,23 +172,29 @@ async def send_vault_file_by_index(client, message):
             try:
                 size_mb = os.path.getsize(path) / (1024 * 1024)
                 current_file_name = os.path.basename(path)
+                current_mb_sent = 0
 
                 def progress(current, total):
-                    nonlocal sent_mb, progress_msg, total_mb, sent_count, current_file_name
-                    mb_sent = current / (1024 * 1024)
-                    mb_total = total / (1024 * 1024)
-                    print(f"\rEnviando... {mb_sent:.2f} MB de {mb_total:.2f} MB", end="")
+                    nonlocal current_mb_sent
+                    current_mb_sent = current / (1024 * 1024)
+                    print(f"\rEnviando... {current_mb_sent:.2f} MB de {size_mb:.2f} MB", end="")
 
-                    estimated_ratio = (sent_mb + mb_sent) / total_mb if total_mb else 0
+                    try:
+                        loop = asyncio.get_running_loop()
+                    except RuntimeError:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+
+                    estimated_ratio = (sent_mb + current_mb_sent) / total_mb if total_mb else 0
                     bar_length = 20
                     filled_length = int(bar_length * estimated_ratio)
                     bar = "█" * filled_length + "▒" * (bar_length - filled_length)
 
-                    asyncio.create_task(safe_call(progress_msg.edit_text,
+                    loop.create_task(safe_call(progress_msg.edit_text,
                         f"📦 Enviando archivos...\n"
                         f"🕒 Tiempo: {int(time.time() - start_time)}s\n"
                         f"📁 Archivos: {sent_count}/{total_files}\n"
-                        f"📊 Progreso: {sent_mb + mb_sent:.2f} MB / {total_mb:.2f} MB\n"
+                        f"📊 Progreso: {sent_mb + current_mb_sent:.2f} MB / {total_mb:.2f} MB\n"
                         f"📉 [{bar}] {estimated_ratio*100:.1f}%\n"
                         f"📄 Archivo actual: {current_file_name}"
                     ))
@@ -208,6 +215,7 @@ async def send_vault_file_by_index(client, message):
                         part_path = os.path.join(VAULT_FOLDER, part)
                         part_size = os.path.getsize(part_path) / (1024 * 1024)
                         current_file_name = part
+                        current_mb_sent = 0
                         await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
                         await safe_call(client.send_document, message.chat.id, document=part_path, caption=f"📦 {part}", progress=progress)
                         await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.CANCEL)
@@ -235,4 +243,3 @@ async def send_vault_file_by_index(client, message):
         updater_task.cancel()
         await safe_call(progress_msg.delete)
         await safe_call(client.send_message, message.chat.id, "✅ Todos los archivos han sido enviados.")
-        
