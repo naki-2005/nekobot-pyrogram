@@ -101,11 +101,6 @@ async def send_vault_file_by_index(client, message):
                 print(f"❌ Error inesperado en {func.__name__}: {type(e).__name__}: {e}")
                 raise
 
-    def progress(current, total):
-        mb_sent = current / (1024 * 1024)
-        mb_total = total / (1024 * 1024)
-        print(f"\rEnviando... {mb_sent:.2f} MB de {mb_total:.2f} MB", end="")
-
     text = message.text.strip()
     args = text.split()
     if len(args) < 2:
@@ -149,6 +144,7 @@ async def send_vault_file_by_index(client, message):
     sent_count = 0
     total_mb = sum(os.path.getsize(p) for p in selected_files) / (1024 * 1024)
     sent_mb = 0
+    current_file_name = ""
 
     async def update_progress():
         while sent_count < total_files:
@@ -163,7 +159,8 @@ async def send_vault_file_by_index(client, message):
                 f"🕒 Tiempo: {elapsed}s\n"
                 f"📁 Archivos: {sent_count}/{total_files}\n"
                 f"📊 Progreso: {sent_mb:.2f} MB / {total_mb:.2f} MB\n"
-                f"📉 [{bar}] {estimated_ratio*100:.1f}%"
+                f"📉 [{bar}] {estimated_ratio*100:.1f}%\n"
+                f"📄 Archivo actual: {current_file_name}"
             )
             await asyncio.sleep(10)
 
@@ -173,6 +170,27 @@ async def send_vault_file_by_index(client, message):
         for path in selected_files:
             try:
                 size_mb = os.path.getsize(path) / (1024 * 1024)
+                current_file_name = os.path.basename(path)
+
+                def progress(current, total):
+                    nonlocal sent_mb, progress_msg, total_mb, sent_count, current_file_name
+                    mb_sent = current / (1024 * 1024)
+                    mb_total = total / (1024 * 1024)
+                    print(f"\rEnviando... {mb_sent:.2f} MB de {mb_total:.2f} MB", end="")
+
+                    estimated_ratio = (sent_mb + mb_sent) / total_mb if total_mb else 0
+                    bar_length = 20
+                    filled_length = int(bar_length * estimated_ratio)
+                    bar = "█" * filled_length + "▒" * (bar_length - filled_length)
+
+                    asyncio.create_task(safe_call(progress_msg.edit_text,
+                        f"📦 Enviando archivos...\n"
+                        f"🕒 Tiempo: {int(time.time() - start_time)}s\n"
+                        f"📁 Archivos: {sent_count}/{total_files}\n"
+                        f"📊 Progreso: {sent_mb + mb_sent:.2f} MB / {total_mb:.2f} MB\n"
+                        f"📉 [{bar}] {estimated_ratio*100:.1f}%\n"
+                        f"📄 Archivo actual: {current_file_name}"
+                    ))
 
                 if size_mb > MAX_SIZE_MB:
                     base_name = os.path.splitext(os.path.basename(path))[0]
@@ -189,6 +207,7 @@ async def send_vault_file_by_index(client, message):
                     for part in archive_parts:
                         part_path = os.path.join(VAULT_FOLDER, part)
                         part_size = os.path.getsize(part_path) / (1024 * 1024)
+                        current_file_name = part
                         await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
                         await safe_call(client.send_document, message.chat.id, document=part_path, caption=f"📦 {part}", progress=progress)
                         await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.CANCEL)
@@ -216,3 +235,4 @@ async def send_vault_file_by_index(client, message):
         updater_task.cancel()
         await safe_call(progress_msg.delete)
         await safe_call(client.send_message, message.chat.id, "✅ Todos los archivos han sido enviados.")
+        
