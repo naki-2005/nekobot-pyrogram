@@ -36,20 +36,67 @@ async def handle_megadl_command(client: Client, message: Message, mega_url: str,
     progress_msg = await safe_call(client.send_message, chat_id, "📥 Iniciando descarga desde MEGA...")
     start_time = time.time()
 
+    async def monitor_download():
+        while True:
+            try:
+                # Buscar archivos temporales de megatools
+                temp_files = [f for f in os.listdir(output_dir) if '.megatmp' in f]
+                if temp_files:
+                    temp_file = os.path.join(output_dir, temp_files[0])
+                    if os.path.exists(temp_file):
+                        file_size = os.path.getsize(temp_file)
+                        file_size_mb = file_size / (1024 * 1024)
+                        elapsed = int(time.time() - start_time)
+                        formatted_time = format_time(elapsed)
+                        
+                        await safe_call(progress_msg.edit_text,
+                            f"📥 Descargando desde MEGA...\n"
+                            f"📦 Tamaño descargado: {file_size_mb:.2f} MB\n"
+                            f"⏱️ Tiempo: {formatted_time}\n"
+                            f"🔄 Buscando archivos temporales..."
+                        )
+                else:
+                    elapsed = int(time.time() - start_time)
+                    formatted_time = format_time(elapsed)
+                    await safe_call(progress_msg.edit_text,
+                        f"📥 Iniciando descarga desde MEGA...\n"
+                        f"⏱️ Tiempo: {formatted_time}\n"
+                        f"🔄 Esperando que comience la descarga..."
+                    )
+                
+                await asyncio.sleep(10)
+            except Exception as e:
+                print(f"Error en monitor_download: {e}")
+                await asyncio.sleep(10)
+
+    # Iniciar monitoreo en segundo plano
+    monitor_task = asyncio.create_task(monitor_download())
+
     try:
-        result = subprocess.run(
+        # Ejecutar megadl en segundo plano
+        process = subprocess.Popen(
             [desmega_path, mega_url, "--path", output_dir],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
         )
 
-        if result.returncode != 0:
+        # Esperar a que termine el proceso
+        stdout, stderr = process.communicate()
+
+        # Cancelar el monitoreo
+        monitor_task.cancel()
+        try:
+            await monitor_task
+        except asyncio.CancelledError:
+            pass
+
+        if process.returncode != 0:
             await safe_call(progress_msg.edit_text, "❌ Error en la descarga MEGA")
-            await safe_call(message.reply, f"❌ Error al ejecutar desmega:\n{result.stderr}")
+            await safe_call(message.reply, f"❌ Error al ejecutar desmega:\n{stderr}")
             return
 
-        files = os.listdir(output_dir)
+        files = [f for f in os.listdir(output_dir) if not f.startswith('.megatmp')]
         if not files:
             await safe_call(progress_msg.edit_text, "⚠️ No se encontraron archivos descargados")
             return
@@ -167,9 +214,9 @@ async def handle_megadl_command(client: Client, message: Message, mega_url: str,
         await safe_call(progress_msg.delete)
 
     except Exception as e:
-        progress_task.cancel()
+        monitor_task.cancel()
         try:
-            await progress_task
+            await monitor_task
         except asyncio.CancelledError:
             pass
         await safe_call(progress_msg.edit_text, f"❌ Error inesperado: {str(e)}")
