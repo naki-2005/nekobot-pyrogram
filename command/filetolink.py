@@ -67,6 +67,21 @@ async def handle_up_command(client: Client, message: Message):
     await client.download_media(message.reply_to_message, full_path)
     await message.reply(f"✅ Archivo guardado como `{relative_path}` en `{VAULT_FOLDER}`.")
 
+async def list_vault_files(client: Client, message: Message):
+    if not os.path.isdir(VAULT_FOLDER):
+        await client.send_message(message.from_user.id, "📁 La carpeta está vacía o no existe.")
+        return
+
+    texto = "📄 Archivos disponibles:\n\n"
+    all_files = get_all_vault_files()
+
+    for idx, (folder, fname, fpath) in enumerate(all_files, start=1):
+        size_mb = os.path.getsize(fpath) / (1024 * 1024)
+        ruta = folder if folder else "Root"
+        texto += f"{idx}. {fname} — {size_mb:.2f} MB ({ruta})\n"
+
+    await client.send_message(message.from_user.id, texto.strip())
+    
 async def send_vault_file_by_index(client, message):
     import os
     import asyncio
