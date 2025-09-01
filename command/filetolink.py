@@ -82,6 +82,7 @@ async def list_vault_files(client: Client, message: Message):
 
     await client.send_message(message.from_user.id, texto.strip())
 
+
 async def send_vault_file_by_index(client, message):
     import os
     import asyncio
@@ -100,6 +101,17 @@ async def send_vault_file_by_index(client, message):
             except Exception as e:
                 print(f"❌ Error inesperado en {func.__name__}: {type(e).__name__}: {e}")
                 raise
+
+    def format_time(seconds):
+        h = seconds // 3600
+        m = (seconds % 3600) // 60
+        s = seconds % 60
+        if h > 0:
+            return f"{h}h {m}m {s}s"
+        elif m > 0:
+            return f"{m}m {s}s"
+        else:
+            return f"{s}s"
 
     text = message.text.strip()
     args = text.split()
@@ -150,6 +162,7 @@ async def send_vault_file_by_index(client, message):
     async def update_progress():
         while sent_count < total_files:
             elapsed = int(time.time() - start_time)
+            formatted_time = format_time(elapsed)
             estimated_ratio = (sent_mb + current_mb_sent) / total_mb if total_mb else 0
             bar_length = 20
             filled_length = int(bar_length * estimated_ratio)
@@ -157,7 +170,7 @@ async def send_vault_file_by_index(client, message):
 
             await safe_call(progress_msg.edit_text,
                 f"📦 Enviando archivos...\n"
-                f"🕒 Tiempo: {elapsed}s\n"
+                f"🕒 Tiempo: {formatted_time}\n"
                 f"📁 Archivos: {sent_count}/{total_files}\n"
                 f"📊 Progreso: {sent_mb + current_mb_sent:.2f} MB / {total_mb:.2f} MB\n"
                 f"📉 [{bar}] {estimated_ratio*100:.1f}%\n"
@@ -181,23 +194,16 @@ async def send_vault_file_by_index(client, message):
 
                     try:
                         loop = asyncio.get_running_loop()
-                    except RuntimeError:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-
-                    estimated_ratio = (sent_mb + current_mb_sent) / total_mb if total_mb else 0
-                    bar_length = 20
-                    filled_length = int(bar_length * estimated_ratio)
-                    bar = "█" * filled_length + "▒" * (bar_length - filled_length)
-
-                    loop.create_task(safe_call(progress_msg.edit_text,
-                        f"📦 Enviando archivos...\n"
-                        f"🕒 Tiempo: {int(time.time() - start_time)}s\n"
-                        f"📁 Archivos: {sent_count}/{total_files}\n"
-                        f"📊 Progreso: {sent_mb + current_mb_sent:.2f} MB / {total_mb:.2f} MB\n"
-                        f"📉 [{bar}] {estimated_ratio*100:.1f}%\n"
-                        f"📄 Archivo actual: {current_file_name}"
-                    ))
+                        loop.create_task(safe_call(progress_msg.edit_text,
+                            f"📦 Enviando archivos...\n"
+                            f"🕒 Tiempo: {format_time(int(time.time() - start_time))}\n"
+                            f"📁 Archivos: {sent_count}/{total_files}\n"
+                            f"📊 Progreso: {sent_mb + current_mb_sent:.2f} MB / {total_mb:.2f} MB\n"
+                            f"📉 [{bar}] {estimated_ratio*100:.1f}%\n"
+                            f"📄 Archivo actual: {current_file_name}"
+                        ))
+                    except Exception:
+                        pass  # Silenciar errores de loop destruido
 
                 if size_mb > MAX_SIZE_MB:
                     base_name = os.path.splitext(os.path.basename(path))[0]
@@ -243,3 +249,4 @@ async def send_vault_file_by_index(client, message):
         updater_task.cancel()
         await safe_call(progress_msg.delete)
         await safe_call(client.send_message, message.chat.id, "✅ Todos los archivos han sido enviados.")
+        
