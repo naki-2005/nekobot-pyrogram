@@ -143,7 +143,7 @@ async def process_magnet_download_telegram(client, message, arg_text, use_compre
     import subprocess
     import time
     from pyrogram import enums
-    from pyrogram.errors import FloodWait
+    from pyrogram.errors import FloodWait, MessageIdInvalid
 
     async def safe_call(func, *args, **kwargs):
         while True:
@@ -152,6 +152,9 @@ async def process_magnet_download_telegram(client, message, arg_text, use_compre
             except FloodWait as e:
                 print(f"⏳ Esperando {e.value} seg para continuar")
                 await asyncio.sleep(e.value)
+            except MessageIdInvalid:
+                print("⚠️ El mensaje ya no existe, no se puede editar")
+                return None
             except Exception as e:
                 print(f"❌ Error inesperado en {func.__name__}: {type(e).__name__}: {e}")
                 raise
@@ -160,41 +163,51 @@ async def process_magnet_download_telegram(client, message, arg_text, use_compre
         h = seconds // 3600
         m = (seconds % 3600) // 60
         s = seconds % 60
-        if h > 0:
-            return f"{h:02d}:{m:02d}:{s:02d}"
-        elif m > 0:
-            return f"{m:02d}:{s:02d}"
-        else:
-            return f"{s:02d}s"
+        return f"{h:02d}:{m:02d}:{s:02d}"
 
     chat_id = message.chat.id
     message.text = f"/magnet {arg_text}"
     status_msg = await safe_call(message.reply, "⏳ Iniciando descarga...")
+    
+    if not status_msg:
+        return
 
     start_time = time.time()
-    progress_data = {"filename": "", "percent": 0, "speed": 0.0, "downloaded": 0, "total_size": 0}
+    progress_data = {
+        "filename": "", 
+        "percent": 0, 
+        "speed": 0.0, 
+        "downloaded": 0, 
+        "total_size": 0,
+        "active": True
+    }
 
     async def update_progress():
-        while progress_data["percent"] < 100:
-            elapsed = int(time.time() - start_time)
-            formatted_time = format_time(elapsed)
-            speed_mb = round(progress_data["speed"] / 1024, 2)
-            
-            bar_length = 20
-            filled_length = int(bar_length * progress_data["percent"] / 100)
-            bar = "█" * filled_length + "▒" * (bar_length - filled_length)
-
-            downloaded_mb = round(progress_data["downloaded"] / (1024 * 1024), 2)
-            total_mb = round(progress_data["total_size"] / (1024 * 1024), 2) if progress_data["total_size"] > 0 else "?"
-            
-            await safe_call(status_msg.edit_text,
-                f"📥 **Descargando:** `{progress_data['filename']}`\n"
-                f"📊 **Progreso:** {progress_data['percent']}%\n"
-                f"📉 [{bar}]\n"
-                f"📦 **Tamaño:** {downloaded_mb} MB / {total_mb} MB\n"
-                f"🚀 **Velocidad:** {speed_mb} MB/s\n"
-                f"⏱️ **Tiempo:** {formatted_time}"
-            )
+        while progress_data["percent"] < 100 and progress_data["active"]:
+            try:
+                elapsed = int(time.time() - start_time)
+                formatted_time = format_time(elapsed)
+                speed_mb = round(progress_data["speed"] / 1024, 2)
+                
+                bar_length = 20
+                filled_length = int(bar_length * progress_data["percent"] / 100)
+                bar = "█" * filled_length + "▒" * (bar_length - filled_length)
+                
+                downloaded_mb = round(progress_data["downloaded"] / (1024 * 1024), 2)
+                total_mb = round(progress_data["total_size"] / (1024 * 1024), 2) if progress_data["total_size"] > 0 else "?"
+                
+                await safe_call(status_msg.edit_text,
+                    f"📥 **Descargando:** `{progress_data['filename']}`\n"
+                    f"📊 **Progreso:** {progress_data['percent']}%\n"
+                    f"📉 [{bar}]\n"
+                    f"📦 **Tamaño:** {downloaded_mb} MB / {total_mb} MB\n"
+                    f"🚀 **Velocidad:** {speed_mb} MB/s\n"
+                    f"⏱️ **Tiempo:** {formatted_time}"
+                )
+            except Exception as e:
+                print(f"Error en update_progress: {e}")
+                break
+                
             await asyncio.sleep(10)
 
     progress_task = asyncio.create_task(update_progress())
@@ -202,6 +215,7 @@ async def process_magnet_download_telegram(client, message, arg_text, use_compre
     try:
         files = await handle_torrent_command(client, message, progress_data)
         progress_data["percent"] = 100
+        progress_data["active"] = False
         
         await asyncio.sleep(2)
         progress_task.cancel()
@@ -209,12 +223,11 @@ async def process_magnet_download_telegram(client, message, arg_text, use_compre
             await progress_task
         except asyncio.CancelledError:
             pass
-            
-        await safe_call(status_msg.delete)
-        await asyncio.sleep(2)
 
         if not files:
-            await safe_call(message.reply, "❌ No se descargaron archivos.")
+            await safe_call(status_msg.edit_text, "❌ No se descargaron archivos.")
+            await asyncio.sleep(5)
+            await safe_call(status_msg.delete)
             return
 
         total_files = len(files)
@@ -228,34 +241,39 @@ async def process_magnet_download_telegram(client, message, arg_text, use_compre
             nonlocal current_mb_sent
             current_mb_sent = current / (1024 * 1024)
 
+        await safe_call(status_msg.edit_text, "📤 Preparando envío de archivos...")
+
         async def update_upload_progress():
             while sent_count < total_files:
-                elapsed = int(time.time() - start_time)
-                formatted_time = format_time(elapsed)
-                estimated_ratio = (sent_mb + current_mb_sent) / total_mb if total_mb > 0 else 0
-                
-                bar_length = 20
-                filled_length = int(bar_length * estimated_ratio)
-                bar = "█" * filled_length + "▒" * (bar_length - filled_length)
+                try:
+                    elapsed = int(time.time() - start_time)
+                    formatted_time = format_time(elapsed)
+                    estimated_ratio = (sent_mb + current_mb_sent) / total_mb if total_mb > 0 else 0
+                    
+                    bar_length = 20
+                    filled_length = int(bar_length * estimated_ratio)
+                    bar = "█" * filled_length + "▒" * (bar_length - filled_length)
 
-                await safe_call(status_msg.edit_text,
-                    f"📤 **Enviando archivos...**\n"
-                    f"📁 **Archivos:** {sent_count}/{total_files}\n"
-                    f"📊 **Progreso:** {sent_mb + current_mb_sent:.2f} MB / {total_mb:.2f} MB\n"
-                    f"📉 [{bar}] {estimated_ratio*100:.1f}%\n"
-                    f"⏱️ **Tiempo:** {formatted_time}\n"
-                    f"📄 **Archivo actual:** {current_file_name}"
-                )
+                    await safe_call(status_msg.edit_text,
+                        f"📤 **Enviando archivos...**\n"
+                        f"📁 **Archivos:** {sent_count}/{total_files}\n"
+                        f"📊 **Progreso:** {sent_mb + current_mb_sent:.2f} MB / {total_mb:.2f} MB\n"
+                        f"📉 [{bar}] {estimated_ratio*100:.1f}%\n"
+                        f"⏱️ **Tiempo:** {formatted_time}\n"
+                        f"📄 **Archivo actual:** {current_file_name}"
+                    )
+                except Exception as e:
+                    print(f"Error en update_upload_progress: {e}")
+                    break
                 await asyncio.sleep(10)
 
-        upload_status_msg = await safe_call(message.reply, "📤 Preparando envío de archivos...")
         upload_task = asyncio.create_task(update_upload_progress())
 
         try:
             if use_compression:
                 try:
                     await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                    await safe_call(upload_status_msg.edit_text, "🗜️ Comprimiendo archivos en partes de 2000MB con 7z...")
+                    await safe_call(status_msg.edit_text, "🗜️ Comprimiendo archivos en partes de 2000MB con 7z...")
 
                     archive_path = os.path.join(BASE_DIR, "compressed.7z")
                     cmd_args = [
@@ -306,7 +324,7 @@ async def process_magnet_download_telegram(client, message, arg_text, use_compre
 
                     if file_size > 2000 * 1024 * 1024:
                         await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                        await safe_call(upload_status_msg.edit_text, f"📦 El archivo `{current_file_name}` excede los 2000MB. Dividiéndolo en partes...")
+                        await safe_call(status_msg.edit_text, f"📦 El archivo `{current_file_name}` excede los 2000MB. Dividiéndolo en partes...")
 
                         with open(path, 'rb') as original:
                             part_num = 1
@@ -351,12 +369,19 @@ async def process_magnet_download_telegram(client, message, arg_text, use_compre
                 await upload_task
             except asyncio.CancelledError:
                 pass
-            await safe_call(upload_status_msg.delete)
+
+        await safe_call(status_msg.edit_text, "✅ Todos los archivos han sido enviados.")
+        await asyncio.sleep(5)
+        await safe_call(status_msg.delete)
 
     except Exception as e:
+        progress_data["active"] = False
         progress_task.cancel()
         try:
             await progress_task
         except asyncio.CancelledError:
             pass
-        await safe_call(status_msg.edit_text, f"❌ Error durante la descarga: {e}")
+        
+        error_msg = await safe_call(message.reply, f"❌ Error durante la descarga: {e}")
+        if status_msg:
+            await safe_call(status_msg.delete)
