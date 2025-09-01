@@ -4,7 +4,7 @@ import asyncio
 import subprocess
 from flask import Flask, request, send_from_directory, render_template_string, redirect, session
 from threading import Thread
-from command.torrent_tools import download_from_magnet
+from command.torrets_tools import download_from_magnet
 from command.htools import crear_cbz_desde_fuente
 from my_flask_templates import LOGIN_TEMPLATE, MAIN_TEMPLATE, UTILS_TEMPLATE
 
