@@ -82,11 +82,41 @@ async def list_vault_files(client: Client, message: Message):
 
     await client.send_message(message.from_user.id, texto.strip())
 
-async def send_vault_file_by_index(client: Client, message: Message):
+
+async def send_vault_file_by_index(client, message):
+    import os
+    import asyncio
+    import subprocess
+    import time
+    from pyrogram import enums
+    from pyrogram.errors import FloodWait
+
+    async def safe_call(func, *args, **kwargs):
+        while True:
+            try:
+                return await func(*args, **kwargs)
+            except FloodWait as e:
+                print(f"⏳ Esperando {e.value} seg para continuar")
+                await asyncio.sleep(e.value)
+            except Exception as e:
+                print(f"❌ Error inesperado en {func.__name__}: {type(e).__name__}: {e}")
+                raise
+
+    def format_time(seconds):
+        h = seconds // 3600
+        m = (seconds % 3600) // 60
+        s = seconds % 60
+        if h > 0:
+            return f"{h}h {m}m {s}s"
+        elif m > 0:
+            return f"{m}m {s}s"
+        else:
+            return f"{s}s"
+
     text = message.text.strip()
     args = text.split()
     if len(args) < 2:
-        await client.send_message(message.chat.id, "❌ Debes especificar los índices")
+        await safe_call(client.send_message, message.chat.id, "❌ Debes especificar los índices")
         return
 
     mode = None
@@ -117,42 +147,106 @@ async def send_vault_file_by_index(client: Client, message: Message):
             selected_files.append(all_files[idx - 1][2])
 
     if not selected_files:
-        await client.send_message(message.chat.id, "❌ No se encontraron archivos válidos")
+        await safe_call(client.send_message, message.chat.id, "❌ No se encontraron archivos válidos")
         return
 
-    for path in selected_files:
-        try:
-            size_mb = os.path.getsize(path) / (1024 * 1024)
-            if size_mb > MAX_SIZE_MB:
-                base_name = os.path.splitext(os.path.basename(path))[0]
-                archive_path = os.path.join(VAULT_FOLDER, f"{base_name}_auto.7z")
-                cmd_args = [SEVEN_ZIP_EXE, "a", "-mx=0", f"-v{MAX_SIZE_MB}m", archive_path, path]
-                subprocess.run(cmd_args, check=True)
+    progress_msg = await safe_call(client.send_message, message.chat.id, "📤 Iniciando envío de archivos...")
+    start_time = time.time()
+    total_files = len(selected_files)
+    sent_count = 0
+    total_mb = sum(os.path.getsize(p) for p in selected_files) / (1024 * 1024)
+    sent_mb = 0
+    current_file_name = ""
+    current_mb_sent = 0
 
-                archive_base = os.path.splitext(archive_path)[0]
-                archive_parts = sorted([
-                    f for f in os.listdir(VAULT_FOLDER)
-                    if f.startswith(os.path.basename(archive_base)) and (f.endswith(".7z") or f.endswith(".7z.001"))
-                ])
+    async def update_progress():
+        while sent_count < total_files:
+            elapsed = int(time.time() - start_time)
+            formatted_time = format_time(elapsed)
+            estimated_ratio = (sent_mb + current_mb_sent) / total_mb if total_mb else 0
+            bar_length = 20
+            filled_length = int(bar_length * estimated_ratio)
+            bar = "█" * filled_length + "▒" * (bar_length - filled_length)
 
-                for part in archive_parts:
-                    part_path = os.path.join(VAULT_FOLDER, part)
-                    await client.send_chat_action(message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
-                    await client.send_document(message.chat.id, document=part_path, caption=f"📦 {part}")
-                    await client.send_chat_action(message.chat.id, enums.ChatAction.CANCEL)
-                    if delete_after and os.path.exists(part_path):
-                        os.remove(part_path)
+            await safe_call(progress_msg.edit_text,
+                f"📦 Enviando archivos...\n"
+                f"🕒 Tiempo: {formatted_time}\n"
+                f"📁 Archivos: {sent_count}/{total_files}\n"
+                f"📊 Progreso: {sent_mb + current_mb_sent:.2f} MB / {total_mb:.2f} MB\n"
+                f"📉 [{bar}] {estimated_ratio*100:.1f}%\n"
+                f"📄 Archivo actual: {current_file_name}"
+            )
+            await asyncio.sleep(10)
 
-                if delete_after and os.path.exists(path):
-                    os.remove(path)
+    updater_task = asyncio.create_task(update_progress())
 
-            else:
-                await client.send_chat_action(message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
-                await client.send_document(message.chat.id, document=path, caption=f"📤 {os.path.basename(path)}")
-                await client.send_chat_action(message.chat.id, enums.ChatAction.CANCEL)
-                if delete_after and os.path.exists(path):
-                    os.remove(path)
+    try:
+        for path in selected_files:
+            try:
+                size_mb = os.path.getsize(path) / (1024 * 1024)
+                current_file_name = os.path.basename(path)
+                current_mb_sent = 0
 
-        except Exception as e:
-            await client.send_message(message.chat.id, f"⚠️ Error al enviar `{os.path.basename(path)}`: {e}")
+                def progress(current, total):
+                    nonlocal current_mb_sent
+                    current_mb_sent = current / (1024 * 1024)
+                    print(f"\rEnviando... {current_mb_sent:.2f} MB de {size_mb:.2f} MB", end="")
 
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(safe_call(progress_msg.edit_text,
+                            f"📦 Enviando archivos...\n"
+                            f"🕒 Tiempo: {format_time(int(time.time() - start_time))}\n"
+                            f"📁 Archivos: {sent_count}/{total_files}\n"
+                            f"📊 Progreso: {sent_mb + current_mb_sent:.2f} MB / {total_mb:.2f} MB\n"
+                            f"📉 [{bar}] {estimated_ratio*100:.1f}%\n"
+                            f"📄 Archivo actual: {current_file_name}"
+                        ))
+                    except Exception:
+                        pass  # Silenciar errores de loop destruido
+
+                if size_mb > MAX_SIZE_MB:
+                    base_name = os.path.splitext(os.path.basename(path))[0]
+                    archive_path = os.path.join(VAULT_FOLDER, f"{base_name}_auto.7z")
+                    cmd_args = [SEVEN_ZIP_EXE, "a", "-mx=0", f"-v{MAX_SIZE_MB}m", archive_path, path]
+                    subprocess.run(cmd_args, check=True)
+
+                    archive_base = os.path.splitext(archive_path)[0]
+                    archive_parts = sorted([
+                        f for f in os.listdir(VAULT_FOLDER)
+                        if f.startswith(os.path.basename(archive_base)) and (f.endswith(".7z") or f.endswith(".7z.001"))
+                    ])
+
+                    for part in archive_parts:
+                        part_path = os.path.join(VAULT_FOLDER, part)
+                        part_size = os.path.getsize(part_path) / (1024 * 1024)
+                        current_file_name = part
+                        current_mb_sent = 0
+                        await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
+                        await safe_call(client.send_document, message.chat.id, document=part_path, caption=f"📦 {part}", progress=progress)
+                        await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.CANCEL)
+                        sent_mb += part_size
+                        if delete_after and os.path.exists(part_path):
+                            os.remove(part_path)
+
+                    if delete_after and os.path.exists(path):
+                        os.remove(path)
+
+                else:
+                    await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
+                    await safe_call(client.send_document, message.chat.id, document=path, caption=f"📤 {os.path.basename(path)}", progress=progress)
+                    await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.CANCEL)
+                    sent_mb += size_mb
+                    if delete_after and os.path.exists(path):
+                        os.remove(path)
+
+                sent_count += 1
+
+            except Exception as e:
+                await safe_call(client.send_message, message.chat.id, f"⚠️ Error al enviar `{os.path.basename(path)}`: {e}")
+
+    finally:
+        updater_task.cancel()
+        await safe_call(progress_msg.delete)
+        await safe_call(client.send_message, message.chat.id, "✅ Todos los archivos han sido enviados.")
+        
