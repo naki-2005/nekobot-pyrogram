@@ -146,10 +146,10 @@ async def process_command(
                 return
 
             await process_magnet_download_telegram(
-                client=client,
-                message=message,
-                magnet_or_torrent=arg_text,
-                use_compression=use_compression
+                client,
+                message,
+                arg_text,
+                use_compression
             )
 
     elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt", "/dltxt"):
