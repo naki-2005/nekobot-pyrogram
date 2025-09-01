@@ -274,3 +274,106 @@ UTILS_TEMPLATE = """
 </body>
 </html>
 """
+
+DOWNLOADS_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Descargas Activas</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; text-align: center; }
+        .download-card { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; background: #fafafa; }
+        .progress-bar { background: #e0e0e0; height: 20px; border-radius: 10px; overflow: hidden; margin: 10px 0; }
+        .progress-fill { background: #4CAF50; height: 100%; transition: width 0.3s; }
+        .stats { display: flex; justify-content: space-between; flex-wrap: wrap; }
+        .stat-item { margin: 5px 10px; }
+        .completed { background: #d4edda; border-color: #c3e6cb; }
+        .error { background: #f8d7da; border-color: #f5c6cb; }
+        .nav { margin-bottom: 20px; text-align: center; }
+        .nav a { margin: 0 10px; text-decoration: none; color: #007bff; }
+        .refresh-btn { background: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; }
+        .auto-refresh { margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav">
+            <a href="/">🏠 Inicio</a>
+            <a href="/utils">🛠️ Utilidades</a>
+            <a href="/downloads">📥 Descargas</a>
+        </div>
+        
+        <h1>📥 Descargas Activas</h1>
+        
+        <div class="auto-refresh">
+            <button class="refresh-btn" onclick="location.reload()">🔄 Actualizar</button>
+            <label><input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()"> Auto-actualizar cada 10 segundos</label>
+        </div>
+        
+        {% if downloads %}
+            {% for id, download in downloads.items() %}
+                <div class="download-card {% if download.state == 'completed' %}completed{% elif download.state == 'error' %}error{% endif %}">
+                    <h3>{{ download.filename }}</h3>
+                    <p><strong>Estado:</strong> {{ download.state }}</p>
+                    <p><strong>Enlace:</strong> <a href="{{ download.link }}" target="_blank">{{ download.link[:50] }}...</a></p>
+                    
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: {{ download.percent }}%"></div>
+                    </div>
+                    <p><strong>Progreso:</strong> {{ download.percent }}%</p>
+                    
+                    <div class="stats">
+                        <div class="stat-item"><strong>📦 Descargado:</strong> {{ (download.downloaded / (1024*1024)) | round(2) }} MB</div>
+                        <div class="stat-item"><strong>📊 Total:</strong> {{ (download.total_size / (1024*1024)) | round(2) if download.total_size > 0 else 'Calculando...' }} MB</div>
+                        <div class="stat-item"><strong>🚀 Velocidad:</strong> {{ (download.speed / (1024*1024)) | round(2) }} MB/s</div>
+                        <div class="stat-item"><strong>⏰ Iniciado:</strong> {{ download.start_time[:19] }}</div>
+                        {% if download.end_time %}
+                        <div class="stat-item"><strong>✅ Completado:</strong> {{ download.end_time[:19] }}</div>
+                        {% endif %}
+                    </div>
+                    
+                    {% if download.error %}
+                    <p style="color: red;"><strong>Error:</strong> {{ download.error }}</p>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>No hay descargas activas.</p>
+        {% endif %}
+    </div>
+
+    <script>
+        let autoRefreshInterval;
+        
+        function toggleAutoRefresh() {
+            if (document.getElementById('autoRefresh').checked) {
+                autoRefreshInterval = setInterval(() => {
+                    location.reload();
+                }, 10000);
+            } else {
+                clearInterval(autoRefreshInterval);
+            }
+        }
+        
+        // Opcional: actualizar automáticamente si hay descargas activas
+        {% if downloads %}
+        document.addEventListener('DOMContentLoaded', function() {
+            const hasActiveDownloads = Object.values({{ downloads|tojson }}).some(d => 
+                d.state !== 'completed' && d.state !== 'error'
+            );
+            if (hasActiveDownloads) {
+                document.getElementById('autoRefresh').checked = true;
+                toggleAutoRefresh();
+            }
+        });
+        {% endif %}
+    </script>
+</body>
+</html>
+"""
+
+
