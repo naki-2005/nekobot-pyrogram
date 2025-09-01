@@ -23,6 +23,7 @@ async def lista_cmd(app):
         BotCommand("sendfile", "Subir un archivo almacenado en el servidor"),
         BotCommand("clearfiles", "Borra los archivos en el servidor"),
         BotCommand("magnet", "Descarga un enlace magnet"),
+        BotCommand("megadl", "Descarga un enlace de Mega"),
         BotCommand("setfile", "Define su preferencia de descarga de Hentai"),
         BotCommand("nh", "Descarga un manga hentai de Nhentai"),
         BotCommand("3h", "Descarga un manga hentai de 3Hentai"),
