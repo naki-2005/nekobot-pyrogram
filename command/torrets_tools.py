@@ -6,6 +6,7 @@ import libtorrent as lt
 import asyncio
 import subprocess
 from pyrogram import enums
+
 SEVEN_ZIP_EXE = os.path.join("7z", "7zz")
 BASE_DIR = "vault_files/torrent_dl"
 TEMP_DIR = os.path.join(BASE_DIR, "downloading")
@@ -51,19 +52,21 @@ def wait_for_metadata(handle):
         time.sleep(1)
     log("Metadata obtenida")
 
-
 async def monitor_download(handle, progress_data=None):
     state_str = ['queued', 'checking', 'downloading metadata',
                  'downloading', 'finished', 'seeding', 'allocating']
     while handle.status().state != lt.torrent_status.seeding:
         s = handle.status()
-        log(f"{s.progress * 100:.2f}% | ↓ {s.download_rate / 1000:.1f} kB/s | ↑ {s.upload_rate / 1000:.1f} kB/s | peers: {s.num_peers} | estado: {state_str[s.state]}")
+        
         if progress_data is not None:
             progress_data["percent"] = round(s.progress * 100, 2)
-            progress_data["speed"] = s.download_rate / 1000
+            progress_data["speed"] = s.download_rate
             progress_data["state"] = state_str[s.state]
+            progress_data["downloaded"] = s.total_done
+            progress_data["total_size"] = s.total_wanted
+        
+        log(f"{s.progress * 100:.2f}% | ↓ {s.download_rate / 1000:.1f} kB/s | ↑ {s.upload_rate / 1000:.1f} kB/s | peers: {s.num_peers} | estado: {state_str[s.state]}")
         await asyncio.sleep(5)
-
 
 def move_completed_files(temp_path, final_path):
     for root, _, files in os.walk(temp_path):
@@ -136,7 +139,6 @@ async def handle_torrent_command(client, message, progress_data=None):
         await message.reply(f"❌ Error al procesar el comando: {e}")
         return []
 
-
 async def process_magnet_download_telegram(client, message, arg_text, use_compression):
     import os
     import asyncio
@@ -187,14 +189,14 @@ async def process_magnet_download_telegram(client, message, arg_text, use_compre
             try:
                 elapsed = int(time.time() - start_time)
                 formatted_time = format_time(elapsed)
-                speed_mb = round(progress_data["speed"] / 1024, 2)
+                speed_mb = round(progress_data["speed"] / (1024 * 1024), 2)
                 
                 bar_length = 20
                 filled_length = int(bar_length * progress_data["percent"] / 100)
                 bar = "█" * filled_length + "▒" * (bar_length - filled_length)
                 
                 downloaded_mb = round(progress_data["downloaded"] / (1024 * 1024), 2)
-                total_mb = round(progress_data["total_size"] / (1024 * 1024), 2) if progress_data["total_size"] > 0 else "?"
+                total_mb = round(progress_data["total_size"] / (1024 * 1024), 2) if progress_data["total_size"] > 0 else "Calculando..."
                 
                 await safe_call(status_msg.edit_text,
                     f"📥 **Descargando:** `{progress_data['filename']}`\n"
