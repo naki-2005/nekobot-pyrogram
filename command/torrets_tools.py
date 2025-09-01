@@ -5,11 +5,19 @@ import shutil
 import libtorrent as lt
 import asyncio
 import subprocess
+import aiohttp
+import aiofiles
+import threading
+import uuid
 from pyrogram import enums
 
 SEVEN_ZIP_EXE = os.path.join("7z", "7zz")
 BASE_DIR = "vault_files/torrent_dl"
 TEMP_DIR = os.path.join(BASE_DIR, "downloading")
+
+# Variable global para almacenar el progreso de las descargas
+active_downloads = {}
+downloads_lock = threading.Lock()
 
 def log(msg):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}")
@@ -19,16 +27,27 @@ def get_magnet_from_torrent(torrent_path):
     t = Torrent.read(torrent_path)
     return str(t.magnet(name=True, size=False, trackers=False, tracker=False))
 
-def download_torrent(link):
+async def download_torrent(link):
     if link.endswith('.torrent'):
-        import wget
         temp_path = os.path.join(TEMP_DIR, "temp.torrent")
         if os.path.exists(temp_path):
             os.remove(temp_path)
+        
         log("Descargando archivo .torrent...")
-        wget.download(link, temp_path)
-        link = get_magnet_from_torrent(temp_path)
-        log("Convertido a magnet link")
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(link) as response:
+                    if response.status == 200:
+                        async with aiofiles.open(temp_path, 'wb') as f:
+                            await f.write(await response.read())
+                        log("Archivo .torrent descargado")
+                        link = get_magnet_from_torrent(temp_path)
+                        log("Convertido a magnet link")
+                    else:
+                        log(f"Error al descargar torrent: {response.status}")
+        except Exception as e:
+            log(f"Error en descarga torrent: {e}")
+    
     return link
 
 def start_session():
@@ -46,15 +65,23 @@ def add_torrent(ses, magnet_uri, save_path):
     handle.set_sequential_download(False)
     return handle
 
-def wait_for_metadata(handle):
+async def wait_for_metadata(handle):
     log("Descargando metadata...")
     while not handle.has_metadata():
-        time.sleep(1)
+        await asyncio.sleep(1)
     log("Metadata obtenida")
 
-async def monitor_download(handle, progress_data=None):
+async def monitor_download(handle, progress_data=None, download_id=None):
     state_str = ['queued', 'checking', 'downloading metadata',
                  'downloading', 'finished', 'seeding', 'allocating']
+    
+    # Actualizar información inicial en active_downloads
+    if download_id:
+        with downloads_lock:
+            if download_id in active_downloads:
+                active_downloads[download_id]["filename"] = handle.name() if handle.has_metadata() else "Obteniendo metadata..."
+                active_downloads[download_id]["state"] = "downloading metadata"
+    
     while handle.status().state != lt.torrent_status.seeding:
         s = handle.status()
         
@@ -64,6 +91,20 @@ async def monitor_download(handle, progress_data=None):
             progress_data["state"] = state_str[s.state]
             progress_data["downloaded"] = s.total_done
             progress_data["total_size"] = s.total_wanted
+        
+        # Actualizar active_downloads
+        if download_id:
+            with downloads_lock:
+                if download_id in active_downloads:
+                    active_downloads[download_id].update({
+                        "percent": round(s.progress * 100, 2),
+                        "speed": s.download_rate,
+                        "state": state_str[s.state],
+                        "downloaded": s.total_done,
+                        "total_size": s.total_wanted,
+                        "filename": handle.name() if handle.has_metadata() else "Obteniendo metadata...",
+                        "last_update": datetime.datetime.now().isoformat()
+                    })
         
         log(f"{s.progress * 100:.2f}% | ↓ {s.download_rate / 1000:.1f} kB/s | ↑ {s.upload_rate / 1000:.1f} kB/s | peers: {s.num_peers} | estado: {state_str[s.state]}")
         await asyncio.sleep(5)
@@ -79,24 +120,39 @@ def move_completed_files(temp_path, final_path):
             shutil.move(src, dst)
             log(f"📦 Archivo movido: {rel_path}")
 
-async def download_from_magnet(link, save_path=BASE_DIR, progress_data=None):
+async def download_from_magnet(link, save_path=BASE_DIR, progress_data=None, download_id=None):
     try:
         os.makedirs(TEMP_DIR, exist_ok=True)
 
-        link = download_torrent(link)
+        # Registrar la descarga en active_downloads
+        if download_id:
+            with downloads_lock:
+                active_downloads[download_id] = {
+                    "link": link,
+                    "percent": 0,
+                    "state": "starting",
+                    "filename": "Iniciando...",
+                    "speed": 0,
+                    "downloaded": 0,
+                    "total_size": 0,
+                    "start_time": datetime.datetime.now().isoformat(),
+                    "last_update": datetime.datetime.now().isoformat()
+                }
+
+        link = await download_torrent(link)
         log(f"Usando magnet link: {link}")
 
         ses = start_session()
         handle = add_torrent(ses, link, TEMP_DIR)
 
         begin = time.time()
-        wait_for_metadata(handle)
+        await wait_for_metadata(handle)
         log(f"Iniciando descarga: {handle.name()}")
 
         if progress_data is not None:
             progress_data["filename"] = handle.name()
 
-        await monitor_download(handle, progress_data)
+        await monitor_download(handle, progress_data, download_id)
         end = time.time()
 
         log(f"✅ {handle.name()} COMPLETADO")
@@ -104,8 +160,45 @@ async def download_from_magnet(link, save_path=BASE_DIR, progress_data=None):
 
         move_completed_files(TEMP_DIR, save_path)
 
+        # Marcar como completado en active_downloads
+        if download_id:
+            with downloads_lock:
+                if download_id in active_downloads:
+                    active_downloads[download_id]["state"] = "completed"
+                    active_downloads[download_id]["percent"] = 100
+                    active_downloads[download_id]["end_time"] = datetime.datetime.now().isoformat()
+
     except Exception as e:
         log(f"❌ Error en descarga: {e}")
+        # Marcar como error en active_downloads
+        if download_id:
+            with downloads_lock:
+                if download_id in active_downloads:
+                    active_downloads[download_id]["state"] = "error"
+                    active_downloads[download_id]["error"] = str(e)
+
+# Función para obtener el progreso de las descargas
+def get_download_progress():
+    with downloads_lock:
+        return active_downloads.copy()
+
+# Función para limpiar descargas antiguas
+def cleanup_old_downloads(max_age_hours=24):
+    with downloads_lock:
+        now = datetime.datetime.now()
+        to_remove = []
+        for download_id, info in active_downloads.items():
+            if "end_time" in info or "start_time" in info:
+                end_time_str = info.get("end_time", info.get("start_time"))
+                try:
+                    end_time = datetime.datetime.fromisoformat(end_time_str)
+                    if (now - end_time).total_seconds() > max_age_hours * 3600:
+                        to_remove.append(download_id)
+                except:
+                    pass
+        
+        for download_id in to_remove:
+            del active_downloads[download_id]
 
 async def handle_torrent_command(client, message, progress_data=None):
     try:
@@ -123,7 +216,8 @@ async def handle_torrent_command(client, message, progress_data=None):
             return []
 
         log(f"📥 Comando recibido con link: {link}")
-        await download_from_magnet(link, BASE_DIR, progress_data)
+        download_id = str(uuid.uuid4())
+        await download_from_magnet(link, BASE_DIR, progress_data, download_id)
 
         moved_files = []
         for root, _, files in os.walk(BASE_DIR):
@@ -215,6 +309,7 @@ async def process_magnet_download_telegram(client, message, arg_text, use_compre
     progress_task = asyncio.create_task(update_progress())
     
     try:
+        download_id = str(uuid.uuid4())
         files = await handle_torrent_command(client, message, progress_data)
         progress_data["percent"] = 100
         progress_data["active"] = False

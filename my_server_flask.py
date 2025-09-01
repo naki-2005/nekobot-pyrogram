@@ -2,11 +2,12 @@ import os
 import json
 import asyncio
 import subprocess
-from flask import Flask, request, send_from_directory, render_template_string, redirect, session
+from flask import Flask, request, send_from_directory, render_template_string, redirect, session, jsonify
 from threading import Thread
-from command.torrets_tools import download_from_magnet
+from command.torrets_tools import download_from_magnet, get_download_progress, cleanup_old_downloads
 from command.htools import crear_cbz_desde_fuente
-from my_flask_templates import LOGIN_TEMPLATE, MAIN_TEMPLATE, UTILS_TEMPLATE
+from my_flask_templates import LOGIN_TEMPLATE, MAIN_TEMPLATE, UTILS_TEMPLATE, DOWNLOADS_TEMPLATE
+import uuid
 
 explorer = Flask("file_explorer")
 explorer.secret_key = os.getenv("FLASK_SECRET", "supersecretkey")
@@ -71,6 +72,22 @@ def browse():
 def utils_page():
     return render_template_string(UTILS_TEMPLATE)
 
+@explorer.route("/downloads")
+@login_required
+def downloads_page():
+    # Limpiar descargas antiguas antes de mostrar
+    cleanup_old_downloads()
+    downloads = get_download_progress()
+    return render_template_string(DOWNLOADS_TEMPLATE, downloads=downloads)
+
+@explorer.route("/api/downloads")
+@login_required
+def api_downloads():
+    # Limpiar descargas antiguas
+    cleanup_old_downloads()
+    downloads = get_download_progress()
+    return jsonify(downloads)
+
 @explorer.route("/download")
 def download():
     path = request.args.get("path")
@@ -113,8 +130,18 @@ def handle_magnet():
         return "<h3>❌ Magnet link vacío.</h3>", 400
 
     try:
-        Thread(target=download_from_magnet, args=(link, BASE_DIR)).start()
-        return redirect("/utils")
+        download_id = str(uuid.uuid4())
+        
+        def run_async_download():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(download_from_magnet(link, BASE_DIR, None, download_id))
+            finally:
+                loop.close()
+
+        Thread(target=run_async_download).start()
+        return redirect("/downloads")
     except Exception as e:
         return f"<h3>Error al iniciar descarga: {e}</h3>", 500
 
