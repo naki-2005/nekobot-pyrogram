@@ -86,6 +86,7 @@ async def send_vault_file_by_index(client, message):
     import os
     import asyncio
     import subprocess
+    import time
     from pyrogram import enums
     from pyrogram.errors import FloodWait
 
@@ -138,12 +139,21 @@ async def send_vault_file_by_index(client, message):
         return
 
     progress_msg = await safe_call(client.send_message, message.chat.id, "📤 Iniciando envío de archivos...")
+    start_time = time.time()
     total_files = len(selected_files)
     sent_count = 0
+    total_mb = sum(os.path.getsize(p) for p in selected_files) / (1024 * 1024)
+    sent_mb = 0
 
     async def update_progress():
         while sent_count < total_files:
-            await safe_call(progress_msg.edit_text, f"📦 Enviando archivos... {sent_count}/{total_files}")
+            elapsed = int(time.time() - start_time)
+            await safe_call(progress_msg.edit_text,
+                f"📦 Enviando archivos...\n"
+                f"🕒 Tiempo: {elapsed}s\n"
+                f"📁 Archivos: {sent_count}/{total_files}\n"
+                f"📊 Progreso: {sent_mb:.2f} MB / {total_mb:.2f} MB"
+            )
             await asyncio.sleep(10)
 
     updater_task = asyncio.create_task(update_progress())
@@ -166,9 +176,11 @@ async def send_vault_file_by_index(client, message):
 
                     for part in archive_parts:
                         part_path = os.path.join(VAULT_FOLDER, part)
+                        part_size = os.path.getsize(part_path) / (1024 * 1024)
                         await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
                         await safe_call(client.send_document, message.chat.id, document=part_path, caption=f"📦 {part}")
                         await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.CANCEL)
+                        sent_mb += part_size
                         if delete_after and os.path.exists(part_path):
                             os.remove(part_path)
 
@@ -179,6 +191,7 @@ async def send_vault_file_by_index(client, message):
                     await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
                     await safe_call(client.send_document, message.chat.id, document=path, caption=f"📤 {os.path.basename(path)}")
                     await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.CANCEL)
+                    sent_mb += size_mb
                     if delete_after and os.path.exists(path):
                         os.remove(path)
 
