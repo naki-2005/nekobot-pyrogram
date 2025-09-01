@@ -124,6 +124,8 @@ async def process_command(
 
     elif command == "/magnet":
         if cmd("torrent", int_lvl):
+            from command.torrets_tools import process_magnet_download_telegram
+
             parts = text.strip().split(maxsplit=2)
             if len(parts) < 2:
                 await message.reply("❗ Debes proporcionar un enlace magnet o .torrent.")
@@ -143,107 +145,13 @@ async def process_command(
                 await message.reply("❗ El enlace debe ser un magnet o un archivo .torrent.")
                 return
 
-            message.text = f"/magnet {arg_text}"
-            status_msg = await message.reply("⏳ Iniciando descarga...")
+            await process_magnet_download_telegram(
+                client=client,
+                message=message,
+                magnet_or_torrent=arg_text,
+                use_compression=use_compression
+            )
 
-            start_time = time.time()
-            progress_data = {"filename": "", "percent": 0, "speed": 0.0}
-
-            async def update_progress():
-                while progress_data["percent"] < 100:
-                    elapsed = int(time.time() - start_time)
-                    h, m, s = elapsed // 3600, (elapsed % 3600) // 60, elapsed % 60
-                    speed_mb = round(progress_data["speed"] / 1024, 2)
-                    await status_msg.edit_text(
-                        f"📥 Descargando: {progress_data['filename']}\n"
-                        f"📊 Progreso: {progress_data['percent']}%\n"
-                        f"⏱️ Tiempo: {h:02d}:{m:02d}:{s:02d}\n"
-                        f"🚀 Velocidad: {speed_mb} MB/s"
-                    )
-                    await asyncio.sleep(10)
-
-            progress_task = asyncio.create_task(update_progress())
-            files = await handle_torrent_command(client, message, progress_data)
-            progress_data["percent"] = 100
-            await progress_task
-            await asyncio.sleep(5)
-            await status_msg.delete()
-
-            if not files:
-                await message.reply("❌ No se descargaron archivos.")
-                return
-
-            if use_compression:
-                try:
-                    await client.send_chat_action(chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                    await message.reply("🗜️ Comprimiendo archivos en partes de 2000MB con 7z...")
-
-                    archive_path = os.path.join(BASE_DIR, "compressed.7z")
-                    seven_zip_exe = os.path.join("7z", "7zz")
-
-                    cmd_args = [
-                        seven_zip_exe,
-                        'a',
-                        '-mx=0',
-                        '-v2000m',
-                        archive_path,
-                        os.path.join(BASE_DIR, '*')
-                    ]
-
-                    subprocess.run(cmd_args, check=True)
-
-                    for rel_path in files:
-                        path = os.path.join(BASE_DIR, rel_path)
-                        if os.path.exists(path):
-                            os.remove(path)
-
-                    for part_file in sorted(os.listdir(BASE_DIR)):
-                        full_path = os.path.join(BASE_DIR, part_file)
-                        if part_file.startswith("compressed.7z"):
-                            await client.send_chat_action(chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                            await client.send_document(chat_id, document=full_path)
-                            await client.send_chat_action(chat_id, enums.ChatAction.CANCEL)
-                            os.remove(full_path)
-
-                except Exception as e:
-                    await message.reply(f"⚠️ Error al comprimir y enviar archivos: {e}")
-                return
-
-            for rel_path in files:
-                path = os.path.join(BASE_DIR, rel_path)
-                try:
-                    file_size = os.path.getsize(path)
-                    if file_size > 2000 * 1024 * 1024:
-                        await client.send_chat_action(chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                        await message.reply(f"📦 El archivo `{os.path.basename(path)}` excede los 2000MB. Dividiéndolo en partes...")
-
-                        with open(path, 'rb') as original:
-                            part_num = 1
-                            while True:
-                                part_data = original.read(2000 * 1024 * 1024)
-                                if not part_data:
-                                    break
-                                part_file = f"{path}.{part_num:03d}"
-                                with open(part_file, 'wb') as part:
-                                    part.write(part_data)
-                                await client.send_chat_action(chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                                await client.send_document(chat_id, document=part_file)
-                                await client.send_chat_action(chat_id, enums.ChatAction.CANCEL)
-                                os.remove(part_file)
-                                part_num += 1
-
-                        os.remove(path)
-                    else:
-                        await client.send_chat_action(chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                        await client.send_document(chat_id, document=path)
-                        await client.send_chat_action(chat_id, enums.ChatAction.CANCEL)
-                        os.remove(path)
-
-                except Exception as e:
-                    await message.reply(f"⚠️ Error al enviar {rel_path}: {e}")
-
-
-                    
     elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt", "/dltxt"):
         if cmd("htools", int_lvl):
             reply = message.reply_to_message
