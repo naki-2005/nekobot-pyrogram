@@ -137,7 +137,8 @@ async def handle_torrent_command(client, message, progress_data=None):
         return []
 
 
-async def process_magnet_download(client, message, arg_text, use_compression):
+async def process_magnet_download_telegram(client, message, arg_text, use_compression):
+    (client, message, arg_text, use_compression):
     chat_id = message.chat.id
     message.text = f"/magnet {arg_text}"
     status_msg = await message.reply("⏳ Iniciando descarga...")
