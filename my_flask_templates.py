@@ -395,6 +395,14 @@ UTILS_TEMPLATE = """
         button:hover {
             transform: translateY(-2px);
         }
+        .info-text {
+            background: #e3f2fd;
+            padding: 10px;
+            border-radius: 6px;
+            border-left: 4px solid #2196f3;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
     </style>
 </head>
 <body>
@@ -419,16 +427,20 @@ UTILS_TEMPLATE = """
         </div>
 
         <div class="section">
-            <h2>🔞 Descargar Doujin</h2>
+            <h2>🔞 Descargar Doujin(s)</h2>
             <form action="/crear_cbz" method="post">
-                <input type="text" name="codigo" placeholder="Código o URL del doujin" required>
+                <input type="text" name="codigo" placeholder="Código(s) separados por coma (ej: 123,456,789)" required>
                 <select name="tipo" required>
                     <option value="nh">NHentai</option>
                     <option value="h3">3Hentai</option>
                     <option value="hito">Hitomi.la</option>
                 </select>
-                <button type="submit">Crear CBZ</button>
+                <button type="submit">Crear CBZ(s)</button>
             </form>
+            <div class="info-text">
+                💡 Puedes ingresar múltiples códigos separados por comas (ej: 123456,789012,345678).
+                La descarga se procesará en segundo plano y podrás ver el progreso en la página de descargas.
+            </div>
         </div>
     </div>
 </body>
