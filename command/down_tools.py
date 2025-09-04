@@ -9,6 +9,8 @@ from pyrogram import Client, enums
 from pyrogram.types import Message
 from pyrogram.errors import FloodWait
 
+seven_zip_exe = os.path.join("7z", "7zz")
+
 async def safe_call(func, *args, **kwargs):
     while True:
         try:
@@ -118,8 +120,7 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
         timestamp = datetime.now(habana_tz).strftime("%Y_%m_%d_%H_%M")
         archive_name = f"Mega_dl_{timestamp}.7z"
         archive_path = os.path.join(output_dir, archive_name)
-        seven_zip_exe = os.path.join("7z", "7zz")
-
+        
         total_size = 0
         for root, dirs, files_in_dir in os.walk(output_dir):
             for file in files_in_dir:
