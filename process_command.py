@@ -187,25 +187,11 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
 
     elif command == "/megadl":
         if not cmd("download", int_lvl):
-            await message.reply("⛔ No tienes permiso para usar este comando.")
             return
 
-        if len(text.split()) < 2:
-            await message.reply("❌ Debes proporcionar un enlace de MEGA.")
-            return
-
-        mega_url = textori.split()[1]
         from command.down_tools import handle_megadl_command
-        await handle_megadl_command(client, message, mega_url, chat_id)
-    elif command == "/imgchest":
-        if cmd("imgtools", int_lvl):
-            from command.imgtools import create_imgchest_post
-            reply = message.reply_to_message
-            if reply and (reply.photo or reply.document or reply.video):
-                await asyncio.create_task(create_imgchest_post(client, message))
-            else:
-                await message.reply("Por favor, usa el comando respondiendo a una foto.")
-
+        await handle_megadl_command(client, message, textori, chat_id)
+        
     elif command in ("/compress", "/split", "/setsize", "/rename", "/caption"):
         if cmd("filetools", int_lvl):
             from command.filetools import handle_compress, set_size, rename, caption
