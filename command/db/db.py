@@ -5,22 +5,23 @@ import json
 import urllib.request
 from datetime import datetime
 import urllib.error
+from arg_parser import get_args
+
+args = get_args()
 
 MAILDATA_FILE = "maildata.txt"
 WEBACCESS_FILE = "web_access.json"
 
 def descargar_web_config():
-    GIT_REPO = os.getenv("GIT_REPO")
-    GIT_API = os.getenv("GIT_API")
-    if not GIT_REPO or not GIT_API:
-        print("[!] Variables de entorno GIT_REPO o GIT_API no definidas")
+    if not args.repo or not args.barer:
+        print("[!] Argumentos --repo o --barer no definidos")
         return
 
     file_path = "data/web_access.json"
-    url = f"https://api.github.com/repos/{GIT_REPO}/contents/{file_path}"
+    url = f"https://api.github.com/repos/{args.repo}/contents/{file_path}"
 
     headers = {
-        "Authorization": f"Bearer {GIT_API}",
+        "Authorization": f"Bearer {args.barer}",
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "python-urllib"
     }
@@ -70,16 +71,14 @@ def guardar_datos_web(user_id: int, usuario: str, contraseña: str) -> None:
     except:
         return
 
-    GIT_REPO = os.getenv("GIT_REPO")
-    GIT_API = os.getenv("GIT_API")
-    if not GIT_REPO or not GIT_API:
+    if not args.repo or not args.barer:
         return
 
     file_path = "data/web_access.json"
-    url = f"https://api.github.com/repos/{GIT_REPO}/contents/{file_path}"
+    url = f"https://api.github.com/repos/{args.repo}/contents/{file_path}"
 
     headers = {
-        "Authorization": f"Bearer {GIT_API}",
+        "Authorization": f"Bearer {args.barer}",
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "python-urllib"
     }
@@ -130,16 +129,14 @@ def guardar_datos_correo(correo: str, contraseña: str, servidor: str) -> None:
     except:
         return
 
-    GIT_REPO = os.getenv("GIT_REPO")
-    GIT_API = os.getenv("GIT_API")
-    if not GIT_REPO or not GIT_API:
+    if not args.repo or not args.barer:
         return
 
     file_path = "data/maildata.txt"
-    url = f"https://api.github.com/repos/{GIT_REPO}/contents/{file_path}"
+    url = f"https://api.github.com/repos/{args.repo}/contents/{file_path}"
 
     headers = {
-        "Authorization": f"Bearer {GIT_API}",
+        "Authorization": f"Bearer {args.barer}",
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "python-urllib"
     }
@@ -180,17 +177,15 @@ def guardar_datos_correo(correo: str, contraseña: str, servidor: str) -> None:
         return
 
 def descargar_mail_config():
-    GIT_REPO = os.getenv("GIT_REPO")
-    GIT_API = os.getenv("GIT_API")
-    if not GIT_REPO or not GIT_API:
-        print("[!] Variables de entorno GIT_REPO o GIT_API no definidas")
+    if not args.repo or not args.barer:
+        print("[!] Argumentos --repo o --barer no definidos")
         return
 
     file_path = "data/maildata.txt"
-    url = f"https://api.github.com/repos/{GIT_REPO}/contents/{file_path}"
+    url = f"https://api.github.com/repos/{args.repo}/contents/{file_path}"
 
     headers = {
-        "Authorization": f"Bearer {GIT_API}",
+        "Authorization": f"Bearer {args.barer}",
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "python-urllib"
     }
@@ -242,23 +237,19 @@ def subir_bot_config(bot_id: str):
         print(f"[!] No existe el archivo: {db_path}")
         return
 
-    GIT_REPO = os.getenv("GIT_REPO")
-    GIT_API = os.getenv("GIT_API")
-    if not GIT_REPO or not GIT_API:
-        print("[!] Variables de entorno GIT_REPO o GIT_API no definidas")
+    if not args.repo or not args.barer:
+        print("[!] Argumentos --repo o --barer no definidos")
         return
 
     file_name = f"{bot_id}.db"
     file_path = f"data/{file_name}"
-    url = f"https://api.github.com/repos/{GIT_REPO}/contents/{file_path}"
+    url = f"https://api.github.com/repos/{args.repo}/contents/{file_path}"
 
     headers = {
-        "Authorization": f"Bearer {GIT_API}",
+        "Authorization": f"Bearer {args.barer}",
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "python-urllib"
     }
-
-    # Detectar si el archivo ya existe para obtener el SHA
     sha = None
     try:
         req = urllib.request.Request(url, headers=headers)
@@ -268,20 +259,17 @@ def subir_bot_config(bot_id: str):
     except urllib.error.HTTPError as e:
         if e.code != 404:
             raise RuntimeError(f"Error al consultar GitHub: {e.code} {e.reason}")
-        # Si es 404, el archivo no existe aún → no se necesita SHA
 
-    # Codificar el contenido del archivo local
     with open(db_path, "rb") as f:
         encoded_content = base64.b64encode(f.read()).decode("utf-8")
 
-    # Preparar el payload para subir o sobrescribir
     payload = {
         "message": f"Subida de configuración bot {bot_id}",
         "content": encoded_content,
         "branch": "main"
     }
     if sha:
-        payload["sha"] = sha  # Necesario para sobrescribir
+        payload["sha"] = sha 
 
     req = urllib.request.Request(
         url,
@@ -296,18 +284,16 @@ def subir_bot_config(bot_id: str):
         return result.get("content", {}).get("download_url", "Subido sin URL")
 
 def descargar_bot_config(bot_id: str):
-    GIT_REPO = os.getenv("GIT_REPO")
-    GIT_API = os.getenv("GIT_API")
-    if not GIT_REPO or not GIT_API:
-        print("[!] Variables de entorno GIT_REPO o GIT_API no definidas")
+    if not args.repo or not args.barer:
+        print("[!] Argumentos --repo o --barer no definidos")
         return
 
     file_name = f"{bot_id}.db"
     file_path = f"data/{file_name}"
-    url = f"https://api.github.com/repos/{GIT_REPO}/contents/{file_path}"
+    url = f"https://api.github.com/repos/{args.repo}/contents/{file_path}"
 
     headers = {
-        "Authorization": f"Bearer {GIT_API}",
+        "Authorization": f"Bearer {args.barer}",
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "python-urllib"
     }
@@ -321,7 +307,6 @@ def descargar_bot_config(bot_id: str):
                 print("[!] No se encontró contenido en el archivo remoto")
                 return
 
-            # Decodificar y guardar como bot_cmd.db
             decoded = base64.b64decode(content_b64)
             with open("bot_cmd.db", "wb") as f:
                 f.write(decoded)
@@ -340,17 +325,16 @@ def escape_sql_key(key):
     return f'"{key}"' if key.lower() in RESERVED_SQL else key
 
 def save_user_data_to_db(user_id, key, value):
-    import urllib.request, json, base64, os, sqlite3
-    from datetime import datetime
-
     db_path = "user_data.db"
-    GIT_REPO = os.getenv("GIT_REPO")
-    GIT_API = os.getenv("GIT_API")
+    if not args.repo or not args.barer:
+        print("[!] Argumentos --repo o --barer no definidos")
+        return
+
     FILE_PATH = "data/user_data.db"
-    url = f"https://api.github.com/repos/{GIT_REPO}/contents/{FILE_PATH}"
+    url = f"https://api.github.com/repos/{args.repo}/contents/{FILE_PATH}"
 
     headers = {
-        "Authorization": f"Bearer {GIT_API}",
+        "Authorization": f"Bearer {args.barer}",
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "python-urllib"
     }
@@ -413,20 +397,20 @@ def save_user_data_to_db(user_id, key, value):
         return result.get("content", {}).get("download_url", "Subido sin URL")
     
 def load_user_config(user_id, key):
-    import os, json, base64, urllib.request, sqlite3
-
     RESERVED_SQL = {"limit", "group", "order", "select"}
     def escape_sql_key(k):
         return f'"{k}"' if k.lower() in RESERVED_SQL else k
 
     db_path = "user_data.db"
-    GIT_REPO = os.getenv("GIT_REPO")
-    GIT_API = os.getenv("GIT_API")
+    if not args.repo or not args.barer:
+        print("[!] Argumentos --repo o --barer no definidos")
+        return None
+
     FILE_PATH = "data/user_data.db"
-    url = f"https://api.github.com/repos/{GIT_REPO}/contents/{FILE_PATH}"
+    url = f"https://api.github.com/repos/{args.repo}/contents/{FILE_PATH}"
 
     headers = {
-        "Authorization": f"Bearer {GIT_API}",
+        "Authorization": f"Bearer {args.barer}",
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "python-urllib"
     }
@@ -439,7 +423,9 @@ def load_user_config(user_id, key):
             with open(db_path, "wb") as f:
                 f.write(content)
     except Exception as e:
-        raise RuntimeError(f"No se pudo descargar la base de datos: {e}")
+        if key == "lvl":
+            return "1"
+        return None
 
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -454,12 +440,16 @@ def load_user_config(user_id, key):
 
     val = row[0] if row else None
     if row is None:
-        return "1"
+        if key == "lvl":
+            return "1"
+        return None
     elif key == "limit":
         return int(val) if val and val.isdigit() else 10
     elif key == "delay":
         return val if val else "manual"
     elif val is None:
-        return "1"
+        if key == "lvl":
+            return "1"
+        return None
     else:
         return val
