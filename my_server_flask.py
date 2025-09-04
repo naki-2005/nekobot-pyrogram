@@ -14,6 +14,8 @@ explorer.secret_key = os.getenv("FLASK_SECRET", "supersecretkey")
 BASE_DIR = "vault_files"
 WEBACCESS_FILE = "web_access.json"
 
+cbz_downloads = {}
+
 def login_required(f):
     def wrapper(*args, **kwargs):
         if not session.get("logged_in"):
@@ -75,7 +77,6 @@ def utils_page():
 @explorer.route("/downloads")
 @login_required
 def downloads_page():
-    # Limpiar descargas antiguas antes de mostrar
     cleanup_old_downloads()
     downloads = get_download_progress()
     return render_template_string(DOWNLOADS_TEMPLATE, downloads=downloads)
@@ -83,10 +84,15 @@ def downloads_page():
 @explorer.route("/api/downloads")
 @login_required
 def api_downloads():
-    # Limpiar descargas antiguas
     cleanup_old_downloads()
     downloads = get_download_progress()
     return jsonify(downloads)
+
+@explorer.route("/api/cbz_downloads")
+@login_required
+def api_cbz_downloads():
+    """Endpoint para obtener el estado de las descargas CBZ"""
+    return jsonify(cbz_downloads)
 
 @explorer.route("/download")
 def download():
@@ -97,19 +103,68 @@ def download():
 
 @explorer.route("/crear_cbz", methods=["POST"])
 def crear_cbz():
-    codigo = request.form.get("codigo", "").strip()
+    codigo_input = request.form.get("codigo", "").strip()
     tipo = request.form.get("tipo", "").strip()
 
-    if not codigo or tipo not in ["nh", "h3", "hito"]:
+    if not codigo_input or tipo not in ["nh", "h3", "hito"]:
         return "<h3>❌ Código o tipo inválido.</h3>", 400
 
+    codigos = [c.strip() for c in codigo_input.split(",") if c.strip()]
+    
+    if not codigos:
+        return "<h3>❌ No se proporcionaron códigos válidos.</h3>", 400
+
+    plural = " los" if len(codigos) > 1 else "l"
+    plural2 = "s" if len(codigos) > 1 else ""
+    response_msg = f"<h3>✅ Iniciando descarga de{plural} doujin{plural2}: {', '.join(codigos)}</h3>"
+    response_msg += f"<p>Los archivos estarán disponibles en <a href='/'>el explorador</a> cuando se completen.</p>"
+
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        cbz_path = loop.run_until_complete(crear_cbz_desde_fuente(codigo, tipo))
-        return f"<h3>✅ CBZ creado: <a href='/download?path={cbz_path}'>{os.path.basename(cbz_path)}</a></h3>"
+        download_id = str(uuid.uuid4())
+        cbz_downloads[download_id] = {
+            "codigos": codigos,
+            "tipo": tipo,
+            "estado": "procesando",
+            "progreso": 0,
+            "total": len(codigos),
+            "completados": 0,
+            "errores": 0
+        }
+        
+        def run_async_cbz():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                completados = 0
+                errores = 0
+                
+                for i, codigo in enumerate(codigos):
+                    try:
+                        cbz_path = loop.run_until_complete(crear_cbz_desde_fuente(codigo, tipo))
+                        completados += 1
+                        cbz_downloads[download_id]["progreso"] = (i + 1) / len(codigos) * 100
+                        cbz_downloads[download_id]["completados"] = completados
+                    except Exception as e:
+                        errores += 1
+                        cbz_downloads[download_id]["errores"] = errores
+                        print(f"Error procesando {codigo}: {e}")
+                
+                cbz_downloads[download_id]["estado"] = "completado"
+                cbz_downloads[download_id]["mensaje"] = f"Procesados {completados} de {len(codigos)} códigos"
+                if errores > 0:
+                    cbz_downloads[download_id]["mensaje"] += f" con {errores} error(es)"
+                
+            except Exception as e:
+                cbz_downloads[download_id]["estado"] = "error"
+                cbz_downloads[download_id]["error"] = str(e)
+            finally:
+                loop.close()
+
+        Thread(target=run_async_cbz).start()
+        return response_msg
+        
     except Exception as e:
-        return f"<h3>❌ Error al crear CBZ: {e}</h3>", 500
+        return f"<h3>❌ Error al iniciar descarga: {e}</h3>", 500
 
 @explorer.route("/upload", methods=["POST"])
 def upload_file():
