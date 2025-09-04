@@ -387,6 +387,13 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
                     await message.reply("No se encontraron códigos válidos en el archivo.")
                 os.remove(file_path)
 
+    elif command == "/q":
+        if int_lvl >= 4: 
+            from command.quotly import create_quote
+            await asyncio.create_task(create_quote(client, message))
+        else:
+            await message.reply("⚠️ Este comando solo está disponible para la administración del bot")
+
     elif command == "/settings" and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
         from command.admintools import send_setting_editor, send_setting_protect, send_setting_public, guardar_parametro
         args = textori.split()[1:]
