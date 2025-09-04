@@ -148,7 +148,7 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
 
         imagenes = datos["imagenes"]
         if not imagenes:
-            await safe_call(message.reply, f"❌ No se encontraron imágenes para {codigo}")
+            await safe_call(message.reply, f"❌ No se encontraron imágenes para {codigo}", reply_to_message_id=message.id)
             continue
 
         try:
@@ -156,22 +156,25 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             async with aiohttp.ClientSession() as session:
                 await descargarimagen_async(session, imagenes[0], previewpath)
 
-            await safe_call(client.send_photo,
+            cover_message = await safe_call(client.send_photo,
                 chat_id=message.chat.id,
                 photo=previewpath,
                 caption=f"{texto_titulo} Número de páginas: {len(imagenes)}",
-                protect_content=proteger
+                protect_content=proteger,
+                reply_to_message_id=message.id
             )
             os.remove(previewpath)
 
         except Exception:
-            await safe_call(message.reply, f"❌ No pude enviar la portada para {texto_titulo}")
+            await safe_call(message.reply, f"❌ No pude enviar la portada para {texto_titulo}", reply_to_message_id=message.id)
+            continue
 
         if operacion == "cover":
             continue
 
         progresomsg = await safe_call(message.reply,
-            f"📦 Procesando imágenes para {texto_titulo} ({len(imagenes)} páginas)...\nProgreso 0/{len(imagenes)}"
+            f"📦 Procesando imágenes para {texto_titulo} ({len(imagenes)} páginas)...\nProgreso 0/{len(imagenes)}",
+            reply_to_message_id=message.id
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -223,14 +226,15 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                         mainimages[0].save(pdfpath, save_all=True, append_images=mainimages[1:])
                         archivos.append(pdfpath)
                 except Exception:
-                    await safe_call(message.reply, f"❌ Error al generar PDF para {texto_titulo}")
+                    await safe_call(message.reply, f"❌ Error al generar PDF para {texto_titulo}", reply_to_message_id=cover_message.id)
 
             for archivo in archivos:
                 await safe_call(client.send_document,
                     chat_id=message.chat.id,
                     document=archivo,
                     caption=texto_titulo,
-                    protect_content=proteger
+                    protect_content=proteger,
+                    reply_to_message_id=cover_message.id
                 )
                 os.remove(archivo)
 
@@ -238,14 +242,14 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
 
 async def nh_combined_operation_txt(client, message, tipo, proteger, userid, operacion):
     if not message.reply_to_message or not message.reply_to_message.document:
-        await safe_call(message.reply, "❌ Debes responder a un archivo .txt")
+        await safe_call(message.reply, "❌ Debes responder a un archivo .txt", reply_to_message_id=message.id)
         return
 
     doc = message.reply_to_message.document
     if not doc.file_name.lower().endswith(".txt"):
         await safe_call(client.download_media, doc.file_id, file_name="temp_invalid")
         os.remove("temp_invalid")
-        await safe_call(message.reply, "❌ Usar en un archivo txt")
+        await safe_call(message.reply, "❌ Usar en un archivo txt", reply_to_message_id=message.id)
         return
 
     filepath = await safe_call(client.download_media, doc.file_id, file_name="temp_input.txt")
@@ -259,14 +263,14 @@ async def nh_combined_operation_txt(client, message, tipo, proteger, userid, ope
             os.remove(filepath)
             try: await safe_call(mensaje_txt.delete)
             except: pass
-            await safe_call(message.reply, "✅ Descarga terminada")
+            await safe_call(message.reply, "✅ Descarga terminada", reply_to_message_id=message.id)
             return
 
         if not all(c in "0123456789," for c in contenido):
             os.remove(filepath)
             try: await safe_call(mensaje_txt.delete)
             except: pass
-            await safe_call(message.reply, "❌ Estructura incorrecta")
+            await safe_call(message.reply, "❌ Estructura incorrecta", reply_to_message_id=message.id)
             return
 
         codigos = contenido.split(",")
@@ -288,10 +292,11 @@ async def nh_combined_operation_txt(client, message, tipo, proteger, userid, ope
                 chat_id=message.chat.id,
                 document=nuevo_path,
                 caption=f"💻 Pendientes: {len(siguientes)}",
-                protect_content=proteger
+                protect_content=proteger,
+                reply_to_message_id=message.id
             )
 
             filepath = nuevo_path
         else:            
-            await safe_call(message.reply, "✅ Descarga terminada")
+            await safe_call(message.reply, "✅ Descarga terminada", reply_to_message_id=message.id)
             return
