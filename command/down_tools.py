@@ -9,8 +9,6 @@ from pyrogram import Client, enums
 from pyrogram.types import Message
 from pyrogram.errors import FloodWait
 
-seven_zip_exe = os.path.join("7z", "7zz")
-
 async def safe_call(func, *args, **kwargs):
     while True:
         try:
@@ -48,8 +46,13 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
             unique_links.append(link)
             seen_links.add(link)
 
-    desmega_path = os.path.join("command", "desmega")
-    output_dir = os.path.join("vault_files", "mega_dl")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = os.path.dirname(script_dir)
+    
+    desmega_path = os.path.join(base_dir, "command", "desmega")
+    output_dir = os.path.join(base_dir, "vault_files", "mega_dl")
+    seven_zip_exe = os.path.join(base_dir, "7z", "7zz")
+    
     os.makedirs(output_dir, exist_ok=True)
 
     progress_msg = await safe_call(client.send_message, chat_id, f"📥 Iniciando {len(unique_links)} descargas desde MEGA...")
@@ -120,7 +123,7 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
         timestamp = datetime.now(habana_tz).strftime("%Y_%m_%d_%H_%M")
         archive_name = f"Mega_dl_{timestamp}.7z"
         archive_path = os.path.join(output_dir, archive_name)
-        
+
         total_size = 0
         for root, dirs, files_in_dir in os.walk(output_dir):
             for file in files_in_dir:
