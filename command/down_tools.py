@@ -9,6 +9,8 @@ from pyrogram import Client, enums
 from pyrogram.types import Message
 from pyrogram.errors import FloodWait
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 async def safe_call(func, *args, **kwargs):
     while True:
         try:
@@ -46,8 +48,8 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
             unique_links.append(link)
             seen_links.add(link)
 
-    desmega_path = os.path.join("command", "desmega")
-    output_dir = os.path.join("vault_files", "mega_dl")
+    desmega_path = os.path.join(BASE_DIR, "command", "desmega")
+    output_dir = os.path.join(BASE_DIR, "vault_files", "mega_dl")
     os.makedirs(output_dir, exist_ok=True)
 
     progress_msg = await safe_call(client.send_message, chat_id, f"📥 Iniciando {len(unique_links)} descargas desde MEGA...")
@@ -55,8 +57,6 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
 
     total_files = len(unique_links)
     processed_files = 0
-    total_mb = 0
-    current_mb = 0
 
     async def update_progress():
         while processed_files < total_files:
@@ -128,7 +128,11 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
         timestamp = datetime.now(habana_tz).strftime("%Y_%m_%d_%H_%M")
         archive_name = f"Mega_dl_{timestamp}.7z"
         archive_path = os.path.join(output_dir, archive_name)
-        seven_zip_exe = os.path.join("7z", "7zz")
+        seven_zip_exe = os.path.join(BASE_DIR, "7z", "7zz")
+
+        if not os.path.exists(seven_zip_exe):
+            await safe_call(progress_msg.edit_text, "❌ Error: No se encontró el ejecutable de 7zip")
+            return
 
         await safe_call(progress_msg.edit_text, 
             f"📦 Creando archivo comprimido...\n"
@@ -164,8 +168,6 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
 
             sent_count = 0
             total_parts = len(archive_parts)
-            total_parts_size = sum(os.path.getsize(os.path.join(output_dir, part)) for part in archive_parts) / (1024 * 1024)
-            sent_mb = 0
 
             for part in archive_parts:
                 part_path = os.path.join(output_dir, part)
@@ -188,7 +190,6 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
                 await safe_call(client.send_chat_action, chat_id, enums.ChatAction.CANCEL)
                 
                 sent_count += 1
-                sent_mb += part_size_mb
                 os.remove(part_path)
 
         else:
