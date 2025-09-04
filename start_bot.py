@@ -4,24 +4,14 @@ from arg_parser import get_args
 from command.db.db import descargar_web_config
 
 def start_data():
-    admin_users = list(map(int, os.getenv('ADMINS', '').split(','))) if os.getenv('ADMINS') else []
-    users = list(map(int, os.getenv('USERS', '').split(','))) if os.getenv('USERS') else []
-    vip_users = list(map(int, os.getenv('VIP_USERS', '').split(','))) if os.getenv('VIP_USERS') else []
-    ban_users = list(map(int, os.getenv('BAN_USERS', '').split(','))) if os.getenv('BAN_USERS') else []
-
-    # 🧱 Guardar niveles
-    for user_id in ban_users:
-        save_user_data_to_db(user_id, "lvl", "0")
-
-    for user_id in users:
-        save_user_data_to_db(user_id, "lvl", "2")
-
-    for user_id in vip_users:
-        save_user_data_to_db(user_id, "lvl", "3")
-
-    for i, user_id in enumerate(admin_users):
-        lvl = "6" if i == 0 else "5"
-        save_user_data_to_db(user_id, "lvl", lvl)
+    args = get_args()
+    if args.owner:
+        try:
+            owner_id = int(args.owner)
+            save_user_data_to_db(owner_id, "lvl", "6")
+            print(f"[✓] Owner configurado con nivel 6: {owner_id}")
+        except ValueError:
+            print(f"[!] ID de owner inválido: {args.owner}")
 
 def start_data_2():
     args = get_args()
