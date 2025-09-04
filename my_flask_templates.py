@@ -552,6 +552,10 @@ DOWNLOADS_TEMPLATE = """
             background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
             border-color: #dc3545;
         }
+        .processing { 
+            background: linear-gradient(135deg, #cce7ff 0%, #b3d9ff 100%);
+            border-color: #007bff;
+        }
         .controls {
             display: flex;
             gap: 10px;
@@ -597,6 +601,17 @@ DOWNLOADS_TEMPLATE = """
             background: #e9ecef;
             border-radius: 6px;
         }
+        .doujin-progress {
+            font-size: 1.1em;
+            font-weight: bold;
+            margin: 10px 0;
+            color: #495057;
+        }
+        .current-item {
+            font-style: italic;
+            color: #6c757d;
+            margin: 5px 0;
+        }
     </style>
 </head>
 <body>
@@ -627,7 +642,77 @@ DOWNLOADS_TEMPLATE = """
             </div>
         </div>
         
+        <!-- Sección de descargas de Doujins -->
+        {% if doujin_downloads %}
+            <h2>📚 Descargas de Doujins</h2>
+            {% for id, download in doujin_downloads.items() %}
+                <div class="download-card {% if download.state == 'completed' %}completed{% elif download.state == 'error' %}error{% else %}processing{% endif %}">
+                    <h3>📖 Creando CBZ{{ 's' if download.total > 1 else '' }} ({{ download.tipo|upper }})</h3>
+                    
+                    <div class="doujin-progress">
+                        Progreso: {{ download.progress }} de {{ download.total }} CBZ{{ 's' if download.total > 1 else '' }}
+                    </div>
+                    
+                    {% if download.state == 'processing' %}
+                    <div class="current-item">
+                        📋 {{ download.current_item }}
+                    </div>
+                    {% endif %}
+                    
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: {{ (download.progress / download.total * 100) | round(1) }}%"></div>
+                    </div>
+                    
+                    <p><strong>Estado:</strong> 
+                        <span style="color: 
+                            {% if download.state == 'completed' %}#28a745
+                            {% elif download.state == 'error' %}#dc3545
+                            {% else %}#007bff{% endif %};">
+                            {{ download.state }}
+                        </span>
+                    </p>
+                    
+                    <div class="stats">
+                        <div class="stat-item"><strong>✅ Completados:</strong> {{ download.completados }}</div>
+                        <div class="stat-item"><strong>❌ Errores:</strong> {{ download.errores }}</div>
+                        <div class="stat-item"><strong>📊 Total:</strong> {{ download.total }}</div>
+                        <div class="stat-item"><strong>⏰ Iniciado:</strong> {{ download.start_time[:19] }}</div>
+                        {% if download.end_time %}
+                        <div class="stat-item"><strong>🏁 Finalizado:</strong> {{ download.end_time[:19] }}</div>
+                        {% endif %}
+                    </div>
+                    
+                    {% if download.state == 'completed' and download.resultados %}
+                    <div style="margin-top: 15px;">
+                        <strong>📋 Resultados:</strong>
+                        <div style="max-height: 200px; overflow-y: auto; margin-top: 10px;">
+                            {% for resultado in download.resultados %}
+                            <div style="padding: 5px; border-bottom: 1px solid #eee;">
+                                {{ resultado.codigo }}: 
+                                <span style="color: {% if resultado.estado == 'completado' %}#28a745{% else %}#dc3545{% endif %};">
+                                    {{ resultado.estado }}
+                                </span>
+                                {% if resultado.error %}
+                                - {{ resultado.error }}
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if download.error %}
+                    <p style="color: #dc3545; background: #f8d7da; padding: 10px; border-radius: 5px;">
+                        <strong>❌ Error:</strong> {{ download.error }}
+                    </p>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% endif %}
+        
+        <!-- Sección de descargas de Torrents -->
         {% if downloads %}
+            <h2>📦 Descargas Torrent</h2>
             {% for id, download in downloads.items() %}
                 <div class="download-card {% if download.state == 'completed' %}completed{% elif download.state == 'error' %}error{% endif %}">
                     <h3>{{ download.filename }}</h3>
@@ -663,8 +748,9 @@ DOWNLOADS_TEMPLATE = """
                     {% endif %}
                 </div>
             {% endfor %}
-        {% else %}
+        {% endif %}
 
+        {% if not downloads and not doujin_downloads %}
             <div style="text-align: center; padding: 40px; color: #6c757d;">
                 <h3>📭 No hay descargas activas</h3>
                 <p>Inicia una nueva descarga usando el formulario superior</p>
