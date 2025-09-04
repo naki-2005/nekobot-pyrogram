@@ -28,10 +28,10 @@ args = get_args()
 
 if args.bot_token:
     app = Client("my_bot", api_id=args.api_id, api_hash=args.api_hash, bot_token=args.bot_token, sleep_threshold=5, max_concurrent_transmissions=True)
-    cmd_list_initialized = False  # Bot Token → comandos permitidos
+    cmd_list_initialized = False  
 else:
     app = Client("my_bot", api_id=args.api_id, api_hash=args.api_hash, session_string=args.session_string, sleep_threshold=5, max_concurrent_transmissions=True)
-    cmd_list_initialized = True  # Session String → comandos deshabilitados
+    cmd_list_initialized = True  
 
 bot_is_sleeping = False
 sleep_duration = 0
@@ -147,7 +147,7 @@ async def callback_handler(client, callback_query):
 logging.basicConfig(level=logging.ERROR)
 
 async def main():
-    if os.environ.get("MAIN_BOT", "").lower() == "true":
+    if args.owner:
         start_data()
     start_data_2()
     threading.Thread(target=run_flask, daemon=True).start()
