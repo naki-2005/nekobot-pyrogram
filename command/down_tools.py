@@ -4,6 +4,7 @@ import asyncio
 import time
 from datetime import datetime
 import pytz
+import re
 from pyrogram import Client, enums
 from pyrogram.types import Message
 from pyrogram.errors import FloodWait
@@ -31,22 +32,19 @@ def format_time(seconds):
         return f"{s}s"
 
 async def handle_megadl_command(client: Client, message: Message, textori: str, chat_id: int):
-    if len(textori.split()) < 2:
-        await message.reply("❌ Debes proporcionar al menos un enlace de MEGA.")
+    mega_links = re.findall(r'https://mega\.nz/[^\s]+', textori)
+    
+    if not mega_links:
+        await message.reply("❌ No se encontraron enlaces válidos de MEGA.")
         return
 
-    links = textori.split()[1:]
     unique_links = []
     seen_links = set()
     
-    for link in links:
-        if link.startswith("https://mega.nz/") and link not in seen_links:
+    for link in mega_links:
+        if link not in seen_links:
             unique_links.append(link)
             seen_links.add(link)
-
-    if not unique_links:
-        await message.reply("❌ No se encontraron enlaces válidos de MEGA.")
-        return
 
     desmega_path = os.path.join("command", "desmega")
     output_dir = os.path.join("vault_files", "mega_dl")
