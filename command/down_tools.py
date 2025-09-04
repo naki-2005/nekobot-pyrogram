@@ -46,55 +46,49 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
             unique_links.append(link)
             seen_links.add(link)
 
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    base_dir = os.path.dirname(script_dir)
-    
-    desmega_path = os.path.join(base_dir, "command", "desmega")
-    output_dir = os.path.join(base_dir, "vault_files", "mega_dl")
-    seven_zip_exe = os.path.join(base_dir, "7z", "7zz")
-    
+    desmega_path = os.path.join("command", "desmega")
+    output_dir = os.path.join("vault_files", "mega_dl")
     os.makedirs(output_dir, exist_ok=True)
 
     progress_msg = await safe_call(client.send_message, chat_id, f"📥 Iniciando {len(unique_links)} descargas desde MEGA...")
     start_time = time.time()
 
-    async def monitor_download():
-        while True:
-            try:
-                temp_files = [f for f in os.listdir(output_dir) if '.megatmp' in f]
-                if temp_files:
-                    temp_file = os.path.join(output_dir, temp_files[0])
-                    if os.path.exists(temp_file):
-                        file_size = os.path.getsize(temp_file)
-                        file_size_mb = file_size / (1024 * 1024)
-                        elapsed = int(time.time() - start_time)
-                        formatted_time = format_time(elapsed)
-                        
-                        await safe_call(progress_msg.edit_text,
-                            f"📥 Descargando desde MEGA...\n"
-                            f"📦 Tamaño descargado: {file_size_mb:.2f} MB\n"
-                            f"⏱️ Tiempo: {formatted_time}\n"
-                            f"🔄 Descargas activas..."
-                        )
-                else:
-                    elapsed = int(time.time() - start_time)
-                    formatted_time = format_time(elapsed)
-                    await safe_call(progress_msg.edit_text,
-                        f"📥 Procesando {len(unique_links)} enlaces MEGA...\n"
-                        f"⏱️ Tiempo: {formatted_time}\n"
-                        f"🔄 Iniciando descargas..."
-                    )
-                
-                await asyncio.sleep(10)
-            except Exception as e:
-                print(f"Error en monitor_download: {e}")
-                await asyncio.sleep(10)
+    total_files = len(unique_links)
+    processed_files = 0
+    total_mb = 0
+    current_mb = 0
 
-    monitor_task = asyncio.create_task(monitor_download())
+    async def update_progress():
+        while processed_files < total_files:
+            try:
+                elapsed = int(time.time() - start_time)
+                formatted_time = format_time(elapsed)
+                
+                progress_ratio = processed_files / total_files if total_files else 0
+                bar_length = 20
+                filled_length = int(bar_length * progress_ratio)
+                bar = "█" * filled_length + "▒" * (bar_length - filled_length)
+                
+                await safe_call(progress_msg.edit_text,
+                    f"📥 Descargando desde MEGA...\n"
+                    f"🕒 Tiempo: {formatted_time}\n"
+                    f"📁 Progreso: {processed_files}/{total_files}\n"
+                    f"📊 [{bar}] {progress_ratio*100:.1f}%\n"
+                    f"🔄 Descargas activas..."
+                )
+                await asyncio.sleep(5)
+            except Exception as e:
+                print(f"Error en update_progress: {e}")
+                await asyncio.sleep(5)
+
+    updater_task = asyncio.create_task(update_progress())
 
     try:
         for i, mega_url in enumerate(unique_links):
-            await safe_call(progress_msg.edit_text, f"📥 Descargando enlace {i+1}/{len(unique_links)}...")
+            await safe_call(progress_msg.edit_text, 
+                f"📥 Descargando enlace {i+1}/{len(unique_links)}...\n"
+                f"🔗 {mega_url[:50]}..."
+            )
 
             process = subprocess.Popen(
                 [desmega_path, mega_url, "--path", output_dir],
@@ -107,10 +101,12 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
 
             if process.returncode != 0:
                 await safe_call(message.reply, f"❌ Error al descargar enlace {i+1}:\n{stderr}")
+            else:
+                processed_files += 1
 
-        monitor_task.cancel()
+        updater_task.cancel()
         try:
-            await monitor_task
+            await updater_task
         except asyncio.CancelledError:
             pass
 
@@ -118,11 +114,6 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
         if not files:
             await safe_call(progress_msg.edit_text, "⚠️ No se encontraron archivos descargados")
             return
-
-        habana_tz = pytz.timezone('America/Havana')
-        timestamp = datetime.now(habana_tz).strftime("%Y_%m_%d_%H_%M")
-        archive_name = f"Mega_dl_{timestamp}.7z"
-        archive_path = os.path.join(output_dir, archive_name)
 
         total_size = 0
         for root, dirs, files_in_dir in os.walk(output_dir):
@@ -133,7 +124,16 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
 
         total_size_mb = total_size / (1024 * 1024)
 
-        await safe_call(progress_msg.edit_text, f"📦 Creando archivo comprimido...")
+        habana_tz = pytz.timezone('America/Havana')
+        timestamp = datetime.now(habana_tz).strftime("%Y_%m_%d_%H_%M")
+        archive_name = f"Mega_dl_{timestamp}.7z"
+        archive_path = os.path.join(output_dir, archive_name)
+        seven_zip_exe = os.path.join("7z", "7zz")
+
+        await safe_call(progress_msg.edit_text, 
+            f"📦 Creando archivo comprimido...\n"
+            f"📊 Tamaño total: {total_size_mb:.2f} MB"
+        )
 
         if total_size_mb > 2000:
             cmd_args = [
@@ -164,18 +164,31 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
 
             sent_count = 0
             total_parts = len(archive_parts)
+            total_parts_size = sum(os.path.getsize(os.path.join(output_dir, part)) for part in archive_parts) / (1024 * 1024)
+            sent_mb = 0
 
             for part in archive_parts:
                 part_path = os.path.join(output_dir, part)
                 part_size_mb = os.path.getsize(part_path) / (1024 * 1024)
                 
-                await safe_call(progress_msg.edit_text, f"📤 Enviando parte {sent_count+1}/{total_parts} ({part_size_mb:.2f} MB)...")
+                progress_ratio = sent_count / total_parts if total_parts else 0
+                bar_length = 20
+                filled_length = int(bar_length * progress_ratio)
+                bar = "█" * filled_length + "▒" * (bar_length - filled_length)
+                
+                await safe_call(progress_msg.edit_text,
+                    f"📤 Enviando parte {sent_count+1}/{total_parts}\n"
+                    f"📦 {part_size_mb:.2f} MB\n"
+                    f"📊 [{bar}] {progress_ratio*100:.1f}%\n"
+                    f"🔄 Enviando..."
+                )
                 
                 await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
                 await safe_call(client.send_document, chat_id, document=part_path)
                 await safe_call(client.send_chat_action, chat_id, enums.ChatAction.CANCEL)
                 
                 sent_count += 1
+                sent_mb += part_size_mb
                 os.remove(part_path)
 
         else:
@@ -200,10 +213,34 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
                 return
 
             archive_size_mb = os.path.getsize(archive_path) / (1024 * 1024)
-            await safe_call(progress_msg.edit_text, f"📤 Enviando archivo ({archive_size_mb:.2f} MB)...")
+            
+            await safe_call(progress_msg.edit_text,
+                f"📤 Enviando archivo completo\n"
+                f"📦 {archive_size_mb:.2f} MB\n"
+                f"🔄 Preparando envío..."
+            )
             
             await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-            await safe_call(client.send_document, chat_id, document=archive_path)
+            
+            def upload_progress(current, total):
+                current_mb = current / (1024 * 1024)
+                total_mb = total / (1024 * 1024)
+                progress_ratio = current / total if total else 0
+                bar_length = 20
+                filled_length = int(bar_length * progress_ratio)
+                bar = "█" * filled_length + "▒" * (bar_length - filled_length)
+                
+                try:
+                    asyncio.create_task(safe_call(progress_msg.edit_text,
+                        f"📤 Enviando archivo completo\n"
+                        f"📦 {current_mb:.2f} MB / {total_mb:.2f} MB\n"
+                        f"📊 [{bar}] {progress_ratio*100:.1f}%\n"
+                        f"⚡ Enviando..."
+                    ))
+                except:
+                    pass
+            
+            await safe_call(client.send_document, chat_id, document=archive_path, progress=upload_progress)
             await safe_call(client.send_chat_action, chat_id, enums.ChatAction.CANCEL)
             
             os.remove(archive_path)
@@ -220,9 +257,9 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
         await safe_call(progress_msg.delete)
 
     except Exception as e:
-        monitor_task.cancel()
+        updater_task.cancel()
         try:
-            await monitor_task
+            await updater_task
         except asyncio.CancelledError:
             pass
         await safe_call(progress_msg.edit_text, f"❌ Error inesperado: {str(e)}")
