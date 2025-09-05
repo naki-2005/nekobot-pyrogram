@@ -10,6 +10,7 @@ async def lista_cmd(app):
         BotCommand("compress", "Comprimir un archivo en partes"),
         BotCommand("split", "Dividir un archivo en partes"),
         BotCommand("rename", "Cambia el nombre de un archivo"),
+        BotCommand("manga", "Busca un manga para descargar"),
         BotCommand("convert", "Convierte un video"),
         BotCommand("calidad", "Ajusta la calidad de /convert"),
         BotCommand("setmail", "Configure su correo para usar /send"),

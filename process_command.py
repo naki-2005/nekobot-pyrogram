@@ -460,3 +460,8 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
     elif command == "/edituser" and message.chat.type in (ChatType.PRIVATE, ChatType.BOT):
         from command.admintools import send_access_editor
         await send_access_editor(client, message)
+
+    elif command == "/manga":
+        if cmd("manga", int_lvl):
+            from command.mangatools import handle_manga_search
+            await handle_manga_search(client, message, textori)
