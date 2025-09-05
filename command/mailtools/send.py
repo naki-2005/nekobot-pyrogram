@@ -1,16 +1,17 @@
 import os
 import time
 import shutil
-import py7zr
 import smtplib
+import subprocess
+import asyncio
 from email.message import EmailMessage
 import random
 from data.vars import admin_users, vip_users, video_limit, PROTECT_CONTENT, correo_manual
-import asyncio
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from command.mailtools.set_values import verify_protect, get_mail_limit, get_user_delay, multi_user_emails, copy_users, exceeded_users, user_emails, user_delays, user_limits
-
 from command.db.db import load_user_config
+
+SEVEN_ZIP_EXE = os.path.join("7z", "7zz")
 
 part_queue = {}
 
@@ -137,13 +138,12 @@ async def send_mail(client, message, division="7z"):
 
     try:
         email = load_user_config(user_id, "email")
-        mail_mb = load_user_config(user_id, "limit")
-        mail_delay = load_user_config(user_id, "delay")
+        mail_mb = load_user_config(user_id, "limit") or 5
+        mail_delay = load_user_config(user_id, "delay") or "manual"
     except Exception as e:
         await message.reply(str(e))
         return
 
-    
     if not message.reply_to_message:
         await message.reply("Por favor, responde a un mensaje.", protect_content=True)
         return
@@ -206,35 +206,39 @@ async def send_mail(client, message, division="7z"):
             del part_queue[user_id][task_id]
             if not part_queue[user_id]:
                 del part_queue[user_id]
-            
 
-def compressfile(file_path, part_size):
+def compressfile(file_path, part_size_mb):
     parts = []
-    part_size *= 1024 * 1024
-    archive_path = f"{file_path}.7z"
-    with py7zr.SevenZipFile(archive_path, 'w') as archive:
-        archive.write(file_path, os.path.basename(file_path))
-    with open(archive_path, 'rb') as archive:
-        part_num = 1
-        while True:
-            part_data = archive.read(part_size)
-            if not part_data:
-                break
-            part_file = f"{archive_path}.{part_num:03d}"
-            with open(part_file, 'wb') as part:
-                part.write(part_data)
-            parts.append(part_file)
-            part_num += 1
-    return parts
-
-    # Eliminar archivo original y el .7z
+    archive_base = f"{file_path}.7z"
+    
+    cmd = [
+        SEVEN_ZIP_EXE, "a", "-mx=0", 
+        f"-v{part_size_mb}m", 
+        archive_base, 
+        file_path
+    ]
+    
+    try:
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=3600)
+        if result.returncode != 0:
+            raise Exception(f"Error al comprimir: {result.stderr}")
+    except subprocess.TimeoutExpired:
+        raise Exception("Timeout al comprimir el archivo")
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"Error en 7zz: {e.stderr}")
+    
+    archive_dir = os.path.dirname(archive_base)
+    archive_name = os.path.basename(archive_base)
+    
+    for fname in os.listdir(archive_dir):
+        if fname.startswith(archive_name):
+            parts.append(os.path.join(archive_dir, fname))
+    
+    parts.sort()
     
     os.remove(file_path)
-    os.remove(archive_path)
-
+    
     return parts
-
-import os
 
 def splitfile(file_path, part_size_mb):
     part_size = part_size_mb * 1024 * 1024
@@ -252,9 +256,7 @@ def splitfile(file_path, part_size_mb):
             parts.append(part_name)
             part_num += 1
 
-    # Eliminar archivo original
     os.remove(file_path)
-
     return parts
 
 def send_email(destino, asunto, contenido=None, adjunto=False):
@@ -313,8 +315,6 @@ def send_email(destino, asunto, contenido=None, adjunto=False):
     except Exception as e:
         print(f"[!] Error al enviar correo: {e}")
 
-
-        
 async def multisendmail(client, message):
     user_id = message.from_user.id
     protect_content = await verify_protect(user_id)
@@ -344,24 +344,41 @@ async def multisendmail(client, message):
     try:
         media = await client.download_media(reply_message, file_name='mailtemp/')
         archive_path = f"mailtemp/{original_filename}.7z"
-        with py7zr.SevenZipFile(archive_path, 'w') as archive: archive.write(media, original_filename)
-        with open(archive_path, 'rb') as f: compressed_data = f.read()
-        os.remove(archive_path); os.remove(media)
-        current_position = 0; part_num = 1; total_parts = 0
+        
+        cmd = [SEVEN_ZIP_EXE, "a", "-mx=0", archive_path, media]
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=3600)
+        if result.returncode != 0:
+            raise Exception(f"Error al comprimir: {result.stderr}")
+        
+        with open(archive_path, 'rb') as f:
+            compressed_data = f.read()
+        os.remove(archive_path)
+        os.remove(media)
+        
+        current_position = 0
+        part_num = 1
+        total_parts = 0
         for email, config in email_config.items():
-            size_limit = config['size_limit'] * 1024 * 1024; msg_limit = config['msg_limit']
+            size_limit = config['size_limit'] * 1024 * 1024
+            msg_limit = config['msg_limit']
             total_parts += min((len(compressed_data) - current_position + size_limit - 1) // size_limit, msg_limit)
-        current_position = 0; part_num = 1
+        
+        current_position = 0
+        part_num = 1
         for email, config in email_config.items():
-            if current_position >= len(compressed_data): break
-            size_limit = config['size_limit'] * 1024 * 1024; remaining_msgs = config['msg_limit']
+            if current_position >= len(compressed_data):
+                break
+            size_limit = config['size_limit'] * 1024 * 1024
+            remaining_msgs = config['msg_limit']
             while current_position < len(compressed_data) and remaining_msgs > 0:
                 chunk_size = min(size_limit, len(compressed_data) - current_position)
                 part_data = compressed_data[current_position:current_position + chunk_size]
-                current_position += chunk_size; remaining_msgs -= 1
+                current_position += chunk_size
+                remaining_msgs -= 1
                 attachment_filename = f"{original_filename}.7z"
                 part_file = f"mailtemp/{attachment_filename}.part{part_num}"
-                with open(part_file, 'wb') as f: f.write(part_data)
+                with open(part_file, 'wb') as f:
+                    f.write(part_data)
                 try:
                     asunto = f"{original_filename} [{part_num}/{total_parts}]"
                     send_email(email, asunto, adjunto=part_file)
@@ -373,13 +390,18 @@ async def multisendmail(client, message):
                         f"📦 Tamaño: {chunk_size/(1024*1024):.2f}MB\n"
                         f"✉️ Mensajes restantes en este correo: {remaining_msgs}/{config['msg_limit']}"
                     )
-                    os.remove(part_file); part_num += 1
+                    os.remove(part_file)
+                    part_num += 1
                     await asyncio.sleep(2)
                 except Exception as e:
                     await processing_msg.edit_text(f"❌ Error al enviar parte {part_num}: {str(e)}")
-                    if os.path.exists(part_file): os.remove(part_file); return
+                    if os.path.exists(part_file):
+                        os.remove(part_file)
+                    return
         await processing_msg.edit_text(f"✅ {original_filename} enviado completamente!")
     except Exception as e:
-        if 'media' in locals() and os.path.exists(media): os.remove(media)
-        if 'archive_path' in locals() and os.path.exists(archive_path): os.remove(archive_path)
+        if 'media' in locals() and os.path.exists(media):
+            os.remove(media)
+        if 'archive_path' in locals() and os.path.exists(archive_path):
+            os.remove(archive_path)
         await processing_msg.edit_text(f"❌ Error procesando {original_filename}: {str(e)}")
