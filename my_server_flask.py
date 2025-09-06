@@ -114,7 +114,22 @@ def api_downloads():
 def download():
     path = request.args.get("path")
     if os.path.isfile(path):
-        return send_from_directory(os.path.dirname(path), os.path.basename(path), as_attachment=True)
+        if 'Range' in request.headers:
+            range_header = request.headers.get('Range')
+            range_start = int(range_header.split('=')[1].split('-')[0])
+            return send_from_directory(
+                os.path.dirname(path), 
+                os.path.basename(path), 
+                as_attachment=True,
+                conditional=True,
+                download_name=os.path.basename(path)
+            )
+        else:
+            return send_from_directory(
+                os.path.dirname(path), 
+                os.path.basename(path), 
+                as_attachment=True
+            )
     return "<h3>Archivo no válido para descarga.</h3>"
 
 @explorer.route("/crear_cbz", methods=["POST"])
