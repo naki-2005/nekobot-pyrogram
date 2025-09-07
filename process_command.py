@@ -420,11 +420,6 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
             return
         if int_lvl != 6:
             return
-
-        if args[0] == "cookies":
-            from command.yt_tools import handle_get_cookies
-            await handle_get_cookies(client, message)
-            return
         if args[0] == "copy" and len(args) >= 2:
             from command.db.db import descargar_web_config, descargar_bot_config, subir_bot_config
             bot_id = args[1]
@@ -470,9 +465,4 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
         if cmd("manga", int_lvl):
             from command.mangatools import handle_manga_search
             await handle_manga_search(client, message, textori)
-
-    elif command == "/ytdl":
-        if cmd("youtube", int_lvl):
-            from command.yt_tools import handle_yt_dl
-            await handle_yt_dl(client, message, textori)
             
