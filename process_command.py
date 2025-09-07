@@ -420,6 +420,10 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
             return
         if int_lvl != 6:
             return
+
+        if args[0] == "cookies":
+            from command.yt_tools import handle_get_cookies
+            await handle_get_cookies(client, message)
         if args[0] == "copy" and len(args) >= 2:
             from command.db.db import descargar_web_config, descargar_bot_config, subir_bot_config
             bot_id = args[1]
