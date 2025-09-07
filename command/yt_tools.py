@@ -73,9 +73,9 @@ def cleanup_old_downloads(max_age_hours=24):
         for download_id in to_remove:
             del active_downloads[download_id]
 
-async def download_youtube_video(url, download_id, progress_data=None, audio_only=False):
+def download_youtube_video_sync(url, download_id, progress_data=None, audio_only=False):
     """
-    Descarga un video de YouTube usando yt-dlp
+    Descarga un video de YouTube usando yt-dlp (versión síncrona)
     
     Args:
         url: URL del video de YouTube
@@ -180,10 +180,17 @@ async def download_youtube_video(url, download_id, progress_data=None, audio_onl
             filename = ydl.prepare_filename(info)
             
             # Para descargas de audio, el archivo final tiene extensión mp3
-            if audio_only and filename.endswith('.webm'):
-                filename = filename[:-5] + '.mp3'
-            elif audio_only and filename.endswith('.m4a'):
-                filename = filename[:-4] + '.mp3'
+            if audio_only:
+                if filename.endswith('.webm'):
+                    filename = filename[:-5] + '.mp3'
+                elif filename.endswith('.m4a'):
+                    filename = filename[:-4] + '.mp3'
+                # Verificar si el archivo mp3 existe
+                if not os.path.exists(filename):
+                    # Buscar el archivo original y convertirlo si es necesario
+                    original_ext = os.path.splitext(filename)[0] + os.path.splitext(ydl.prepare_filename(info))[1]
+                    if os.path.exists(original_ext):
+                        filename = original_ext
             
             return filename
             
@@ -280,10 +287,10 @@ async def handle_yt_dl(client, message, text):
         progress_task = asyncio.create_task(update_progress())
         
         try:
-            # Realizar la descarga
+            # Realizar la descarga (versión síncrona en executor)
             downloaded_file = await asyncio.get_event_loop().run_in_executor(
                 None, 
-                lambda: download_youtube_video(url, download_id, progress_data, audio_only)
+                lambda: download_youtube_video_sync(url, download_id, progress_data, audio_only)
             )
             
             progress_data["active"] = False
@@ -308,27 +315,18 @@ async def handle_yt_dl(client, message, text):
             
             await safe_call(status_msg.edit_text, f"📤 Preparando envío: {filename} ({file_size_mb:.2f} MB)")
             
-            # Función de progreso para la subida
-            current_uploaded = 0
-            
-            def upload_progress(current, total):
-                nonlocal current_uploaded
-                current_uploaded = current
-            
             # Enviar el archivo
             await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
             
             if audio_only:
                 await safe_call(client.send_audio, 
                                chat_id=chat_id, 
-                               audio=downloaded_file, 
-                               progress=upload_progress,
+                               audio=downloaded_file,
                                caption=f"🎵 {filename}")
             else:
                 await safe_call(client.send_video, 
                                chat_id=chat_id, 
-                               video=downloaded_file, 
-                               progress=upload_progress,
+                               video=downloaded_file,
                                caption=f"🎥 {filename}")
             
             # Limpiar archivo temporal
