@@ -468,6 +468,6 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
 
     elif command == "/ytdl":
         if cmd("youtube", int_lvl):
-            from command.yt_tools import handle_manga_search
+            from command.yt_tools import handle_yt_dl
             await handle_yt_dl(client, message, textori)
             
