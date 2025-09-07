@@ -6,14 +6,18 @@ import uuid
 import threading
 from pyrogram import enums
 from pyrogram.errors import FloodWait, MessageIdInvalid
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
-# Configuración
 BASE_DIR = "vault_files/yt_dl"
 TEMP_DIR = os.path.join(BASE_DIR, "downloading")
+COOKIES_FILE = os.path.join(BASE_DIR, "cookies.txt")
 os.makedirs(BASE_DIR, exist_ok=True)
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-# Variable global para almacenar el progreso de las descargas
 active_downloads = {}
 downloads_lock = threading.Lock()
 
@@ -21,7 +25,6 @@ def log(msg):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}")
 
 async def safe_call(func, *args, **kwargs):
-    """Maneja llamadas seguras a la API de Telegram"""
     while True:
         try:
             return await func(*args, **kwargs)
@@ -36,14 +39,12 @@ async def safe_call(func, *args, **kwargs):
             raise
 
 def format_time(seconds):
-    """Formatea segundos a formato HH:MM:SS"""
     h = seconds // 3600
     m = (seconds % 3600) // 60
     s = seconds % 60
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 def format_size(bytes_size):
-    """Formatea bytes a formato legible"""
     if bytes_size == 0:
         return "0 B"
     
@@ -55,36 +56,48 @@ def format_size(bytes_size):
     
     return f"{bytes_size:.2f} {units[i]}"
 
-def get_download_progress():
-    """Obtiene el progreso de todas las descargas activas"""
-    with downloads_lock:
-        return active_downloads.copy()
-
-def cleanup_old_downloads(max_age_hours=24):
-    """Limpia descargas antiguas del registro"""
-    with downloads_lock:
-        now = time.time()
-        to_remove = []
-        for download_id, info in active_downloads.items():
-            if "start_time" in info:
-                if (now - info["start_time"]) > max_age_hours * 3600:
-                    to_remove.append(download_id)
+def get_youtube_cookies():
+    try:
+        chrome_options = Options()
+        chrome_options.binary_location = "selenium/chrome-linux64/chrome"
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
         
-        for download_id in to_remove:
-            del active_downloads[download_id]
+        driver = webdriver.Chrome(
+            executable_path="selenium/chromedriver-linux64/chromedriver",
+            options=chrome_options
+        )
+        
+        try:
+            driver.get("https://www.youtube.com")
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+            time.sleep(3)
+            
+            cookies = driver.get_cookies()
+            with open(COOKIES_FILE, 'w', encoding='utf-8') as f:
+                for cookie in cookies:
+                    f.write(f"{cookie['domain']}\t{'TRUE' if cookie.get('secure') else 'FALSE'}\t{cookie['path']}\t{'TRUE' if cookie.get('secure') else 'FALSE'}\t{int(time.time()) + 3600 * 24 * 7}\t{cookie['name']}\t{cookie['value']}\n")
+            
+            log("✅ Cookies de YouTube obtenidas exitosamente")
+            return True
+            
+        except Exception as e:
+            log(f"❌ Error al obtener cookies: {e}")
+            return False
+            
+        finally:
+            driver.quit()
+            
+    except Exception as e:
+        log(f"❌ Error al iniciar el navegador: {e}")
+        return False
 
 def download_youtube_video_sync(url, download_id, progress_data=None, audio_only=False):
-    """
-    Descarga un video de YouTube usando yt-dlp (versión síncrona)
-    
-    Args:
-        url: URL del video de YouTube
-        download_id: ID único para esta descarga
-        progress_data: Diccionario para almacenar progreso
-        audio_only: Si es True, descarga solo audio
-    """
     try:
-        # Registrar la descarga en active_downloads
         with downloads_lock:
             active_downloads[download_id] = {
                 "url": url,
@@ -99,16 +112,27 @@ def download_youtube_video_sync(url, download_id, progress_data=None, audio_only
                 "audio_only": audio_only
             }
         
-        # Configuración de yt-dlp
         ydl_opts = {
             'outtmpl': os.path.join(TEMP_DIR, '%(title)s.%(ext)s'),
             'quiet': True,
-            'no_warnings': True,
+            'no_warnings': False,
             'continuedl': True,
             'concurrent_fragment_downloads': 3,
             'retries': 10,
-            'noprogress': False
+            'noprogress': False,
+            'extractor_retries': 5,
+            'fragment_retries': 10,
+            'skip_unavailable_fragments': True,
+            'ignoreerrors': True,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'referer': 'https://www.youtube.com/',
         }
+        
+        if not os.path.exists(COOKIES_FILE):
+            get_youtube_cookies()
+        
+        if os.path.exists(COOKIES_FILE):
+            ydl_opts['cookiefile'] = COOKIES_FILE
         
         if audio_only:
             ydl_opts.update({
@@ -125,7 +149,6 @@ def download_youtube_video_sync(url, download_id, progress_data=None, audio_only
         else:
             ydl_opts['format'] = 'bestvideo[height<=720]+bestaudio/best[height<=720]'
         
-        # Hook de progreso personalizado
         def progress_hook(d):
             if d['status'] == 'downloading':
                 total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
@@ -136,7 +159,6 @@ def download_youtube_video_sync(url, download_id, progress_data=None, audio_only
                 if total > 0:
                     percent = (downloaded / total) * 100
                     
-                    # Actualizar progress_data si se proporciona
                     if progress_data is not None:
                         progress_data["percent"] = percent
                         progress_data["speed"] = speed
@@ -144,7 +166,6 @@ def download_youtube_video_sync(url, download_id, progress_data=None, audio_only
                         progress_data["total_size"] = total
                         progress_data["filename"] = os.path.basename(filename) if filename else "Descargando..."
                     
-                    # Actualizar active_downloads
                     with downloads_lock:
                         if download_id in active_downloads:
                             active_downloads[download_id].update({
@@ -158,7 +179,6 @@ def download_youtube_video_sync(url, download_id, progress_data=None, audio_only
                             })
             
             elif d['status'] == 'finished':
-                # Actualizar como completado
                 with downloads_lock:
                     if download_id in active_downloads:
                         active_downloads[download_id].update({
@@ -174,20 +194,16 @@ def download_youtube_video_sync(url, download_id, progress_data=None, audio_only
         
         ydl_opts['progress_hooks'] = [progress_hook]
         
-        # Realizar la descarga
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
             
-            # Para descargas de audio, el archivo final tiene extensión mp3
             if audio_only:
                 if filename.endswith('.webm'):
                     filename = filename[:-5] + '.mp3'
                 elif filename.endswith('.m4a'):
                     filename = filename[:-4] + '.mp3'
-                # Verificar si el archivo mp3 existe
                 if not os.path.exists(filename):
-                    # Buscar el archivo original y convertirlo si es necesario
                     original_ext = os.path.splitext(filename)[0] + os.path.splitext(ydl.prepare_filename(info))[1]
                     if os.path.exists(original_ext):
                         filename = original_ext
@@ -196,7 +212,6 @@ def download_youtube_video_sync(url, download_id, progress_data=None, audio_only
             
     except Exception as e:
         log(f"❌ Error en descarga de YouTube: {e}")
-        # Marcar como error
         with downloads_lock:
             if download_id in active_downloads:
                 active_downloads[download_id].update({
@@ -212,9 +227,6 @@ def download_youtube_video_sync(url, download_id, progress_data=None, audio_only
         raise
 
 async def handle_yt_dl(client, message, text):
-    """
-    Maneja el comando /ytdl para descargar videos de YouTube
-    """
     try:
         parts = text.strip().split()
         
@@ -224,18 +236,21 @@ async def handle_yt_dl(client, message, text):
         
         url = parts[1].strip()
         
-        # Verificar si es una URL válida de YouTube
         if "youtube.com" not in url and "youtu.be" not in url:
             await message.reply("❗ URL no válida. Debe ser un enlace de YouTube.")
             return
         
-        # Determinar si es solo audio basado en el parámetro -a
         audio_only = False
         if len(parts) > 2 and parts[2].strip() == "-a":
             audio_only = True
         
         chat_id = message.chat.id
-        status_msg = await message.reply("⏳ Iniciando descarga de YouTube...")
+        
+        cookies_status = ""
+        if not os.path.exists(COOKIES_FILE):
+            cookies_status = "\n⚠️ **Sin cookies**: Algunos videos pueden requerir verificación."
+        
+        status_msg = await message.reply(f"⏳ Iniciando descarga de YouTube...{cookies_status}")
         
         start_time = time.time()
         progress_data = {
@@ -251,7 +266,6 @@ async def handle_yt_dl(client, message, text):
         download_id = str(uuid.uuid4())
         
         async def update_progress():
-            """Actualiza el mensaje de progreso de la descarga"""
             while progress_data["percent"] < 100 and progress_data["active"]:
                 try:
                     elapsed = int(time.time() - start_time)
@@ -283,11 +297,9 @@ async def handle_yt_dl(client, message, text):
                     
                 await asyncio.sleep(5)
         
-        # Iniciar tarea de actualización de progreso
         progress_task = asyncio.create_task(update_progress())
         
         try:
-            # Realizar la descarga (versión síncrona en executor)
             downloaded_file = await asyncio.get_event_loop().run_in_executor(
                 None, 
                 lambda: download_youtube_video_sync(url, download_id, progress_data, audio_only)
@@ -296,7 +308,6 @@ async def handle_yt_dl(client, message, text):
             progress_data["active"] = False
             progress_data["state"] = "completed"
             
-            # Esperar a que la tarea de progreso termine
             await asyncio.sleep(2)
             progress_task.cancel()
             try:
@@ -308,14 +319,12 @@ async def handle_yt_dl(client, message, text):
                 await safe_call(status_msg.edit_text, "❌ Error: No se pudo descargar el archivo.")
                 return
             
-            # Preparar para enviar el archivo
             file_size = os.path.getsize(downloaded_file)
             file_size_mb = file_size / (1024 * 1024)
             filename = os.path.basename(downloaded_file)
             
             await safe_call(status_msg.edit_text, f"📤 Preparando envío: {filename} ({file_size_mb:.2f} MB)")
             
-            # Enviar el archivo
             await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
             
             if audio_only:
@@ -329,7 +338,6 @@ async def handle_yt_dl(client, message, text):
                                video=downloaded_file,
                                caption=f"🎥 {filename}")
             
-            # Limpiar archivo temporal
             try:
                 os.remove(downloaded_file)
             except:
@@ -355,3 +363,18 @@ async def handle_yt_dl(client, message, text):
     except Exception as e:
         log(f"Error en handle_yt_dl: {e}")
         await message.reply(f"❌ Error al procesar el comando: {str(e)}")
+
+async def handle_get_cookies(client, message):
+    try:
+        status_msg = await message.reply("🔄 Generando cookies de YouTube...")
+        
+        success = await asyncio.get_event_loop().run_in_executor(None, get_youtube_cookies)
+        
+        if success:
+            await safe_call(status_msg.edit_text, "✅ Cookies generadas exitosamente. Ahora puedes descargar videos sin problemas.")
+        else:
+            await safe_call(status_msg.edit_text, "❌ Error al generar cookies. Verifica que Selenium esté configurado correctamente.")
+            
+    except Exception as e:
+        log(f"Error en handle_get_cookies: {e}")
+        await message.reply(f"❌ Error al generar cookies: {str(e)}")
