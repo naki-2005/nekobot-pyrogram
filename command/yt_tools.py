@@ -4,6 +4,7 @@ import asyncio
 import time
 import uuid
 import threading
+import random
 from pyrogram import enums
 from pyrogram.errors import FloodWait, MessageIdInvalid
 from selenium import webdriver
@@ -56,6 +57,16 @@ def format_size(bytes_size):
     
     return f"{bytes_size:.2f} {units[i]}"
 
+def get_random_user_agent():
+    user_agents = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0'
+    ]
+    return random.choice(user_agents)
+
 def get_youtube_cookies():
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -73,18 +84,29 @@ def get_youtube_cookies():
         
         chrome_options = Options()
         chrome_options.binary_location = chrome_path
-        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
-        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        chrome_options.add_argument(f"--user-agent={get_random_user_agent()}")
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
         
-        driver = webdriver.Chrome(executable_path=driver_path, options=chrome_options)
+        service = webdriver.chrome.service.Service(executable_path=driver_path)
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         
         try:
+            log("🌐 Navegando a YouTube...")
             driver.get("https://www.youtube.com")
-            WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+            
+            WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
+            
             time.sleep(5)
             
             cookies = driver.get_cookies()
@@ -94,22 +116,25 @@ def get_youtube_cookies():
             
             with open(COOKIES_FILE, 'w', encoding='utf-8') as f:
                 for cookie in cookies:
-                    f.write(f"{cookie.get('domain', '')}\t"
-                           f"{'TRUE' if cookie.get('secure') else 'FALSE'}\t"
+                    f.write(f"{cookie.get('domain', '.youtube.com')}\t"
+                           f"{'TRUE' if cookie.get('secure', False) else 'FALSE'}\t"
                            f"{cookie.get('path', '/')}\t"
-                           f"{'TRUE' if cookie.get('secure') else 'FALSE'}\t"
+                           f"{'TRUE' if cookie.get('secure', False) else 'FALSE'}\t"
                            f"{int(time.time()) + 3600 * 24 * 7}\t"
                            f"{cookie.get('name', '')}\t"
                            f"{cookie.get('value', '')}\n")
             
-            log("✅ Cookies de YouTube obtenidas exitosamente")
+            log(f"✅ {len(cookies)} cookies obtenidas exitosamente")
             return True
             
         except Exception as e:
             log(f"❌ Error al obtener cookies: {e}")
             return False
         finally:
-            driver.quit()
+            try:
+                driver.quit()
+            except:
+                pass
             
     except Exception as e:
         log(f"❌ Error al iniciar el navegador: {e}")
@@ -142,17 +167,27 @@ def download_youtube_video_sync(url, download_id, progress_data=None, audio_only
             'extractor_retries': 5,
             'fragment_retries': 10,
             'skip_unavailable_fragments': True,
-            'ignoreerrors': True,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'referer': 'https://www.youtube.com/',
+            'ignoreerrors': False,
             'socket_timeout': 30,
+            'extract_flat': False,
+            'http_headers': {
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive',
+            }
         }
         
         if os.path.exists(COOKIES_FILE):
             ydl_opts['cookiefile'] = COOKIES_FILE
             log("✅ Usando cookies para autenticación")
         else:
-            log("⚠️ Continuando sin cookies")
+            log("⚠️ Continuando sin cookies, intentando obtener...")
+            if get_youtube_cookies() and os.path.exists(COOKIES_FILE):
+                ydl_opts['cookiefile'] = COOKIES_FILE
+                log("✅ Cookies obtenidas automáticamente")
+        
+        ydl_opts['http_headers']['User-Agent'] = get_random_user_agent()
         
         if audio_only:
             ydl_opts.update({
@@ -170,13 +205,13 @@ def download_youtube_video_sync(url, download_id, progress_data=None, audio_only
             ydl_opts['format'] = 'best[height<=720]'
         
         def progress_hook(d):
-            if d['status'] == 'downloading':
+            if d.get('status') == 'downloading':
                 total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
                 downloaded = d.get('downloaded_bytes', 0)
                 speed = d.get('speed', 0)
                 filename = d.get('filename', '')
                 
-                if total > 0:
+                if total and total > 0:
                     percent = (downloaded / total) * 100
                     
                     if progress_data is not None:
@@ -198,7 +233,7 @@ def download_youtube_video_sync(url, download_id, progress_data=None, audio_only
                                 "last_update": time.time()
                             })
             
-            elif d['status'] == 'finished':
+            elif d.get('status') == 'finished':
                 with downloads_lock:
                     if download_id in active_downloads:
                         active_downloads[download_id].update({
@@ -215,8 +250,11 @@ def download_youtube_video_sync(url, download_id, progress_data=None, audio_only
         ydl_opts['progress_hooks'] = [progress_hook]
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
+            info = ydl.extract_info(url, download=False)
+            if not info:
+                raise Exception("No se pudo obtener información del video")
+            
+            filename = download_youtube_video_sync(url, download_id, progress_data, audio_only)
             
             if audio_only:
                 base_name = os.path.splitext(filename)[0]
@@ -263,7 +301,7 @@ async def handle_yt_dl(client, message, text):
         
         cookies_status = ""
         if not os.path.exists(COOKIES_FILE):
-            cookies_status = "\n⚠️ **Sin cookies**: Algunos videos pueden requerir verificación."
+            cookies_status = "\n⚠️ **Generando cookies automáticamente...**"
         
         status_msg = await message.reply(f"⏳ Iniciando descarga de YouTube...{cookies_status}")
         
@@ -291,15 +329,12 @@ async def handle_yt_dl(client, message, text):
                     filled_length = int(bar_length * progress_data["percent"] / 100)
                     bar = "█" * filled_length + "▒" * (bar_length - filled_length)
                     
-                    downloaded_mb = progress_data["downloaded"] / (1024 * 1024)
-                    total_mb = progress_data["total_size"] / (1024 * 1024) if progress_data["total_size"] > 0 else 0
-                    
                     status_text = (
                         f"📥 **Descargando de YouTube:**\n"
-                        f"📄 **Archivo:** `{progress_data['filename']}`\n"
-                        f"📊 **Progreso:** {progress_data['percent']:.1f}%\n"
+                        f"📄 **Archivo:** `{progress_data.get('filename', '')}`\n"
+                        f"📊 **Progreso:** {progress_data.get('percent', 0):.1f}%\n"
                         f"📉 [{bar}]\n"
-                        f"📦 **Descargado:** {format_size(progress_data['downloaded'])} / {format_size(progress_data['total_size'])}\n"
+                        f"📦 **Descargado:** {format_size(progress_data.get('downloaded', 0))} / {format_size(progress_data.get('total_size', 0))}\n"
                         f"🚀 **Velocidad:** {speed_mb:.2f} MB/s\n"
                         f"⏱️ **Tiempo:** {formatted_time}\n"
                         f"🔊 **Modo:** {'Solo audio' if audio_only else 'Video completo'}"
