@@ -70,9 +70,41 @@ class MangaClient:
 
     def search(self, query: str = ""):
         query = quote_plus(query)
-        request_url = f'{self.search_url}?{self.search_param}={query}'
-        content = self.get_url(request_url)
-        return self.mangas_from_page(content)
+        all_names = []
+        all_urls = []
+        all_images = []
+        page = 1
+        
+        while True:
+            if page == 1:
+                request_url = f'{self.search_url}?{self.search_param}={query}'
+            else:
+                request_url = f'{self.search_url}?name_sel=&wd={query}&author_sel=&author=&artist_sel=&artist=&category_id=&out_category_id=&completed_series=&page={page}.html'
+            
+            content = self.get_url(request_url)
+            if content is None:
+                break
+            
+            names, urls, images = self.mangas_from_page(content)
+            
+            if not names:
+                break
+            
+            all_names.extend(names)
+            all_urls.extend(urls)
+            all_images.extend(images)
+            
+            bs = BeautifulSoup(content, "html.parser")
+            next_page = bs.find("a", {"class": "next"})
+            if not next_page:
+                break
+                
+            page += 1
+            
+            if page > 50:
+                break
+        
+        return all_names, all_urls, all_images
 
     def chapters_from_page(self, page: bytes):
         if not page:
@@ -225,6 +257,9 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
             return
         
         query = user_data[user_id]["query"]
+        
+        await callback_query.answer("Buscando mangas...")
+        
         manga_client = MangaClient(language)
         
         mangas, manga_urls, _ = manga_client.search(query)
@@ -344,6 +379,8 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
         
         manga_name = manga_list[manga_index]
         manga_url = manga_urls[manga_index]
+        
+        await callback_query.answer("Cargando capítulos...")
         
         manga_client = MangaClient(language)
         chapters, chapter_urls = manga_client.get_chapters(manga_url)
