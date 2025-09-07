@@ -58,29 +58,49 @@ def format_size(bytes_size):
 
 def get_youtube_cookies():
     try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        base_dir = os.path.dirname(script_dir)
+        
+        chrome_path = os.path.join(base_dir, "selenium", "chrome-linux64", "chrome")
+        driver_path = os.path.join(base_dir, "selenium", "chromedriver-linux64", "chromedriver")
+        
+        if not os.path.exists(chrome_path):
+            log(f"❌ Chrome no encontrado en: {chrome_path}")
+            return False
+        if not os.path.exists(driver_path):
+            log(f"❌ ChromeDriver no encontrado en: {driver_path}")
+            return False
+        
         chrome_options = Options()
-        chrome_options.binary_location = "selenium/chrome-linux64/chrome"
+        chrome_options.binary_location = chrome_path
         chrome_options.add_argument("--headless")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
-        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         
-        driver = webdriver.Chrome(
-            executable_path="selenium/chromedriver-linux64/chromedriver",
-            options=chrome_options
-        )
+        driver = webdriver.Chrome(executable_path=driver_path, options=chrome_options)
         
         try:
             driver.get("https://www.youtube.com")
-            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-            time.sleep(3)
+            WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+            time.sleep(5)
             
             cookies = driver.get_cookies()
+            if not cookies:
+                log("❌ No se pudieron obtener cookies")
+                return False
+            
             with open(COOKIES_FILE, 'w', encoding='utf-8') as f:
                 for cookie in cookies:
-                    f.write(f"{cookie['domain']}\t{'TRUE' if cookie.get('secure') else 'FALSE'}\t{cookie['path']}\t{'TRUE' if cookie.get('secure') else 'FALSE'}\t{int(time.time()) + 3600 * 24 * 7}\t{cookie['name']}\t{cookie['value']}\n")
+                    f.write(f"{cookie.get('domain', '')}\t"
+                           f"{'TRUE' if cookie.get('secure') else 'FALSE'}\t"
+                           f"{cookie.get('path', '/')}\t"
+                           f"{'TRUE' if cookie.get('secure') else 'FALSE'}\t"
+                           f"{int(time.time()) + 3600 * 24 * 7}\t"
+                           f"{cookie.get('name', '')}\t"
+                           f"{cookie.get('value', '')}\n")
             
             log("✅ Cookies de YouTube obtenidas exitosamente")
             return True
@@ -88,7 +108,6 @@ def get_youtube_cookies():
         except Exception as e:
             log(f"❌ Error al obtener cookies: {e}")
             return False
-            
         finally:
             driver.quit()
             
@@ -115,7 +134,7 @@ def download_youtube_video_sync(url, download_id, progress_data=None, audio_only
         ydl_opts = {
             'outtmpl': os.path.join(TEMP_DIR, '%(title)s.%(ext)s'),
             'quiet': True,
-            'no_warnings': False,
+            'no_warnings': True,
             'continuedl': True,
             'concurrent_fragment_downloads': 3,
             'retries': 10,
@@ -124,15 +143,16 @@ def download_youtube_video_sync(url, download_id, progress_data=None, audio_only
             'fragment_retries': 10,
             'skip_unavailable_fragments': True,
             'ignoreerrors': True,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'referer': 'https://www.youtube.com/',
+            'socket_timeout': 30,
         }
-        
-        if not os.path.exists(COOKIES_FILE):
-            get_youtube_cookies()
         
         if os.path.exists(COOKIES_FILE):
             ydl_opts['cookiefile'] = COOKIES_FILE
+            log("✅ Usando cookies para autenticación")
+        else:
+            log("⚠️ Continuando sin cookies")
         
         if audio_only:
             ydl_opts.update({
@@ -147,7 +167,7 @@ def download_youtube_video_sync(url, download_id, progress_data=None, audio_only
                 }]
             })
         else:
-            ydl_opts['format'] = 'bestvideo[height<=720]+bestaudio/best[height<=720]'
+            ydl_opts['format'] = 'best[height<=720]'
         
         def progress_hook(d):
             if d['status'] == 'downloading':
@@ -199,15 +219,10 @@ def download_youtube_video_sync(url, download_id, progress_data=None, audio_only
             filename = ydl.prepare_filename(info)
             
             if audio_only:
-                if filename.endswith('.webm'):
-                    filename = filename[:-5] + '.mp3'
-                elif filename.endswith('.m4a'):
-                    filename = filename[:-4] + '.mp3'
-                if not os.path.exists(filename):
-                    original_ext = os.path.splitext(filename)[0] + os.path.splitext(ydl.prepare_filename(info))[1]
-                    if os.path.exists(original_ext):
-                        filename = original_ext
-            
+                base_name = os.path.splitext(filename)[0]
+                mp3_file = base_name + '.mp3'
+                if os.path.exists(mp3_file):
+                    return mp3_file
             return filename
             
     except Exception as e:
@@ -294,8 +309,7 @@ async def handle_yt_dl(client, message, text):
                 except Exception as e:
                     log(f"Error en update_progress: {e}")
                     break
-                    
-                await asyncio.sleep(5)
+                await asyncio.sleep(3)
         
         progress_task = asyncio.create_task(update_progress())
         
@@ -306,8 +320,6 @@ async def handle_yt_dl(client, message, text):
             )
             
             progress_data["active"] = False
-            progress_data["state"] = "completed"
-            
             await asyncio.sleep(2)
             progress_task.cancel()
             try:
@@ -344,7 +356,7 @@ async def handle_yt_dl(client, message, text):
                 pass
             
             await safe_call(status_msg.edit_text, "✅ Descarga y envío completados correctamente.")
-            await asyncio.sleep(5)
+            await asyncio.sleep(3)
             await safe_call(status_msg.delete)
             
         except Exception as e:
