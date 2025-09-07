@@ -465,3 +465,9 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
         if cmd("manga", int_lvl):
             from command.mangatools import handle_manga_search
             await handle_manga_search(client, message, textori)
+
+    elif command == "/ytdl":
+        if cmd("youtube", int_lvl):
+            from command.yt_tools import handle_manga_search
+            await handle_yt_dl(client, message, textori)
+            
