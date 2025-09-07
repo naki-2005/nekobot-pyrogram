@@ -616,24 +616,42 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
         chapter_urls = cache_data["chapter_urls"]
         manga_name = cache_data["manga_name"]
         language = cache_data["language"]
+        current_page = cache_data["current_page"]
         
-        await callback_query.answer(f"Descargando {len(chapters)} capítulos...")
+        # Calcular los capítulos de la página actual
+        start_idx = current_page * 10
+        end_idx = min(start_idx + 10, len(chapters))
+        chapters_to_download = end_idx - start_idx
         
-        downloaded_files = await download_multiple_chapters(user_id, 0, len(chapters), chapters, chapter_urls, language)
+        await callback_query.answer(f"Descargando {chapters_to_download} capítulos de esta página...")
+        
+        # Enviar mensaje de inicio de descarga
+        progress_msg = await callback_query.message.reply(f"📥 Iniciando descarga de {chapters_to_download} capítulos...")
+        
+        downloaded_files = await download_multiple_chapters(user_id, start_idx, end_idx, chapters, chapter_urls, language)
         
         if not downloaded_files:
-            await callback_query.message.reply("Error al descargar los capítulos.")
+            await progress_msg.edit_text("Error al descargar los capítulos.")
             return
         
+        # Actualizar mensaje de progreso
+        await progress_msg.edit_text(f"✅ Descarga completada. Enviando {len(downloaded_files)} archivos...")
+        
+        # Enviar archivos uno por uno
+        success_count = 0
         for cbz_file in downloaded_files:
             try:
                 await callback_query.message.reply_document(
                     document=cbz_file,
-                    caption=f"¡Capítulo descargado!"
+                    caption=f"¡Capítulo descargado! ({success_count + 1}/{len(downloaded_files)})"
                 )
+                success_count += 1
                 os.remove(cbz_file)
             except Exception as e:
                 await callback_query.message.reply(f"Error al enviar archivo: {str(e)}")
+        
+        # Actualizar mensaje final
+        await progress_msg.edit_text(f"✅ Proceso completado. Se enviaron {success_count} de {len(downloaded_files)} capítulos correctamente.")
     
     elif data.startswith("chapter_"):
         try:
