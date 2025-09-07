@@ -5,6 +5,7 @@ import concurrent.futures
 import zipfile
 import tempfile
 import shutil
+import re
 from urllib.parse import urlparse, urljoin, quote_plus
 from bs4 import BeautifulSoup
 from pyrogram import Client
@@ -18,7 +19,10 @@ chapters_cache = {}
 class MangaClient:
     def __init__(self, language='es'):
         self.language = language
-        self.base_url = urlparse(f"https://{language}.ninemanga.com/")
+        if language == 'es':
+            self.base_url = urlparse("https://es.ninemanga.com/")
+        else:
+            self.base_url = urlparse("https://ninemanga.com/")
         self.search_param = 'wd'
         self.query_param = 'waring=1'
         self.pre_headers = {
@@ -105,6 +109,24 @@ class MangaClient:
                 break
         
         return all_names, all_urls, all_images
+
+    def get_manga_name_from_url(self, manga_url: str):
+        content = self.get_url(manga_url)
+        if not content:
+            return None
+        
+        bs = BeautifulSoup(content, "html.parser")
+        title_element = bs.find("h1")
+        if title_element:
+            return title_element.get_text().strip()
+        
+        title_element = bs.find("div", {"class": "bookinfo"})
+        if title_element:
+            h1 = title_element.find("h1")
+            if h1:
+                return h1.get_text().strip()
+        
+        return None
 
     def chapters_from_page(self, page: bytes):
         if not page:
@@ -211,24 +233,90 @@ async def handle_manga_search(client: Client, message: Message, textori: str):
     parts = textori.split(maxsplit=1)
     
     if len(parts) < 2:
-        await message.reply("Por favor, proporciona un nombre de manga. Ejemplo: /manga One Piece")
+        await message.reply("Por favor, proporciona un nombre de manga o URL. Ejemplo: /manga One Piece o /manga https://es.ninemanga.com/manga/Kuro.html")
         return
     
     query = parts[1].strip()
     
-    keyboard = [
-        [InlineKeyboardButton("🇪🇸 Español", callback_data="manga_lang_es")],
-        [InlineKeyboardButton("🇺🇸 Inglés", callback_data="manga_lang_en")]
-    ]
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await message.reply(
-        "Elija el idioma a buscar",
-        reply_markup=reply_markup
-    )
-    
-    user_data[user_id] = {"query": query}
+    # Verificar si es una URL de ninemanga
+    if re.match(r'https?://(es\.)?ninemanga\.com/manga/', query):
+        # Determinar el idioma de la URL
+        if 'es.ninemanga.com' in query:
+            language = 'es'
+        else:
+            language = 'en'
+        
+        manga_client = MangaClient(language)
+        manga_name = manga_client.get_manga_name_from_url(query)
+        manga_client.close()
+        
+        if not manga_name:
+            await message.reply("No se pudo obtener información del manga desde la URL proporcionada.")
+            return
+        
+        await message.reply(f"🔄 Obteniendo capítulos de {manga_name}...")
+        
+        manga_client = MangaClient(language)
+        chapters, chapter_urls = manga_client.get_chapters(query)
+        manga_client.close()
+        
+        if not chapters:
+            await message.reply("No se encontraron capítulos para este manga.")
+            return
+        
+        chapters_cache[user_id] = {
+            "chapters": chapters,
+            "chapter_urls": chapter_urls,
+            "current_page": 0,
+            "manga_name": manga_name,
+            "language": language
+        }
+        
+        total_chapters = len(chapters)
+        current_page = 0
+        start_idx = current_page * 10
+        end_idx = min(start_idx + 10, total_chapters)
+        
+        keyboard = []
+        for i in range(start_idx, end_idx):
+            keyboard.append([InlineKeyboardButton(chapters[i], callback_data=f"chapter_{i}")])
+        
+        if total_chapters > 10:
+            nav_buttons = []
+            if current_page > 0:
+                nav_buttons.append(InlineKeyboardButton("⏪", callback_data="first_page"))
+                nav_buttons.append(InlineKeyboardButton("◀️", callback_data="prev_page"))
+            
+            if end_idx < total_chapters:
+                nav_buttons.append(InlineKeyboardButton("▶️", callback_data="next_page"))
+                nav_buttons.append(InlineKeyboardButton("⏩", callback_data="last_page"))
+            
+            if nav_buttons:
+                keyboard.append(nav_buttons)
+        
+        keyboard.append([InlineKeyboardButton("📥 Descargar Todos", callback_data="chapter_all")])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await message.reply(
+            f"📚 Capítulos de {manga_name}:\nMostrando {start_idx + 1}-{end_idx} de {total_chapters}",
+            reply_markup=reply_markup
+        )
+    else:
+        # Búsqueda normal por texto
+        keyboard = [
+            [InlineKeyboardButton("🇪🇸 Español", callback_data="manga_lang_es")],
+            [InlineKeyboardButton("🇺🇸 Inglés", callback_data="manga_lang_en")]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await message.reply(
+            "Elija el idioma a buscar",
+            reply_markup=reply_markup
+        )
+        
+        user_data[user_id] = {"query": query}
 
 async def download_multiple_chapters(user_id, start_idx, end_idx, chapters, chapter_urls, language):
     manga_client = MangaClient(language)
