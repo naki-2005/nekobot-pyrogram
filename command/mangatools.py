@@ -16,21 +16,22 @@ manga_cache = {}
 chapters_cache = {}
 
 class MangaClient:
-    base_url = urlparse("https://es.ninemanga.com/")
-    search_param = 'wd'
-    query_param = 'waring=1'
-    pre_headers = {
-        'User-Agent': ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                       'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'),
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'DNT': '1',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1'
-    }
-
-    def __init__(self):
+    def __init__(self, language='es'):
+        self.language = language
+        self.base_url = urlparse(f"https://{language}.ninemanga.com/")
+        self.search_param = 'wd'
+        self.query_param = 'waring=1'
+        self.pre_headers = {
+            'User-Agent': ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                           'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'),
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        }
+        
         self.search_url = urljoin(self.base_url.geturl(), 'search/')
         self.updates_url = self.base_url.geturl()
         self.scraper = cloudscraper.create_scraper(
@@ -71,7 +72,8 @@ class MangaClient:
         query = quote_plus(query)
         request_url = f'{self.search_url}?{self.search_param}={query}'
         content = self.get_url(request_url)
-        return self.mangas_from_page(content)
+        names, urls, images = self.mangas_from_page(content)
+        return names[:10], urls[:10], images[:10]
 
     def chapters_from_page(self, page: bytes):
         if not page:
@@ -182,34 +184,23 @@ async def handle_manga_search(client: Client, message: Message, textori: str):
         return
     
     query = parts[1].strip()
-    manga_client = MangaClient()
     
-    mangas, manga_urls, _ = manga_client.search(query)
-    manga_client.close()
-    
-    if not mangas:
-        await message.reply("No se encontraron mangas con ese nombre.")
-        return
-    
-    user_data[user_id] = {
-        "manga_list": mangas,
-        "manga_urls": manga_urls,
-        "current_page": 0
-    }
-    
-    keyboard = []
-    for i, manga in enumerate(mangas):
-        keyboard.append([InlineKeyboardButton(manga, callback_data=f"manga_{i}")])
+    keyboard = [
+        [InlineKeyboardButton("🇪🇸 Español", callback_data="manga_lang_es")],
+        [InlineKeyboardButton("🇺🇸 Inglés", callback_data="manga_lang_en")]
+    ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await message.reply(
-        f"Resultados de búsqueda para '{query}':",
+        "Elija el idioma a buscar",
         reply_markup=reply_markup
     )
+    
+    user_data[user_id] = {"query": query}
 
-async def download_multiple_chapters(user_id, start_idx, end_idx, chapters, chapter_urls):
-    manga_client = MangaClient()
+async def download_multiple_chapters(user_id, start_idx, end_idx, chapters, chapter_urls, language):
+    manga_client = MangaClient(language)
     downloaded_files = []
     
     for i in range(start_idx, end_idx):
@@ -227,15 +218,113 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
     data = callback_query.data
     
-    if data.startswith("manga_"):
-        manga_index = int(data.split("_")[1])
+    if data.startswith("manga_lang_"):
+        language = data.split("_")[2]
         
-        if user_id not in user_data:
+        if user_id not in user_data or "query" not in user_data[user_id]:
+            await callback_query.answer("La sesión ha expirado. Por favor, realiza una nueva búsqueda.")
+            return
+        
+        query = user_data[user_id]["query"]
+        manga_client = MangaClient(language)
+        
+        mangas, manga_urls, _ = manga_client.search(query)
+        manga_client.close()
+        
+        if not mangas:
+            await callback_query.message.edit_text("No se encontraron mangas con ese nombre.")
+            return
+        
+        user_data[user_id] = {
+            "manga_list": mangas,
+            "manga_urls": manga_urls,
+            "current_page": 0,
+            "language": language
+        }
+        
+        keyboard = []
+        for i, manga in enumerate(mangas):
+            keyboard.append([InlineKeyboardButton(manga, callback_data=f"manga_{i}")])
+        
+        if len(mangas) == 10:
+            keyboard.append([
+                InlineKeyboardButton("⏪", callback_data="manga_first_page"),
+                InlineKeyboardButton("◀️", callback_data="manga_prev_page"),
+                InlineKeyboardButton("▶️", callback_data="manga_next_page"),
+                InlineKeyboardButton("⏩", callback_data="manga_last_page")
+            ])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await callback_query.message.edit_text(
+            f"Resultados de búsqueda para '{query}':",
+            reply_markup=reply_markup
+        )
+        await callback_query.answer()
+    
+    elif data in ["manga_first_page", "manga_prev_page", "manga_next_page", "manga_last_page"]:
+        if user_id not in user_data or "manga_list" not in user_data[user_id]:
             await callback_query.answer("La sesión ha expirado. Por favor, realiza una nueva búsqueda.")
             return
         
         manga_list = user_data[user_id]["manga_list"]
+        current_page = user_data[user_id]["current_page"]
+        language = user_data[user_id].get("language", "es")
+        query = user_data[user_id].get("query", "")
+        
+        total_pages = (len(manga_list) - 1) // 10 + 1
+        
+        if data == "manga_first_page":
+            new_page = 0
+        elif data == "manga_prev_page":
+            new_page = max(0, current_page - 1)
+        elif data == "manga_next_page":
+            new_page = min(total_pages - 1, current_page + 1)
+        elif data == "manga_last_page":
+            new_page = total_pages - 1
+        
+        user_data[user_id]["current_page"] = new_page
+        
+        start_idx = new_page * 10
+        end_idx = min(start_idx + 10, len(manga_list))
+        
+        keyboard = []
+        for i in range(start_idx, end_idx):
+            keyboard.append([InlineKeyboardButton(manga_list[i], callback_data=f"manga_{i}")])
+        
+        nav_buttons = []
+        if new_page > 0:
+            nav_buttons.append(InlineKeyboardButton("⏪", callback_data="manga_first_page"))
+            nav_buttons.append(InlineKeyboardButton("◀️", callback_data="manga_prev_page"))
+        
+        if new_page < total_pages - 1:
+            nav_buttons.append(InlineKeyboardButton("▶️", callback_data="manga_next_page"))
+            nav_buttons.append(InlineKeyboardButton("⏩", callback_data="manga_last_page"))
+        
+        if nav_buttons:
+            keyboard.append(nav_buttons)
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await callback_query.message.edit_text(
+            f"Resultados de búsqueda para '{query}' - Página {new_page + 1}/{total_pages}:",
+            reply_markup=reply_markup
+        )
+        await callback_query.answer()
+    
+    elif data.startswith("manga_"):
+        try:
+            manga_index = int(data.split("_")[1])
+        except:
+            manga_index = -1
+        
+        if manga_index == -1 or user_id not in user_data or "manga_list" not in user_data[user_id]:
+            await callback_query.answer("Manga no válido.")
+            return
+        
+        manga_list = user_data[user_id]["manga_list"]
         manga_urls = user_data[user_id]["manga_urls"]
+        language = user_data[user_id].get("language", "es")
         
         if manga_index >= len(manga_list):
             await callback_query.answer("Manga no válido.")
@@ -244,7 +333,7 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
         manga_name = manga_list[manga_index]
         manga_url = manga_urls[manga_index]
         
-        manga_client = MangaClient()
+        manga_client = MangaClient(language)
         chapters, chapter_urls = manga_client.get_chapters(manga_url)
         manga_client.close()
         
@@ -256,7 +345,8 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
             "chapters": chapters,
             "chapter_urls": chapter_urls,
             "current_page": 0,
-            "manga_name": manga_name
+            "manga_name": manga_name,
+            "language": language
         }
         
         keyboard = []
@@ -265,6 +355,8 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
         
         if len(chapters) > 10:
             keyboard.append([
+                InlineKeyboardButton("⏪", callback_data="first_page"),
+                InlineKeyboardButton("◀️", callback_data="prev_page"),
                 InlineKeyboardButton("▶️", callback_data="next_page"),
                 InlineKeyboardButton("⏩", callback_data="last_page")
             ])
@@ -344,13 +436,14 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
         chapters = cache_data["chapters"]
         chapter_urls = cache_data["chapter_urls"]
         manga_name = cache_data["manga_name"]
+        language = cache_data["language"]
         
         start_idx = page_num * 10
         end_idx = min(start_idx + 10, len(chapters))
         
         await callback_query.answer(f"Descargando {end_idx - start_idx} capítulos...")
         
-        downloaded_files = await download_multiple_chapters(user_id, start_idx, end_idx, chapters, chapter_urls)
+        downloaded_files = await download_multiple_chapters(user_id, start_idx, end_idx, chapters, chapter_urls, language)
         
         if not downloaded_files:
             await callback_query.message.reply("Error al descargar los capítulos.")
@@ -375,10 +468,11 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
         chapters = cache_data["chapters"]
         chapter_urls = cache_data["chapter_urls"]
         manga_name = cache_data["manga_name"]
+        language = cache_data["language"]
         
         await callback_query.answer(f"Descargando {len(chapters)} capítulos...")
         
-        downloaded_files = await download_multiple_chapters(user_id, 0, len(chapters), chapters, chapter_urls)
+        downloaded_files = await download_multiple_chapters(user_id, 0, len(chapters), chapters, chapter_urls, language)
         
         if not downloaded_files:
             await callback_query.message.reply("Error al descargar los capítulos.")
@@ -395,15 +489,19 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
                 await callback_query.message.reply(f"Error al enviar archivo: {str(e)}")
     
     elif data.startswith("chapter_"):
-        chapter_index = int(data.split("_")[1])
+        try:
+            chapter_index = int(data.split("_")[1])
+        except:
+            chapter_index = -1
         
-        if user_id not in chapters_cache:
+        if chapter_index == -1 or user_id not in chapters_cache:
             await callback_query.answer("La sesión ha expirado. Por favor, realiza una nueva búsqueda.")
             return
         
         cache_data = chapters_cache[user_id]
         chapters = cache_data["chapters"]
         chapter_urls = cache_data["chapter_urls"]
+        language = cache_data["language"]
         
         if chapter_index >= len(chapters):
             await callback_query.answer("Capítulo no válido.")
@@ -414,7 +512,7 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
         
         await callback_query.answer(f"Descargando {chapter_name}...")
         
-        manga_client = MangaClient()
+        manga_client = MangaClient(language)
         cbz_file = await download_chapter(chapter_url, chapter_name, manga_client)
         manga_client.close()
         
