@@ -72,8 +72,7 @@ class MangaClient:
         query = quote_plus(query)
         request_url = f'{self.search_url}?{self.search_param}={query}'
         content = self.get_url(request_url)
-        names, urls, images = self.mangas_from_page(content)
-        return names[:10], urls[:10], images[:10]
+        return self.mangas_from_page(content)
 
     def chapters_from_page(self, page: bytes):
         if not page:
@@ -239,25 +238,36 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
             "manga_list": mangas,
             "manga_urls": manga_urls,
             "current_page": 0,
-            "language": language
+            "language": language,
+            "query": query
         }
         
-        keyboard = []
-        for i, manga in enumerate(mangas):
-            keyboard.append([InlineKeyboardButton(manga, callback_data=f"manga_{i}")])
+        total_mangas = len(mangas)
+        current_page = 0
+        start_idx = current_page * 10
+        end_idx = min(start_idx + 10, total_mangas)
         
-        if len(mangas) == 10:
-            keyboard.append([
-                InlineKeyboardButton("⏪", callback_data="manga_first_page"),
-                InlineKeyboardButton("◀️", callback_data="manga_prev_page"),
-                InlineKeyboardButton("▶️", callback_data="manga_next_page"),
-                InlineKeyboardButton("⏩", callback_data="manga_last_page")
-            ])
+        keyboard = []
+        for i in range(start_idx, end_idx):
+            keyboard.append([InlineKeyboardButton(mangas[i], callback_data=f"manga_{i}")])
+        
+        nav_buttons = []
+        if total_mangas > 10:
+            if current_page > 0:
+                nav_buttons.append(InlineKeyboardButton("⏪", callback_data="manga_first_page"))
+                nav_buttons.append(InlineKeyboardButton("◀️", callback_data="manga_prev_page"))
+            
+            if end_idx < total_mangas:
+                nav_buttons.append(InlineKeyboardButton("▶️", callback_data="manga_next_page"))
+                nav_buttons.append(InlineKeyboardButton("⏩", callback_data="manga_last_page"))
+            
+            if nav_buttons:
+                keyboard.append(nav_buttons)
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await callback_query.message.edit_text(
-            f"Resultados de búsqueda para '{query}':",
+            f"Resultados de búsqueda para '{query}' ({'Español' if language == 'es' else 'Inglés'}):\nMostrando {start_idx + 1}-{end_idx} de {total_mangas}",
             reply_markup=reply_markup
         )
         await callback_query.answer()
@@ -272,7 +282,8 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
         language = user_data[user_id].get("language", "es")
         query = user_data[user_id].get("query", "")
         
-        total_pages = (len(manga_list) - 1) // 10 + 1
+        total_mangas = len(manga_list)
+        total_pages = (total_mangas + 9) // 10
         
         if data == "manga_first_page":
             new_page = 0
@@ -286,28 +297,29 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
         user_data[user_id]["current_page"] = new_page
         
         start_idx = new_page * 10
-        end_idx = min(start_idx + 10, len(manga_list))
+        end_idx = min(start_idx + 10, total_mangas)
         
         keyboard = []
         for i in range(start_idx, end_idx):
             keyboard.append([InlineKeyboardButton(manga_list[i], callback_data=f"manga_{i}")])
         
         nav_buttons = []
-        if new_page > 0:
-            nav_buttons.append(InlineKeyboardButton("⏪", callback_data="manga_first_page"))
-            nav_buttons.append(InlineKeyboardButton("◀️", callback_data="manga_prev_page"))
-        
-        if new_page < total_pages - 1:
-            nav_buttons.append(InlineKeyboardButton("▶️", callback_data="manga_next_page"))
-            nav_buttons.append(InlineKeyboardButton("⏩", callback_data="manga_last_page"))
-        
-        if nav_buttons:
-            keyboard.append(nav_buttons)
+        if total_mangas > 10:
+            if new_page > 0:
+                nav_buttons.append(InlineKeyboardButton("⏪", callback_data="manga_first_page"))
+                nav_buttons.append(InlineKeyboardButton("◀️", callback_data="manga_prev_page"))
+            
+            if end_idx < total_mangas:
+                nav_buttons.append(InlineKeyboardButton("▶️", callback_data="manga_next_page"))
+                nav_buttons.append(InlineKeyboardButton("⏩", callback_data="manga_last_page"))
+            
+            if nav_buttons:
+                keyboard.append(nav_buttons)
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await callback_query.message.edit_text(
-            f"Resultados de búsqueda para '{query}' - Página {new_page + 1}/{total_pages}:",
+            f"Resultados de búsqueda para '{query}' ({'Español' if language == 'es' else 'Inglés'}):\nMostrando {start_idx + 1}-{end_idx} de {total_mangas}",
             reply_markup=reply_markup
         )
         await callback_query.answer()
@@ -349,24 +361,34 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
             "language": language
         }
         
+        total_chapters = len(chapters)
+        current_page = 0
+        start_idx = current_page * 10
+        end_idx = min(start_idx + 10, total_chapters)
+        
         keyboard = []
-        for i in range(min(10, len(chapters))):
+        for i in range(start_idx, end_idx):
             keyboard.append([InlineKeyboardButton(chapters[i], callback_data=f"chapter_{i}")])
         
-        if len(chapters) > 10:
-            keyboard.append([
-                InlineKeyboardButton("⏪", callback_data="first_page"),
-                InlineKeyboardButton("◀️", callback_data="prev_page"),
-                InlineKeyboardButton("▶️", callback_data="next_page"),
-                InlineKeyboardButton("⏩", callback_data="last_page")
-            ])
+        if total_chapters > 10:
+            nav_buttons = []
+            if current_page > 0:
+                nav_buttons.append(InlineKeyboardButton("⏪", callback_data="first_page"))
+                nav_buttons.append(InlineKeyboardButton("◀️", callback_data="prev_page"))
+            
+            if end_idx < total_chapters:
+                nav_buttons.append(InlineKeyboardButton("▶️", callback_data="next_page"))
+                nav_buttons.append(InlineKeyboardButton("⏩", callback_data="last_page"))
+            
+            if nav_buttons:
+                keyboard.append(nav_buttons)
         
         keyboard.append([InlineKeyboardButton("📥 Descargar Todos", callback_data="chapter_all")])
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await callback_query.message.edit_text(
-            f"Capítulos de {manga_name}:",
+            f"Capítulos de {manga_name}:\nMostrando {start_idx + 1}-{end_idx} de {total_chapters}",
             reply_markup=reply_markup
         )
         await callback_query.answer()
@@ -381,46 +403,46 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
         current_page = cache_data["current_page"]
         manga_name = cache_data["manga_name"]
         
+        total_chapters = len(chapters)
+        total_pages = (total_chapters + 9) // 10
+        
         if data == "first_page":
             new_page = 0
         elif data == "prev_page":
             new_page = max(0, current_page - 1)
         elif data == "next_page":
-            new_page = min((len(chapters) - 1) // 10, current_page + 1)
+            new_page = min(total_pages - 1, current_page + 1)
         elif data == "last_page":
-            new_page = (len(chapters) - 1) // 10
+            new_page = total_pages - 1
         
         chapters_cache[user_id]["current_page"] = new_page
         
-        keyboard = []
         start_idx = new_page * 10
-        end_idx = min(start_idx + 10, len(chapters))
+        end_idx = min(start_idx + 10, total_chapters)
         
+        keyboard = []
         for i in range(start_idx, end_idx):
             keyboard.append([InlineKeyboardButton(chapters[i], callback_data=f"chapter_{i}")])
         
         nav_buttons = []
-        
-        if new_page > 0:
-            nav_buttons.append(InlineKeyboardButton("⏪", callback_data="first_page"))
-            nav_buttons.append(InlineKeyboardButton("◀️", callback_data="prev_page"))
-        
-        if new_page < (len(chapters) - 1) // 10:
-            if not nav_buttons:
-                nav_buttons.append(InlineKeyboardButton("◀️", callback_data="noop"))
+        if total_chapters > 10:
+            if new_page > 0:
+                nav_buttons.append(InlineKeyboardButton("⏪", callback_data="first_page"))
+                nav_buttons.append(InlineKeyboardButton("◀️", callback_data="prev_page"))
             
-            nav_buttons.append(InlineKeyboardButton("▶️", callback_data="next_page"))
-            nav_buttons.append(InlineKeyboardButton("⏩", callback_data="last_page"))
+            if end_idx < total_chapters:
+                nav_buttons.append(InlineKeyboardButton("▶️", callback_data="next_page"))
+                nav_buttons.append(InlineKeyboardButton("⏩", callback_data="last_page"))
+            
+            if nav_buttons:
+                keyboard.append(nav_buttons)
         
-        if nav_buttons:
-            keyboard.append(nav_buttons)
-        
-        keyboard.append([InlineKeyboardButton("📥 Descargar Todos", callback_data=f"chapter_page_{new_page}")])
+        keyboard.append([InlineKeyboardButton("📥 Descargar Todos", callback_data="chapter_all")])
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await callback_query.message.edit_text(
-            f"Capítulos de {manga_name} (Página {new_page + 1}/{(len(chapters) - 1) // 10 + 1}):",
+            f"Capítulos de {manga_name}:\nMostrando {start_idx + 1}-{end_idx} de {total_chapters}",
             reply_markup=reply_markup
         )
         await callback_query.answer()
