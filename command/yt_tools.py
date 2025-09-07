@@ -209,7 +209,7 @@ async def handle_yt_dl(client, message, text):
     Maneja el comando /ytdl para descargar videos de YouTube
     """
     try:
-        parts = text.strip().split(maxsplit=2)
+        parts = text.strip().split()
         
         if len(parts) < 2:
             await message.reply("❗ Debes proporcionar una URL de YouTube después del comando.")
@@ -222,24 +222,10 @@ async def handle_yt_dl(client, message, text):
             await message.reply("❗ URL no válida. Debe ser un enlace de YouTube.")
             return
         
-        # Preguntar si quiere solo audio
-        ask_msg = await message.reply("🎵 ¿Quieres descargar solo audio (MP3) o video completo?\n\n"
-                                     "Responde con:\n"
-                                     "• `audio` para solo audio\n"
-                                     "• `video` para video completo")
-        
-        try:
-            # Esperar respuesta por 30 segundos
-            response = await client.listen.Message(filters=(filters.text & filters.user(message.from_user.id)), 
-                                                  timeout=30)
-            choice = response.text.strip().lower()
-        except asyncio.TimeoutError:
-            choice = "video"  # Por defecto video
-        
-        audio_only = choice == "audio"
-        
-        # Eliminar mensaje de pregunta
-        await ask_msg.delete()
+        # Determinar si es solo audio basado en el parámetro -a
+        audio_only = False
+        if len(parts) > 2 and parts[2].strip() == "-a":
+            audio_only = True
         
         chat_id = message.chat.id
         status_msg = await message.reply("⏳ Iniciando descarga de YouTube...")
