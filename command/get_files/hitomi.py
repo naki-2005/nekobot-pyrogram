@@ -32,10 +32,9 @@ def obtener_titulo_y_autor(link_hitomi: str, chrome_path: str, driver_path: str)
     
     try:
         driver.get(link_hitomi)
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.TAG_NAME, "title"))
+        WebDriverWait(driver, 15).until(
+            lambda d: d.title and d.title.strip() != "" and "Hitomi.la" in d.title
         )
-        time.sleep(2)
 
         titulo_completo = driver.title
         titulo_limpio = limpiar_nombre(titulo_completo)
@@ -66,6 +65,24 @@ def procesar_id_o_enlace(entrada: str) -> str:
     
     raise ValueError("Formato de entrada no válido. Debe ser un ID numérico o una URL de Hitomi.la")
 
+def esperar_imagen_cargada(driver, timeout=10):
+    try:
+        WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((By.TAG_NAME, "img"))
+        )
+        
+        WebDriverWait(driver, timeout).until(
+            lambda d: any(
+                img.is_displayed() and 
+                img.get_attribute('src') and 
+                (img.get_attribute('src').endswith('.webp') or 'webp' in img.get_attribute('src'))
+                for img in d.find_elements(By.TAG_NAME, 'img')
+            )
+        )
+        return True
+    except:
+        return False
+
 def descargar_y_comprimir_hitomi(entrada: str) -> str:
     link_hitomi = procesar_id_o_enlace(entrada)
     
@@ -84,9 +101,8 @@ def descargar_y_comprimir_hitomi(entrada: str) -> str:
     nombre_cbz = truncar_nombre(nombre_final)
 
     os.makedirs(BASE_DIR, exist_ok=True)
-    carpeta_temporal = os.path.join(BASE_DIR, str(uuid.uuid4()))
-    carpeta_raiz = os.path.abspath(carpeta_temporal)
-    os.makedirs(carpeta_raiz, exist_ok=True)
+    carpeta_doujin = os.path.join(BASE_DIR, nombre_final)
+    os.makedirs(carpeta_doujin, exist_ok=True)
 
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -130,75 +146,97 @@ def descargar_y_comprimir_hitomi(entrada: str) -> str:
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+    options.add_argument('--disable-blink-features=AutomationControlled')
+    options.add_experimental_option('excludeSwitches', ['enable-automation'])
+    options.add_experimental_option('useAutomationExtension', False)
 
     service = Service(executable_path=driver_path)
     driver = webdriver.Chrome(service=service, options=options)
+    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
     hashes = {}
     duplicados = 0
     contador = 1
-    max_intentos = 5 
+    max_intentos = 3
+    max_paginas_sin_progreso = 5
+    paginas_sin_progreso = 0
 
-    while True:
+    while paginas_sin_progreso < max_paginas_sin_progreso:
         url = f"{enlace_base}#{contador}"
-        driver.get(url)
-        time.sleep(2.5)
-        intentos = 0
-        urls = []
-        while not urls and intentos < max_intentos:
-            imagenes = driver.find_elements(By.TAG_NAME, 'img')
-            urls = [img.get_attribute('src') for img in imagenes 
-                   if img.get_attribute('src') and (img.get_attribute('src').endswith('.webp') or 'webp' in img.get_attribute('src'))]
+        print(f"Intentando descargar página {contador}")
+        
+        try:
+            driver.get(url)
             
-            if not urls:
-                time.sleep(0.5)
-                intentos += 1
+            if not esperar_imagen_cargada(driver, timeout=8):
+                print(f"Timeout esperando imagen para página {contador}")
+                paginas_sin_progreso += 1
+                contador += 1
+                continue
+            
+            imagenes = driver.find_elements(By.TAG_NAME, 'img')
+            urls_webp = [
+                img.get_attribute('src') for img in imagenes 
+                if (img.get_attribute('src') and 
+                    (img.get_attribute('src').endswith('.webp') or 
+                     'webp' in img.get_attribute('src')))
+            ]
+            
+            if not urls_webp:
+                print(f"No se encontraron imágenes webp para página {contador}")
+                paginas_sin_progreso += 1
+                contador += 1
+                continue
+            
+            img_url = urls_webp[0]
+            nombre_archivo = f"{contador:03d}.webp" 
+            ruta_destino = os.path.join(carpeta_doujin, nombre_archivo)
 
-        if not urls:
-            print(f"No se encontró imagen para la página {contador} después de {max_intentos} intentos")
-            break
-
-        img_url = urls[0]
-        nombre_archivo = f"{contador:03d}.webp" 
-        ruta_destino = os.path.join(carpeta_raiz, nombre_archivo)
-
-        if descargar_imagen(img_url, ruta_destino):
-            hash_actual = calcular_hash_imagen(ruta_destino)
-            if hash_actual in hashes.values():
-                print(f"Imagen duplicada encontrada: {nombre_archivo}")
-                duplicados += 1
-                os.remove(ruta_destino)
-                if duplicados >= 3:
-                    print("Demasiadas imágenes duplicadas consecutivas, finalizando descarga")
-                    break
+            if descargar_imagen(img_url, ruta_destino):
+                hash_actual = calcular_hash_imagen(ruta_destino)
+                if hash_actual in hashes.values():
+                    print(f"Imagen duplicada encontrada: {nombre_archivo}")
+                    duplicados += 1
+                    os.remove(ruta_destino)
+                    if duplicados >= 3:
+                        print("Demasiadas imágenes duplicadas consecutivas, finalizando descarga")
+                        break
+                else:
+                    hashes[nombre_archivo] = hash_actual
+                    duplicados = 0
+                    paginas_sin_progreso = 0
+                    print(f"Descargada página {contador}")
             else:
-                hashes[nombre_archivo] = hash_actual
-                duplicados = 0
-                print(f"Descargada página {contador}")
-        else:
-            print(f"Error al descargar página {contador}")
-
-        contador += 1
+                print(f"Error al descargar página {contador}")
+                paginas_sin_progreso += 1
+            
+            contador += 1
+            
+        except Exception as e:
+            print(f"Error al procesar página {contador}: {e}")
+            paginas_sin_progreso += 1
+            contador += 1
+            time.sleep(1)
 
     driver.quit()
 
-    archivos_descargados = [f for f in os.listdir(carpeta_raiz) if os.path.isfile(os.path.join(carpeta_raiz, f))]
+    archivos_descargados = [f for f in os.listdir(carpeta_doujin) if os.path.isfile(os.path.join(carpeta_doujin, f))]
     if not archivos_descargados:
-        print("No se descargaron imágenes. Eliminando carpeta temporal.")
-        os.rmdir(carpeta_raiz)
+        print("No se descargaron imágenes. Eliminando carpeta.")
+        os.rmdir(carpeta_doujin)
         return ""
 
     ruta_cbz = os.path.join(BASE_DIR, nombre_cbz)
     with zipfile.ZipFile(ruta_cbz, 'w') as cbz:
-        for root, _, files in os.walk(carpeta_raiz):
+        for root, _, files in os.walk(carpeta_doujin):
             for file in sorted(files):
                 ruta_completa = os.path.join(root, file)
-                arcname = os.path.relpath(ruta_completa, os.path.dirname(carpeta_raiz))
+                arcname = os.path.join(nombre_final, file)
                 cbz.write(ruta_completa, arcname=arcname)
 
-    for file in os.listdir(carpeta_raiz):
-        os.remove(os.path.join(carpeta_raiz, file))
-    os.rmdir(carpeta_raiz)
+    for file in os.listdir(carpeta_doujin):
+        os.remove(os.path.join(carpeta_doujin, file))
+    os.rmdir(carpeta_doujin)
 
     print(f"Archivo CBZ creado: {ruta_cbz}")
     return ruta_cbz
