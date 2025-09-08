@@ -32,7 +32,7 @@ def obtener_titulo_y_autor(link_hitomi: str, chrome_path: str, driver_path: str)
     
     try:
         driver.get(link_hitomi)
-        WebDriverWait(driver, 15).until(
+        WebDriverWait(driver, 2).until(
             lambda d: d.title and d.title.strip() != "" and "Hitomi.la" in d.title
         )
 
@@ -65,7 +65,7 @@ def procesar_id_o_enlace(entrada: str) -> str:
     
     raise ValueError("Formato de entrada no válido. Debe ser un ID numérico o una URL de Hitomi.la")
 
-def esperar_imagen_cargada(driver, timeout=10):
+def esperar_imagen_cargada(driver, timeout=2):
     try:
         WebDriverWait(driver, timeout).until(
             EC.presence_of_element_located((By.TAG_NAME, "img"))
@@ -122,7 +122,7 @@ def descargar_y_comprimir_hitomi(entrada: str) -> str:
 
     def descargar_imagen(url, ruta_destino):
         try:
-            r = requests.get(url, headers=headers, timeout=30)
+            r = requests.get(url, headers=headers, timeout=5)
             if r.status_code == 200:
                 with open(ruta_destino, 'wb') as f:
                     f.write(r.content)
@@ -168,7 +168,7 @@ def descargar_y_comprimir_hitomi(entrada: str) -> str:
         try:
             driver.get(url)
             
-            if not esperar_imagen_cargada(driver, timeout=8):
+            if not esperar_imagen_cargada(driver, timeout=2):
                 print(f"Timeout esperando imagen para página {contador}")
                 paginas_sin_progreso += 1
                 contador += 1
