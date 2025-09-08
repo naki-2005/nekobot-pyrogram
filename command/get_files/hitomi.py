@@ -10,7 +10,6 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 
 def limpiar_nombre(nombre: str) -> str:
-    # Eliminar "Hitomi.la" y caracteres inválidos para nombres de archivo
     nombre = nombre.replace(" | Hitomi.la", "")
     nombre = re.sub(r'[\\/*?:"<>|]', '', nombre)
     return nombre.strip()
@@ -45,16 +44,20 @@ def truncar_nombre(nombre: str, max_len: int = 63) -> str:
     return nombre[:max_len - 4].strip() + ".cbz"
 
 def descargar_y_comprimir_hitomi(link_hitomi: str) -> str:
-    # 🧠 Configurar Selenium
     chrome_path = "selenium/chrome-linux64/chrome"
     driver_path = "selenium/chromedriver-linux64/chromedriver"
 
-    titulo, autor = obtener_titulo_y_autor(link_hitomi, chrome_path, driver_path)
+    if "reader" in link_hitomi:
+        id_enlace = link_hitomi.split('/reader/')[1].split('.')[0]
+        gallery_link = f"https://hitomi.la/gallery/{id_enlace}.html"
+        titulo, autor = obtener_titulo_y_autor(gallery_link, chrome_path, driver_path)
+    else:
+        titulo, autor = obtener_titulo_y_autor(link_hitomi, chrome_path, driver_path)
+
     nombre_final = f"{autor} - {titulo}".strip()
     nombre_final = limpiar_nombre(nombre_final)
     nombre_cbz = truncar_nombre(nombre_final)
 
-    # 📁 Crear carpeta destino con nombre completo
     carpeta_raiz = os.path.abspath(nombre_final)
     os.makedirs(carpeta_raiz, exist_ok=True)
 
@@ -78,9 +81,14 @@ def descargar_y_comprimir_hitomi(link_hitomi: str) -> str:
             pass
         return False
 
-    def ajustar_enlace(enlace):
-        id_enlace = enlace.split('-')[-1].split('.')[0]
-        return f"https://hitomi.la/reader/{id_enlace}.html"
+    def extraer_id_enlace(enlace):
+        if "reader" in enlace:
+            return enlace.split('/reader/')[1].split('.')[0]
+        else:
+            return enlace.split('-')[-1].split('.')[0]
+
+    id_enlace = extraer_id_enlace(link_hitomi)
+    enlace_base = f"https://hitomi.la/reader/{id_enlace}.html"
 
     options = Options()
     options.binary_location = chrome_path
@@ -91,7 +99,6 @@ def descargar_y_comprimir_hitomi(link_hitomi: str) -> str:
     service = Service(executable_path=driver_path)
     driver = webdriver.Chrome(service=service, options=options)
 
-    enlace_base = ajustar_enlace(link_hitomi)
     hashes = {}
     duplicados = 0
     contador = 1
@@ -126,7 +133,6 @@ def descargar_y_comprimir_hitomi(link_hitomi: str) -> str:
 
     driver.quit()
 
-    # 📦 Comprimir carpeta completa
     ruta_cbz = os.path.abspath(nombre_cbz)
     with zipfile.ZipFile(ruta_cbz, 'w') as cbz:
         for root, _, files in os.walk(carpeta_raiz):
@@ -135,7 +141,6 @@ def descargar_y_comprimir_hitomi(link_hitomi: str) -> str:
                 arcname = os.path.relpath(ruta_completa, os.path.dirname(carpeta_raiz))
                 cbz.write(ruta_completa, arcname=arcname)
 
-    # 🧹 Limpiar carpeta
     for file in os.listdir(carpeta_raiz):
         os.remove(os.path.join(carpeta_raiz, file))
     os.rmdir(carpeta_raiz)
