@@ -67,7 +67,7 @@ def browse():
 
     try:
         items = []
-        for name in sorted(os.listdir(abs_requested)):
+        for name in sorted(os.listdir(abs_requested), key=natural_sort_key):
             full_path = os.path.join(abs_requested, name)
             is_dir = os.path.isdir(full_path)
             size_mb = round(os.path.getsize(full_path) / (1024 * 1024), 2) if not is_dir else "-"
@@ -77,7 +77,15 @@ def browse():
                 "is_dir": is_dir,
                 "size_mb": size_mb
             })
-        return render_template_string(MAIN_TEMPLATE, items=items)
+        
+        image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff'}
+        has_images = any(
+            os.path.isfile(os.path.join(abs_requested, name)) and 
+            any(name.lower().endswith(ext) for ext in image_extensions)
+            for name in os.listdir(abs_requested)
+        )
+        
+        return render_template_string(MAIN_TEMPLATE, items=items, has_images=has_images, current_path=requested_path)
     except Exception as e:
         return f"<h3>Error al acceder a los archivos: {e}</h3>", 500
 
