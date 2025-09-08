@@ -101,8 +101,8 @@ def descargar_y_comprimir_hitomi(entrada: str) -> str:
     nombre_cbz = truncar_nombre(nombre_final)
 
     os.makedirs(BASE_DIR, exist_ok=True)
-    carpeta_doujin = os.path.join(BASE_DIR, nombre_final)
-    os.makedirs(carpeta_doujin, exist_ok=True)
+    carpeta_temporal = os.path.join(BASE_DIR, str(uuid.uuid4()))
+    os.makedirs(carpeta_temporal, exist_ok=True)
 
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -190,7 +190,7 @@ def descargar_y_comprimir_hitomi(entrada: str) -> str:
             
             img_url = urls_webp[0]
             nombre_archivo = f"{contador:03d}.webp" 
-            ruta_destino = os.path.join(carpeta_doujin, nombre_archivo)
+            ruta_destino = os.path.join(carpeta_temporal, nombre_archivo)
 
             if descargar_imagen(img_url, ruta_destino):
                 hash_actual = calcular_hash_imagen(ruta_destino)
@@ -220,23 +220,23 @@ def descargar_y_comprimir_hitomi(entrada: str) -> str:
 
     driver.quit()
 
-    archivos_descargados = [f for f in os.listdir(carpeta_doujin) if os.path.isfile(os.path.join(carpeta_doujin, f))]
+    archivos_descargados = [f for f in os.listdir(carpeta_temporal) if os.path.isfile(os.path.join(carpeta_temporal, f))]
     if not archivos_descargados:
-        print("No se descargaron imágenes. Eliminando carpeta.")
-        os.rmdir(carpeta_doujin)
+        print("No se descargaron imágenes. Eliminando carpeta temporal.")
+        os.rmdir(carpeta_temporal)
         return ""
 
     ruta_cbz = os.path.join(BASE_DIR, nombre_cbz)
     with zipfile.ZipFile(ruta_cbz, 'w') as cbz:
-        for root, _, files in os.walk(carpeta_doujin):
+        for root, _, files in os.walk(carpeta_temporal):
             for file in sorted(files):
                 ruta_completa = os.path.join(root, file)
                 arcname = os.path.join(nombre_final, file)
                 cbz.write(ruta_completa, arcname=arcname)
 
-    for file in os.listdir(carpeta_doujin):
-        os.remove(os.path.join(carpeta_doujin, file))
-    os.rmdir(carpeta_doujin)
+    for file in os.listdir(carpeta_temporal):
+        os.remove(os.path.join(carpeta_temporal, file))
+    os.rmdir(carpeta_temporal)
 
     print(f"Archivo CBZ creado: {ruta_cbz}")
     return ruta_cbz
