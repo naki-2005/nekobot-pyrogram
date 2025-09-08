@@ -9,7 +9,6 @@ from command.htools import crear_cbz_desde_fuente
 from my_flask_templates import LOGIN_TEMPLATE, MAIN_TEMPLATE, UTILS_TEMPLATE, DOWNLOADS_TEMPLATE, GALLERY_TEMPLATE
 import uuid
 from datetime import datetime
-
 import re
 import zipfile
 import py7zr
@@ -355,6 +354,46 @@ def compress_items():
         return redirect("/")
     except Exception as e:
         return f"<h3>❌ Error al comprimir: {e}</h3>", 500
+
+@explorer.route("/extract", methods=["POST"])
+@login_required
+def extract_archive():
+    archive_path = request.form.get("path")
+    if not archive_path or not os.path.isfile(archive_path):
+        return "<h3>❌ Archivo no válido para descomprimir.</h3>", 400
+    
+    try:
+        extract_dir = os.path.splitext(archive_path)[0]
+        if os.path.exists(extract_dir):
+            counter = 1
+            while os.path.exists(f"{extract_dir}_{counter}"):
+                counter += 1
+            extract_dir = f"{extract_dir}_{counter}"
+        
+        os.makedirs(extract_dir, exist_ok=True)
+        
+        if archive_path.lower().endswith('.7z'):
+            cmd_args = [
+                os.path.join("7z", "7zz"),
+                'x',
+                archive_path,
+                f'-o{extract_dir}',
+                '-y' 
+            ]
+            result = subprocess.run(cmd_args, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                return f"<h3>❌ Error al descomprimir archivo 7z: {result.stderr}</h3>", 500
+                
+        elif archive_path.lower().endswith('.cbz') or archive_path.lower().endswith('.zip'):
+            with zipfile.ZipFile(archive_path, 'r') as z:
+                z.extractall(extract_dir)
+        else:
+            return "<h3>❌ Formato de archivo no compatible para descompresión.</h3>", 400
+        
+        return redirect("/")
+    except Exception as e:
+        return f"<h3>Error al descomprimir archivo: {e}</h3>", 500
 
 def run_flask():
     explorer.run(host="0.0.0.0", port=10000)
