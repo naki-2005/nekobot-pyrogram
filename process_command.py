@@ -96,7 +96,7 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
             
             if not link:
                 if len(parts) < 2:
-                    await message.reply("❗ Debes proporcionar un enlace magnet o .torrent.")
+                    await message.reply("❗ Debes proporcionar un enlace magnet or .torrent.")
                     return
 
                 use_compression = False
@@ -128,15 +128,21 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
             reply = message.reply_to_message
             parts = text.split(maxsplit=1)
             arg_text = parts[1] if len(parts) > 1 else ""
-            codes = arg_text.split(',') if ',' in arg_text else [arg_text] if arg_text else []
-            codes_limpiados = [
-                re.sub(r"https://nhentai\.net|https://[a-z]{2}\.3hentai\.net|https://3hentai\.net|/d/|/g/|/", "", code).strip()
-                for code in codes
-            ]
-
-            if codes_limpiados != codes:
-                codes = codes_limpiados
-                await message.reply("Solo son necesarios los números pero ok")
+            
+            if command == "/hito":
+                if len(parts) < 2 or not parts[1].startswith("https://"):
+                    await message.reply("Debes colocar un enlace válido después de /hito")
+                    return
+                link_hitomi = parts[1].strip()
+                await message.reply("Procesando enlace de Hitomi.la...")
+                try:
+                    from command.get_files.hitomi import descargar_y_comprimir_hitomi
+                    path_cbz = descargar_y_comprimir_hitomi(link_hitomi)
+                    await client.send_document(chat_id=message.chat.id, document=path_cbz, protect_content=protect_content)
+                    os.remove(path_cbz)
+                except Exception as e:
+                    await message.reply(f"Error al procesar el enlace: {e}")
+                return
 
             if command == "/setfile":
                 new_selection = arg_text.strip().lower()
@@ -149,7 +155,17 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
                     await message.reply("Opción inválida. Usa: '/setfile cbz', '/setfile pdf', '/setfile both' o '/setfile none'.")
                 return
 
-            elif command == "/nh":
+            codes = arg_text.split(',') if ',' in arg_text else [arg_text] if arg_text else []
+            codes_limpiados = [
+                re.sub(r"https://nhentai\.net|https://[a-z]{2}\.3hentai\.net|https://3hentai\.net|/d/|/g/|/", "", code).strip()
+                for code in codes
+            ]
+
+            if codes_limpiados != codes:
+                codes = codes_limpiados
+                await message.reply("Solo son necesarios los números pero ok")
+
+            if command == "/nh":
                 await asyncio.create_task(nh_combined_operation(client, message, codes, "nh", protect_content, user_id, "download"))
             elif command == "/3h":
                 await asyncio.create_task(nh_combined_operation(client, message, codes, "3h", protect_content, user_id, "download"))
@@ -171,19 +187,6 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
                     return
                 path_cbz = txt_a_cbz(path_txt)
                 await client.send_document(chat_id=message.chat.id, document=path_cbz)
-            elif command == "/hito":
-                from command.get_files.hitomi import descargar_y_comprimir_hitomi
-                if len(parts) < 2 or not parts[1].startswith("https://"):
-                    await message.reply("Debes colocar un enlace válido después de /hito")
-                    return
-                link_hitomi = parts[1].strip()
-                await message.reply("Procesando enlace de Hitomi.la...")
-                try:
-                    path_cbz = descargar_y_comprimir_hitomi(link_hitomi)
-                    await client.send_document(chat_id=message.chat.id, document=path_cbz, protect_content=protect_content)
-                    os.remove(path_cbz)
-                except Exception as e:
-                    await message.reply(f"Error al procesar el enlace: {e}")
 
     elif command == "/megadl":
         if not cmd("download", int_lvl):
@@ -465,4 +468,3 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
         if cmd("manga", int_lvl):
             from command.mangatools import handle_manga_search
             await handle_manga_search(client, message, textori)
-            
