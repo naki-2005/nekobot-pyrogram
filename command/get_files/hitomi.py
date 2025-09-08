@@ -83,6 +83,55 @@ def esperar_imagen_cargada(driver, timeout=2):
     except:
         return False
 
+def descargar_imagen_con_reintentos(url, ruta_destino, headers, max_intentos=float('inf')):
+    intento = 0
+    while intento < max_intentos:
+        try:
+            r = requests.get(url, headers=headers, timeout=30)
+            if r.status_code == 200:
+                with open(ruta_destino, 'wb') as f:
+                    f.write(r.content)
+                return True
+            else:
+                raise Exception(f"HTTP {r.status_code}")
+        except Exception as e:
+            intento += 1
+            tiempo_espera = 3 + intento
+            print(f"❌ Error descargando imagen (intento {intento}): {str(e)}")
+            print(f"⏳ Reintentando en {tiempo_espera} segundos...")
+            time.sleep(tiempo_espera)
+    return False
+
+def obtener_url_imagen_con_reintentos(driver, url_pagina, max_intentos=float('inf')):
+    intento = 0
+    while intento < max_intentos:
+        try:
+            driver.get(url_pagina)
+            
+            if not esperar_imagen_cargada(driver, timeout=2):
+                raise Exception("Timeout esperando imagen")
+            
+            imagenes = driver.find_elements(By.TAG_NAME, 'img')
+            urls_webp = [
+                img.get_attribute('src') for img in imagenes 
+                if (img.get_attribute('src') and 
+                    (img.get_attribute('src').endswith('.webp') or 
+                     'webp' in img.get_attribute('src')))
+            ]
+            
+            if urls_webp:
+                return urls_webp[0]
+            else:
+                raise Exception("No se encontraron imágenes webp")
+                
+        except Exception as e:
+            intento += 1
+            tiempo_espera = 3 + intento
+            print(f"❌ Error obteniendo URL de imagen (intento {intento}): {str(e)}")
+            print(f"⏳ Reintentando en {tiempo_espera} segundos...")
+            time.sleep(tiempo_espera)
+    return None
+
 def descargar_y_comprimir_hitomi(entrada: str) -> str:
     link_hitomi = procesar_id_o_enlace(entrada)
     
@@ -120,17 +169,6 @@ def descargar_y_comprimir_hitomi(entrada: str) -> str:
         with open(ruta, 'rb') as f:
             return hashlib.md5(f.read()).hexdigest()
 
-    def descargar_imagen(url, ruta_destino):
-        try:
-            r = requests.get(url, headers=headers, timeout=5)
-            if r.status_code == 200:
-                with open(ruta_destino, 'wb') as f:
-                    f.write(r.content)
-                return True
-        except Exception as e:
-            print(f"Error al descargar imagen: {e}")
-        return False
-
     def extraer_id_enlace(enlace):
         if "reader" in enlace:
             return enlace.split('/reader/')[1].split('.')[0]
@@ -157,72 +195,48 @@ def descargar_y_comprimir_hitomi(entrada: str) -> str:
     hashes = {}
     duplicados = 0
     contador = 1
-    max_intentos = 3
     max_paginas_sin_progreso = 5
     paginas_sin_progreso = 0
 
     while paginas_sin_progreso < max_paginas_sin_progreso:
-        url = f"{enlace_base}#{contador}"
-        print(f"Intentando descargar página {contador}")
+        url_pagina = f"{enlace_base}#{contador}"
+        print(f"🔄 Procesando página {contador}")
         
-        try:
-            driver.get(url)
-            
-            if not esperar_imagen_cargada(driver, timeout=2):
-                print(f"Timeout esperando imagen para página {contador}")
-                paginas_sin_progreso += 1
-                contador += 1
-                continue
-            
-            imagenes = driver.find_elements(By.TAG_NAME, 'img')
-            urls_webp = [
-                img.get_attribute('src') for img in imagenes 
-                if (img.get_attribute('src') and 
-                    (img.get_attribute('src').endswith('.webp') or 
-                     'webp' in img.get_attribute('src')))
-            ]
-            
-            if not urls_webp:
-                print(f"No se encontraron imágenes webp para página {contador}")
-                paginas_sin_progreso += 1
-                contador += 1
-                continue
-            
-            img_url = urls_webp[0]
-            nombre_archivo = f"{contador:03d}.webp" 
-            ruta_destino = os.path.join(carpeta_temporal, nombre_archivo)
-
-            if descargar_imagen(img_url, ruta_destino):
-                hash_actual = calcular_hash_imagen(ruta_destino)
-                if hash_actual in hashes.values():
-                    print(f"Imagen duplicada encontrada: {nombre_archivo}")
-                    duplicados += 1
-                    os.remove(ruta_destino)
-                    if duplicados >= 3:
-                        print("Demasiadas imágenes duplicadas consecutivas, finalizando descarga")
-                        break
-                else:
-                    hashes[nombre_archivo] = hash_actual
-                    duplicados = 0
-                    paginas_sin_progreso = 0
-                    print(f"Descargada página {contador}")
-            else:
-                print(f"Error al descargar página {contador}")
-                paginas_sin_progreso += 1
-            
-            contador += 1
-            
-        except Exception as e:
-            print(f"Error al procesar página {contador}: {e}")
+        img_url = obtener_url_imagen_con_reintentos(driver, url_pagina)
+        if not img_url:
+            print(f"❌ No se pudo obtener URL para página {contador}")
             paginas_sin_progreso += 1
             contador += 1
-            time.sleep(1)
+            continue
+            
+        nombre_archivo = f"{contador:03d}.webp" 
+        ruta_destino = os.path.join(carpeta_temporal, nombre_archivo)
+
+        if descargar_imagen_con_reintentos(img_url, ruta_destino, headers):
+            hash_actual = calcular_hash_imagen(ruta_destino)
+            if hash_actual in hashes.values():
+                print(f"⚠️  Imagen duplicada encontrada: {nombre_archivo}")
+                duplicados += 1
+                os.remove(ruta_destino)
+                if duplicados >= 3:
+                    print("🛑 Demasiadas imágenes duplicadas consecutivas, finalizando descarga")
+                    break
+            else:
+                hashes[nombre_archivo] = hash_actual
+                duplicados = 0
+                paginas_sin_progreso = 0
+                print(f"✅ Descargada página {contador}")
+        else:
+            print(f"❌ Error al descargar página {contador}")
+            paginas_sin_progreso += 1
+        
+        contador += 1
 
     driver.quit()
 
     archivos_descargados = [f for f in os.listdir(carpeta_temporal) if os.path.isfile(os.path.join(carpeta_temporal, f))]
     if not archivos_descargados:
-        print("No se descargaron imágenes. Eliminando carpeta temporal.")
+        print("❌ No se descargaron imágenes. Eliminando carpeta temporal.")
         os.rmdir(carpeta_temporal)
         return ""
 
@@ -238,5 +252,5 @@ def descargar_y_comprimir_hitomi(entrada: str) -> str:
         os.remove(os.path.join(carpeta_temporal, file))
     os.rmdir(carpeta_temporal)
 
-    print(f"Archivo CBZ creado: {ruta_cbz}")
+    print(f"✅ Archivo CBZ creado: {ruta_cbz}")
     return ruta_cbz
