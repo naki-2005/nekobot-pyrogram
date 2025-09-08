@@ -185,23 +185,42 @@ MAIN_TEMPLATE = """
             background: #f8f9fa;
             border-radius: 6px;
             border-left: 4px solid #667eea;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .file-info {
+            flex: 1;
+            min-width: 200px;
+        }
+        .file-actions {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
         }
         a { text-decoration: none; color: #667eea; font-weight: 500; }
         a:hover { text-decoration: underline; }
-        .delete-btn, .rename-btn { 
-            background-color: #dc3545; 
+        .delete-btn, .rename-btn, .extract-btn, .gallery-btn { 
             color: white; 
             border: none; 
             padding: 0.5em 1em; 
-            margin-left: 10px; 
             border-radius: 4px; 
             cursor: pointer;
             font-size: 0.9em;
+            text-decoration: none;
+            display: inline-block;
         }
+        .delete-btn { background-color: #dc3545; }
         .rename-btn { background-color: #ffc107; color: black; }
+        .extract-btn { background-color: #28a745; }
+        .gallery-btn { background-color: #17a2b8; }
         .compress-toggle { 
             margin-top: 1em;
             background: #28a745;
+        }
+        .select-all {
+            margin-bottom: 10px;
+            background: #6c757d;
         }
         
         .file-list {
@@ -224,6 +243,13 @@ MAIN_TEMPLATE = """
             input.style.display = input.style.display === "none" ? "inline" : "none";
             btn.style.display = btn.style.display === "none" ? "inline" : "none";
         }
+        
+        function selectAllFiles(selectAll) {
+            const checkboxes = document.querySelectorAll('input[name="selected"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = selectAll;
+            });
+        }
     </script>
 </head>
 <body>
@@ -235,6 +261,9 @@ MAIN_TEMPLATE = """
             <a href="/" class="nav-btn">🏠 Inicio</a>
             <a href="/utils" class="nav-btn">🛠️ Utilidades</a>
             <a href="/downloads" class="nav-btn">📥 Descargas</a>
+            {% if has_images %}
+            <a href="/gallery?path={{ current_path }}" class="nav-btn">🖼️ Galería</a>
+            {% endif %}
         </div>
     </div>
     
@@ -251,6 +280,8 @@ MAIN_TEMPLATE = """
             <h2>🗜️ Comprimir archivos</h2>
             <button class="compress-toggle" onclick="toggleCompress()">Mostrar opciones de compresión</button>
             <div id="compress-section" style="display:none; margin-top: 1em;">
+                <button type="button" class="select-all" onclick="selectAllFiles(true)">Seleccionar todo</button>
+                <button type="button" class="select-all" onclick="selectAllFiles(false)">Deseleccionar todo</button>
                 <form action="/compress" method="post">
                     <input type="text" name="archive_name" placeholder="Nombre del archivo .7z" required>
                     <div class="file-list">
@@ -277,21 +308,34 @@ MAIN_TEMPLATE = """
             <ul>
             {% for item in items %}
                 <li>
-                    {% if item['is_dir'] %}
-                        📂 <a href="/browse?path={{ item['full_path'] }}">{{ item['name'] }}/</a>
-                    {% else %}
-                        📄 <a href="/download?path={{ item['full_path'] }}">{{ item['name'] }}</a> — {{ item['size_mb'] }} MB
-                    {% endif %}
-                    <form action="/delete" method="post" style="display:inline;">
-                        <input type="hidden" name="path" value="{{ item['full_path'] }}">
-                        <button class="delete-btn" onclick="return confirm('¿Eliminar {{ item['name'] }}?')">Eliminar</button>
-                    </form>
-                    <button class="rename-btn" onclick="toggleRename('{{ loop.index }}')">✏️ Renombrar</button>
-                    <form action="/rename" method="post" style="display:inline;">
-                        <input type="hidden" name="old_path" value="{{ item['full_path'] }}">
-                        <input type="text" name="new_name" id="rename-{{ loop.index }}" style="display:none; width: 200px;" placeholder="Nuevo nombre">
-                        <button type="submit" style="display:none;" id="rename-{{ loop.index }}-btn">✅</button>
-                    </form>
+                    <div class="file-info">
+                        {% if item['is_dir'] %}
+                            📂 <a href="/browse?path={{ item['full_path'] }}">{{ item['name'] }}/</a>
+                        {% else %}
+                            📄 <a href="/download?path={{ item['full_path'] }}">{{ item['name'] }}</a> — {{ item['size_mb'] }} MB
+                        {% endif %}
+                    </div>
+                    <div class="file-actions">
+                        <form action="/delete" method="post" style="display:inline;">
+                            <input type="hidden" name="path" value="{{ item['full_path'] }}">
+                            <button class="delete-btn" onclick="return confirm('¿Eliminar {{ item['name'] }}?')">Eliminar</button>
+                        </form>
+                        <button class="rename-btn" onclick="toggleRename('{{ loop.index }}')">✏️ Renombrar</button>
+                        {% if item['name'].lower().endswith('.7z') or item['name'].lower().endswith('.cbz') or item['name'].lower().endswith('.zip') %}
+                        <form action="/extract" method="post" style="display:inline;">
+                            <input type="hidden" name="path" value="{{ item['full_path'] }}">
+                            <button class="extract-btn" onclick="return confirm('¿Descomprimir {{ item['name'] }}?')">📦 Descomprimir</button>
+                        </form>
+                        {% endif %}
+                        {% if item['name'].lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff')) %}
+                        <a href="/download?path={{ item['full_path'] }}" class="gallery-btn" target="_blank">🖼️ Ver</a>
+                        {% endif %}
+                        <form action="/rename" method="post" style="display:inline;">
+                            <input type="hidden" name="old_path" value="{{ item['full_path'] }}">
+                            <input type="text" name="new_name" id="rename-{{ loop.index }}" style="display:none; width: 200px;" placeholder="Nuevo nombre">
+                            <button type="submit" style="display:none;" id="rename-{{ loop.index }}-btn">✅</button>
+                        </form>
+                    </div>
                 </li>
             {% endfor %}
             </ul>
@@ -300,7 +344,6 @@ MAIN_TEMPLATE = """
 </body>
 </html>
 """
-
 UTILS_TEMPLATE = """
 <!doctype html>
 <html>
