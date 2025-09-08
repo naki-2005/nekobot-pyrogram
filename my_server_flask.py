@@ -6,10 +6,20 @@ from flask import Flask, request, send_from_directory, render_template_string, r
 from threading import Thread, Lock
 from command.torrets_tools import download_from_magnet, get_download_progress, cleanup_old_downloads
 from command.htools import crear_cbz_desde_fuente
-from my_flask_templates import LOGIN_TEMPLATE, MAIN_TEMPLATE, UTILS_TEMPLATE, DOWNLOADS_TEMPLATE
+from my_flask_templates import LOGIN_TEMPLATE, MAIN_TEMPLATE, UTILS_TEMPLATE, DOWNLOADS_TEMPLATE, GALLERY_TEMPLATE
 import uuid
 from datetime import datetime
 
+import re
+import zipfile
+import py7zr
+from flask import send_file
+import shutil
+
+def natural_sort_key(s):
+    return [int(text) if text.isdigit() else text.lower() 
+            for text in re.split(r'(\d+)', s)]
+    
 explorer = Flask("file_explorer")
 explorer.secret_key = os.getenv("FLASK_SECRET", "supersecretkey")
 BASE_DIR = "vault_files"
@@ -70,6 +80,36 @@ def browse():
         return render_template_string(MAIN_TEMPLATE, items=items)
     except Exception as e:
         return f"<h3>Error al acceder a los archivos: {e}</h3>", 500
+
+@explorer.route("/gallery")
+@login_required
+def gallery():
+    requested_path = request.args.get("path", BASE_DIR)
+    abs_base = os.path.abspath(BASE_DIR)
+    abs_requested = os.path.abspath(requested_path)
+
+    if not abs_requested.startswith(abs_base):
+        return "<h3>❌ Acceso denegado: ruta fuera de 'vault_files'.</h3>", 403
+
+    try:
+        # Obtener solo archivos de imagen
+        image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff'}
+        image_files = []
+        
+        for name in sorted(os.listdir(abs_requested), key=natural_sort_key):
+            full_path = os.path.join(abs_requested, name)
+            if os.path.isfile(full_path) and any(name.lower().endswith(ext) for ext in image_extensions):
+                image_files.append({
+                    "name": name,
+                    "full_path": full_path,
+                    "url_path": f"/download?path={full_path}"
+                })
+        
+        return render_template_string(GALLERY_TEMPLATE, 
+                                    image_files=image_files, 
+                                    requested_path=requested_path)
+    except Exception as e:
+        return f"<h3>Error al acceder a la galería: {e}</h3>", 500
 
 @explorer.route("/utils")
 @login_required
