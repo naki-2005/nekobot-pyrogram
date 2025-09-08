@@ -788,3 +788,153 @@ DOWNLOADS_TEMPLATE = """
 </body>
 </html>
 """
+
+GALLERY_TEMPLATE = """
+        <!doctype html>
+        <html>
+        <head>
+            <title>Galería de Imágenes</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                body { 
+                    font-family: Arial; 
+                    margin: 0; 
+                    padding: 0; 
+                    background-color: #f0f0f0;
+                }
+                .header { 
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white; 
+                    padding: 1em; 
+                    text-align: center; 
+                    position: sticky;
+                    top: 0;
+                    z-index: 100;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                }
+                .header a { 
+                    color: white; 
+                    text-decoration: none;
+                    font-weight: bold;
+                    margin: 0 10px;
+                    padding: 5px 10px;
+                    border-radius: 4px;
+                    background: rgba(255,255,255,0.2);
+                }
+                .header a:hover { 
+                    background: rgba(255,255,255,0.3);
+                }
+                .gallery-container {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+                    gap: 15px;
+                    padding: 20px;
+                }
+                .gallery-item {
+                    position: relative;
+                    overflow: hidden;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                    transition: transform 0.3s;
+                    background: white;
+                }
+                .gallery-item:hover {
+                    transform: scale(1.03);
+                    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+                }
+                .gallery-item img {
+                    width: 100%;
+                    height: 200px;
+                    object-fit: cover;
+                    display: block;
+                }
+                .gallery-item .caption {
+                    padding: 10px;
+                    text-align: center;
+                    font-size: 0.9em;
+                    color: #333;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+                .back-button {
+                    display: inline-block;
+                    margin: 10px 20px;
+                    padding: 8px 15px;
+                    background: #667eea;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 4px;
+                }
+                .fullscreen {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0,0,0,0.9);
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    z-index: 1000;
+                    cursor: pointer;
+                }
+                .fullscreen img {
+                    max-width: 90%;
+                    max-height: 90%;
+                    object-fit: contain;
+                }
+                .nav-buttons {
+                    display: flex;
+                    justify-content: center;
+                    gap: 10px;
+                    margin: 10px 0;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <a href="/">🏠 Inicio</a>
+                <a href="/utils">🛠️ Utilidades</a>
+                <a href="/downloads">📥 Descargas</a>
+                <a href="/browse?path={{ requested_path }}">📂 Volver al explorador</a>
+            </div>
+
+            <div class="nav-buttons">
+                <a href="?path={{ requested_path }}&view=grid" class="nav-btn">🖼️ Vista Cuadrícula</a>
+                <a href="?path={{ requested_path }}&view=slideshow" class="nav-btn">🎬 Vista Presentación</a>
+            </div>
+
+            <div class="gallery-container">
+                {% for image in image_files %}
+                <div class="gallery-item" onclick="openFullscreen('{{ image.url_path }}')">
+                    <img src="{{ image.url_path }}" alt="{{ image.name }}">
+                    <div class="caption">{{ image.name }}</div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div id="fullscreen-view" class="fullscreen" style="display:none;" onclick="closeFullscreen()">
+                <img id="fullscreen-img" src="">
+            </div>
+
+            <script>
+                function openFullscreen(src) {
+                    document.getElementById('fullscreen-img').src = src;
+                    document.getElementById('fullscreen-view').style.display = 'flex';
+                    document.body.style.overflow = 'hidden';
+                }
+                
+                function closeFullscreen() {
+                    document.getElementById('fullscreen-view').style.display = 'none';
+                    document.body.style.overflow = 'auto';
+                }
+                
+                // Cerrar con ESC
+                document.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape') closeFullscreen();
+                });
+            </script>
+        </body>
+        </html>
+        """
