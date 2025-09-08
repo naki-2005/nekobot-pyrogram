@@ -112,7 +112,9 @@ from command.get_files.h3_links import obtener_titulo_y_imagenes as obtener_info
 
 def obtenerporcli(codigo, tipo, cover):
     try:
-        if tipo == "nh":
+        if tipo == "hito":
+            return {"texto": "Procesando Hitomi.la", "imagenes": []}
+        elif tipo == "nh":
             title, imagenes = scrape_nhentai(codigo)
             datos = {"texto": title, "imagenes": imagenes}
         else:
@@ -136,6 +138,24 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
     MAX_FILENAME_LEN = 63
 
     for codigo in codigos:
+        if tipo == "hito":
+            try:
+                cbz_path = await crear_cbz_desde_fuente(codigo, tipo)
+                texto_titulo = os.path.basename(cbz_path).replace('.cbz', '')
+                
+                await safe_call(client.send_document,
+                    chat_id=message.chat.id,
+                    document=cbz_path,
+                    caption=texto_titulo,
+                    protect_content=proteger,
+                    reply_to_message_id=message.id
+                )
+                os.remove(cbz_path)
+                continue
+            except Exception as e:
+                await safe_call(message.reply, f"❌ Error con Hitomi.la: {e}", reply_to_message_id=message.id)
+                continue
+
         datos = obtenerporcli(codigo, tipo, cover=(operacion == "cover"))
         texto_original = datos.get("texto", "").strip()
         texto_titulo = f"{codigo} {texto_original}"
@@ -260,23 +280,28 @@ async def nh_combined_operation_txt(client, message, tipo, proteger, userid, ope
 
     while True:
         with open(filepath, "r", encoding="utf-8") as f:
-            contenido = f.read().strip()
+            if tipo == "hito":
+                contenido = f.read().strip()
+                urls = [line.strip() for line in contenido.split('\n') if line.strip()]
+                codigos = urls
+            else:
+                contenido = f.read().strip()
+                codigos = contenido.split(",")
 
-        if not contenido:
+        if not codigos:
             os.remove(filepath)
             try: await safe_call(mensaje_txt.delete)
             except: pass
             await safe_call(message.reply, "✅ Descarga terminada", reply_to_message_id=message.id)
             return
 
-        if not all(c in "0123456789," for c in contenido):
+        if tipo != "hito" and not all(c in "0123456789," for c in contenido):
             os.remove(filepath)
             try: await safe_call(mensaje_txt.delete)
             except: pass
             await safe_call(message.reply, "❌ Estructura incorrecta", reply_to_message_id=message.id)
             return
 
-        codigos = contenido.split(",")
         primer_codigo = codigos[0]
         siguientes = codigos[1:]
 
@@ -289,7 +314,10 @@ async def nh_combined_operation_txt(client, message, tipo, proteger, userid, ope
         if siguientes:
             nuevo_path = "temp_next.txt"
             with open(nuevo_path, "w", encoding="utf-8") as f:
-                f.write(",".join(siguientes))
+                if tipo == "hito":
+                    f.write('\n'.join(siguientes))
+                else:
+                    f.write(",".join(siguientes))
 
             mensaje_txt = await safe_call(client.send_document,
                 chat_id=message.chat.id,
