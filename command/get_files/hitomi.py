@@ -4,10 +4,13 @@ import requests
 import hashlib
 import zipfile
 import re
+import uuid
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+
+BASE_DIR = "vault_files/doujins"
 
 def limpiar_nombre(nombre: str) -> str:
     nombre = nombre.replace(" | Hitomi.la", "")
@@ -58,7 +61,9 @@ def descargar_y_comprimir_hitomi(link_hitomi: str) -> str:
     nombre_final = limpiar_nombre(nombre_final)
     nombre_cbz = truncar_nombre(nombre_final)
 
-    carpeta_raiz = os.path.abspath(nombre_final)
+    os.makedirs(BASE_DIR, exist_ok=True)
+    carpeta_temporal = os.path.join(BASE_DIR, str(uuid.uuid4()))
+    carpeta_raiz = os.path.abspath(carpeta_temporal)
     os.makedirs(carpeta_raiz, exist_ok=True)
 
     headers = {
