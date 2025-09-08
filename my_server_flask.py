@@ -15,7 +15,6 @@ explorer.secret_key = os.getenv("FLASK_SECRET", "supersecretkey")
 BASE_DIR = "vault_files"
 WEBACCESS_FILE = "web_access.json"
 
-# Diccionario para rastrear descargas de doujins con lock para thread safety
 doujin_downloads = {}
 doujin_lock = Lock()
 
@@ -80,11 +79,9 @@ def utils_page():
 @explorer.route("/downloads")
 @login_required
 def downloads_page():
-    # Limpiar descargas antiguas antes de mostrar
     cleanup_old_downloads()
     downloads = get_download_progress()
     
-    # Limpiar descargas de doujins completadas hace más de 1 hora
     current_time = datetime.now()
     with doujin_lock:
         to_delete = []
@@ -97,7 +94,6 @@ def downloads_page():
         for download_id in to_delete:
             del doujin_downloads[download_id]
     
-    # Agregar descargas de doujins al contexto
     return render_template_string(DOWNLOADS_TEMPLATE, 
                                 downloads=downloads, 
                                 doujin_downloads=doujin_downloads)
@@ -105,7 +101,6 @@ def downloads_page():
 @explorer.route("/api/downloads")
 @login_required
 def api_downloads():
-    # Limpiar descargas antiguas
     cleanup_old_downloads()
     downloads = get_download_progress()
     return jsonify({"torrents": downloads, "doujins": doujin_downloads})
@@ -140,20 +135,23 @@ def crear_cbz():
     if not codigo_input or tipo not in ["nh", "h3", "hito"]:
         return "<h3>❌ Código o tipo inválido.</h3>", 400
 
-    # Separar códigos por comas
-    codigos = [c.strip() for c in codigo_input.split(",") if c.strip()]
+    if tipo == "hito":
+        codigos = [codigo_input]
+    else:
+        if codigo_input.replace(",", "").replace(" ", "").isdigit():
+            codigos = [c.strip() for c in codigo_input.split(",") if c.strip()]
+        else:
+            codigos = [codigo_input]
     
     if not codigos:
         return "<h3>❌ No se proporcionaron códigos válidos.</h3>", 400
 
-    # Respuesta inmediata
     total_codigos = len(codigos)
     plural = "s" if total_codigos > 1 else ""
     response_msg = f"<h3>✅ Iniciando descarga de {total_codigos} doujin{plural}</h3>"
     response_msg += f"<p>Procesando: {', '.join(codigos[:3])}{'...' if total_codigos > 3 else ''}</p>"
     response_msg += "<p>Puedes ver el progreso en la <a href='/downloads'>página de descargas</a></p>"
 
-    # Iniciar proceso en segundo plano
     download_id = str(uuid.uuid4())
     
     with doujin_lock:
@@ -177,7 +175,6 @@ def crear_cbz():
             
             resultados = []
             for i, codigo in enumerate(codigos):
-                # Actualizar progreso
                 with doujin_lock:
                     doujin_downloads[download_id]["progress"] = i + 1
                     doujin_downloads[download_id]["current_item"] = f"Procesando {codigo} ({i+1}/{total_codigos})"
@@ -201,11 +198,9 @@ def crear_cbz():
                     with doujin_lock:
                         doujin_downloads[download_id]["errores"] += 1
                 
-                # Actualizar resultados
                 with doujin_lock:
                     doujin_downloads[download_id]["resultados"] = resultados
             
-            # Marcar como completado
             with doujin_lock:
                 doujin_downloads[download_id]["state"] = "completed"
                 doujin_downloads[download_id]["end_time"] = datetime.now().isoformat()
@@ -221,7 +216,6 @@ def crear_cbz():
 
     Thread(target=run_async_download, daemon=True).start()
     return response_msg
-
 
 @explorer.route("/upload", methods=["POST"])
 def upload_file():
