@@ -6,16 +6,24 @@ from flask import Flask, request, send_from_directory, render_template_string, r
 from threading import Thread, Lock
 from command.torrets_tools import download_from_magnet, get_download_progress, cleanup_old_downloads
 from command.htools import crear_cbz_desde_fuente
-from my_flask_templates import LOGIN_TEMPLATE, MAIN_TEMPLATE, UTILS_TEMPLATE, DOWNLOADS_TEMPLATE
+from my_flask_templates import LOGIN_TEMPLATE, MAIN_TEMPLATE, UTILS_TEMPLATE, DOWNLOADS_TEMPLATE, GALLERY_TEMPLATE
 import uuid
 from datetime import datetime
+import re
+import zipfile
+import py7zr
+from flask import send_file
+import shutil
 
+def natural_sort_key(s):
+    return [int(text) if text.isdigit() else text.lower() 
+            for text in re.split(r'(\d+)', s)]
+    
 explorer = Flask("file_explorer")
 explorer.secret_key = os.getenv("FLASK_SECRET", "supersecretkey")
 BASE_DIR = "vault_files"
 WEBACCESS_FILE = "web_access.json"
 
-# Diccionario para rastrear descargas de doujins con lock para thread safety
 doujin_downloads = {}
 doujin_lock = Lock()
 
@@ -58,7 +66,7 @@ def browse():
 
     try:
         items = []
-        for name in sorted(os.listdir(abs_requested)):
+        for name in sorted(os.listdir(abs_requested), key=natural_sort_key):
             full_path = os.path.join(abs_requested, name)
             is_dir = os.path.isdir(full_path)
             size_mb = round(os.path.getsize(full_path) / (1024 * 1024), 2) if not is_dir else "-"
@@ -68,9 +76,47 @@ def browse():
                 "is_dir": is_dir,
                 "size_mb": size_mb
             })
-        return render_template_string(MAIN_TEMPLATE, items=items)
+        
+        image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff'}
+        has_images = any(
+            os.path.isfile(os.path.join(abs_requested, name)) and 
+            any(name.lower().endswith(ext) for ext in image_extensions)
+            for name in os.listdir(abs_requested)
+        )
+        
+        return render_template_string(MAIN_TEMPLATE, items=items, has_images=has_images, current_path=requested_path)
     except Exception as e:
         return f"<h3>Error al acceder a los archivos: {e}</h3>", 500
+
+@explorer.route("/gallery")
+@login_required
+def gallery():
+    requested_path = request.args.get("path", BASE_DIR)
+    abs_base = os.path.abspath(BASE_DIR)
+    abs_requested = os.path.abspath(requested_path)
+
+    if not abs_requested.startswith(abs_base):
+        return "<h3>❌ Acceso denegado: ruta fuera de 'vault_files'.</h3>", 403
+
+    try:
+        # Obtener solo archivos de imagen
+        image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff'}
+        image_files = []
+        
+        for name in sorted(os.listdir(abs_requested), key=natural_sort_key):
+            full_path = os.path.join(abs_requested, name)
+            if os.path.isfile(full_path) and any(name.lower().endswith(ext) for ext in image_extensions):
+                image_files.append({
+                    "name": name,
+                    "full_path": full_path,
+                    "url_path": f"/download?path={full_path}"
+                })
+        
+        return render_template_string(GALLERY_TEMPLATE, 
+                                    image_files=image_files, 
+                                    requested_path=requested_path)
+    except Exception as e:
+        return f"<h3>Error al acceder a la galería: {e}</h3>", 500
 
 @explorer.route("/utils")
 @login_required
@@ -80,11 +126,9 @@ def utils_page():
 @explorer.route("/downloads")
 @login_required
 def downloads_page():
-    # Limpiar descargas antiguas antes de mostrar
     cleanup_old_downloads()
     downloads = get_download_progress()
     
-    # Limpiar descargas de doujins completadas hace más de 1 hora
     current_time = datetime.now()
     with doujin_lock:
         to_delete = []
@@ -97,7 +141,6 @@ def downloads_page():
         for download_id in to_delete:
             del doujin_downloads[download_id]
     
-    # Agregar descargas de doujins al contexto
     return render_template_string(DOWNLOADS_TEMPLATE, 
                                 downloads=downloads, 
                                 doujin_downloads=doujin_downloads)
@@ -105,7 +148,6 @@ def downloads_page():
 @explorer.route("/api/downloads")
 @login_required
 def api_downloads():
-    # Limpiar descargas antiguas
     cleanup_old_downloads()
     downloads = get_download_progress()
     return jsonify({"torrents": downloads, "doujins": doujin_downloads})
@@ -114,7 +156,22 @@ def api_downloads():
 def download():
     path = request.args.get("path")
     if os.path.isfile(path):
-        return send_from_directory(os.path.dirname(path), os.path.basename(path), as_attachment=True)
+        if 'Range' in request.headers:
+            range_header = request.headers.get('Range')
+            range_start = int(range_header.split('=')[1].split('-')[0])
+            return send_from_directory(
+                os.path.dirname(path), 
+                os.path.basename(path), 
+                as_attachment=True,
+                conditional=True,
+                download_name=os.path.basename(path)
+            )
+        else:
+            return send_from_directory(
+                os.path.dirname(path), 
+                os.path.basename(path), 
+                as_attachment=True
+            )
     return "<h3>Archivo no válido para descarga.</h3>"
 
 @explorer.route("/crear_cbz", methods=["POST"])
@@ -125,20 +182,23 @@ def crear_cbz():
     if not codigo_input or tipo not in ["nh", "h3", "hito"]:
         return "<h3>❌ Código o tipo inválido.</h3>", 400
 
-    # Separar códigos por comas
-    codigos = [c.strip() for c in codigo_input.split(",") if c.strip()]
+    if tipo == "hito":
+        codigos = [codigo_input]
+    else:
+        if codigo_input.replace(",", "").replace(" ", "").isdigit():
+            codigos = [c.strip() for c in codigo_input.split(",") if c.strip()]
+        else:
+            codigos = [codigo_input]
     
     if not codigos:
         return "<h3>❌ No se proporcionaron códigos válidos.</h3>", 400
 
-    # Respuesta inmediata
     total_codigos = len(codigos)
     plural = "s" if total_codigos > 1 else ""
     response_msg = f"<h3>✅ Iniciando descarga de {total_codigos} doujin{plural}</h3>"
     response_msg += f"<p>Procesando: {', '.join(codigos[:3])}{'...' if total_codigos > 3 else ''}</p>"
     response_msg += "<p>Puedes ver el progreso en la <a href='/downloads'>página de descargas</a></p>"
 
-    # Iniciar proceso en segundo plano
     download_id = str(uuid.uuid4())
     
     with doujin_lock:
@@ -162,7 +222,6 @@ def crear_cbz():
             
             resultados = []
             for i, codigo in enumerate(codigos):
-                # Actualizar progreso
                 with doujin_lock:
                     doujin_downloads[download_id]["progress"] = i + 1
                     doujin_downloads[download_id]["current_item"] = f"Procesando {codigo} ({i+1}/{total_codigos})"
@@ -186,11 +245,9 @@ def crear_cbz():
                     with doujin_lock:
                         doujin_downloads[download_id]["errores"] += 1
                 
-                # Actualizar resultados
                 with doujin_lock:
                     doujin_downloads[download_id]["resultados"] = resultados
             
-            # Marcar como completado
             with doujin_lock:
                 doujin_downloads[download_id]["state"] = "completed"
                 doujin_downloads[download_id]["end_time"] = datetime.now().isoformat()
@@ -206,7 +263,6 @@ def crear_cbz():
 
     Thread(target=run_async_download, daemon=True).start()
     return response_msg
-
 
 @explorer.route("/upload", methods=["POST"])
 def upload_file():
@@ -298,6 +354,46 @@ def compress_items():
         return redirect("/")
     except Exception as e:
         return f"<h3>❌ Error al comprimir: {e}</h3>", 500
+
+@explorer.route("/extract", methods=["POST"])
+@login_required
+def extract_archive():
+    archive_path = request.form.get("path")
+    if not archive_path or not os.path.isfile(archive_path):
+        return "<h3>❌ Archivo no válido para descomprimir.</h3>", 400
+    
+    try:
+        extract_dir = os.path.splitext(archive_path)[0]
+        if os.path.exists(extract_dir):
+            counter = 1
+            while os.path.exists(f"{extract_dir}_{counter}"):
+                counter += 1
+            extract_dir = f"{extract_dir}_{counter}"
+        
+        os.makedirs(extract_dir, exist_ok=True)
+        
+        if archive_path.lower().endswith('.7z'):
+            cmd_args = [
+                os.path.join("7z", "7zz"),
+                'x',
+                archive_path,
+                f'-o{extract_dir}',
+                '-y' 
+            ]
+            result = subprocess.run(cmd_args, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                return f"<h3>❌ Error al descomprimir archivo 7z: {result.stderr}</h3>", 500
+                
+        elif archive_path.lower().endswith('.cbz') or archive_path.lower().endswith('.zip'):
+            with zipfile.ZipFile(archive_path, 'r') as z:
+                z.extractall(extract_dir)
+        else:
+            return "<h3>❌ Formato de archivo no compatible para descompresión.</h3>", 400
+        
+        return redirect("/")
+    except Exception as e:
+        return f"<h3>Error al descomprimir archivo: {e}</h3>", 500
 
 def run_flask():
     explorer.run(host="0.0.0.0", port=10000)

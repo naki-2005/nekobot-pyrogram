@@ -185,23 +185,42 @@ MAIN_TEMPLATE = """
             background: #f8f9fa;
             border-radius: 6px;
             border-left: 4px solid #667eea;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .file-info {
+            flex: 1;
+            min-width: 200px;
+        }
+        .file-actions {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
         }
         a { text-decoration: none; color: #667eea; font-weight: 500; }
         a:hover { text-decoration: underline; }
-        .delete-btn, .rename-btn { 
-            background-color: #dc3545; 
+        .delete-btn, .rename-btn, .extract-btn, .gallery-btn { 
             color: white; 
             border: none; 
             padding: 0.5em 1em; 
-            margin-left: 10px; 
             border-radius: 4px; 
             cursor: pointer;
             font-size: 0.9em;
+            text-decoration: none;
+            display: inline-block;
         }
+        .delete-btn { background-color: #dc3545; }
         .rename-btn { background-color: #ffc107; color: black; }
+        .extract-btn { background-color: #28a745; }
+        .gallery-btn { background-color: #17a2b8; }
         .compress-toggle { 
             margin-top: 1em;
             background: #28a745;
+        }
+        .select-all {
+            margin-bottom: 10px;
+            background: #6c757d;
         }
         
         .file-list {
@@ -224,6 +243,13 @@ MAIN_TEMPLATE = """
             input.style.display = input.style.display === "none" ? "inline" : "none";
             btn.style.display = btn.style.display === "none" ? "inline" : "none";
         }
+        
+        function selectAllFiles(selectAll) {
+            const checkboxes = document.querySelectorAll('input[name="selected"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = selectAll;
+            });
+        }
     </script>
 </head>
 <body>
@@ -235,6 +261,9 @@ MAIN_TEMPLATE = """
             <a href="/" class="nav-btn">🏠 Inicio</a>
             <a href="/utils" class="nav-btn">🛠️ Utilidades</a>
             <a href="/downloads" class="nav-btn">📥 Descargas</a>
+            {% if has_images %}
+            <a href="/gallery?path={{ current_path }}" class="nav-btn">🖼️ Galería</a>
+            {% endif %}
         </div>
     </div>
     
@@ -251,6 +280,8 @@ MAIN_TEMPLATE = """
             <h2>🗜️ Comprimir archivos</h2>
             <button class="compress-toggle" onclick="toggleCompress()">Mostrar opciones de compresión</button>
             <div id="compress-section" style="display:none; margin-top: 1em;">
+                <button type="button" class="select-all" onclick="selectAllFiles(true)">Seleccionar todo</button>
+                <button type="button" class="select-all" onclick="selectAllFiles(false)">Deseleccionar todo</button>
                 <form action="/compress" method="post">
                     <input type="text" name="archive_name" placeholder="Nombre del archivo .7z" required>
                     <div class="file-list">
@@ -277,21 +308,34 @@ MAIN_TEMPLATE = """
             <ul>
             {% for item in items %}
                 <li>
-                    {% if item['is_dir'] %}
-                        📂 <a href="/browse?path={{ item['full_path'] }}">{{ item['name'] }}/</a>
-                    {% else %}
-                        📄 <a href="/download?path={{ item['full_path'] }}">{{ item['name'] }}</a> — {{ item['size_mb'] }} MB
-                    {% endif %}
-                    <form action="/delete" method="post" style="display:inline;">
-                        <input type="hidden" name="path" value="{{ item['full_path'] }}">
-                        <button class="delete-btn" onclick="return confirm('¿Eliminar {{ item['name'] }}?')">Eliminar</button>
-                    </form>
-                    <button class="rename-btn" onclick="toggleRename('{{ loop.index }}')">✏️ Renombrar</button>
-                    <form action="/rename" method="post" style="display:inline;">
-                        <input type="hidden" name="old_path" value="{{ item['full_path'] }}">
-                        <input type="text" name="new_name" id="rename-{{ loop.index }}" style="display:none; width: 200px;" placeholder="Nuevo nombre">
-                        <button type="submit" style="display:none;" id="rename-{{ loop.index }}-btn">✅</button>
-                    </form>
+                    <div class="file-info">
+                        {% if item['is_dir'] %}
+                            📂 <a href="/browse?path={{ item['full_path'] }}">{{ item['name'] }}/</a>
+                        {% else %}
+                            📄 <a href="/download?path={{ item['full_path'] }}">{{ item['name'] }}</a> — {{ item['size_mb'] }} MB
+                        {% endif %}
+                    </div>
+                    <div class="file-actions">
+                        <form action="/delete" method="post" style="display:inline;">
+                            <input type="hidden" name="path" value="{{ item['full_path'] }}">
+                            <button class="delete-btn" onclick="return confirm('¿Eliminar {{ item['name'] }}?')">Eliminar</button>
+                        </form>
+                        <button class="rename-btn" onclick="toggleRename('{{ loop.index }}')">✏️ Renombrar</button>
+                        {% if item['name'].lower().endswith('.7z') or item['name'].lower().endswith('.cbz') or item['name'].lower().endswith('.zip') %}
+                        <form action="/extract" method="post" style="display:inline;">
+                            <input type="hidden" name="path" value="{{ item['full_path'] }}">
+                            <button class="extract-btn" onclick="return confirm('¿Descomprimir {{ item['name'] }}?')">📦 Descomprimir</button>
+                        </form>
+                        {% endif %}
+                        {% if item['name'].lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff')) %}
+                        <a href="/download?path={{ item['full_path'] }}" class="gallery-btn" target="_blank">🖼️ Ver</a>
+                        {% endif %}
+                        <form action="/rename" method="post" style="display:inline;">
+                            <input type="hidden" name="old_path" value="{{ item['full_path'] }}">
+                            <input type="text" name="new_name" id="rename-{{ loop.index }}" style="display:none; width: 200px;" placeholder="Nuevo nombre">
+                            <button type="submit" style="display:none;" id="rename-{{ loop.index }}-btn">✅</button>
+                        </form>
+                    </div>
                 </li>
             {% endfor %}
             </ul>
@@ -300,7 +344,6 @@ MAIN_TEMPLATE = """
 </body>
 </html>
 """
-
 UTILS_TEMPLATE = """
 <!doctype html>
 <html>
@@ -788,3 +831,153 @@ DOWNLOADS_TEMPLATE = """
 </body>
 </html>
 """
+
+GALLERY_TEMPLATE = """
+        <!doctype html>
+        <html>
+        <head>
+            <title>Galería de Imágenes</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                body { 
+                    font-family: Arial; 
+                    margin: 0; 
+                    padding: 0; 
+                    background-color: #f0f0f0;
+                }
+                .header { 
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white; 
+                    padding: 1em; 
+                    text-align: center; 
+                    position: sticky;
+                    top: 0;
+                    z-index: 100;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                }
+                .header a { 
+                    color: white; 
+                    text-decoration: none;
+                    font-weight: bold;
+                    margin: 0 10px;
+                    padding: 5px 10px;
+                    border-radius: 4px;
+                    background: rgba(255,255,255,0.2);
+                }
+                .header a:hover { 
+                    background: rgba(255,255,255,0.3);
+                }
+                .gallery-container {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+                    gap: 15px;
+                    padding: 20px;
+                }
+                .gallery-item {
+                    position: relative;
+                    overflow: hidden;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                    transition: transform 0.3s;
+                    background: white;
+                }
+                .gallery-item:hover {
+                    transform: scale(1.03);
+                    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+                }
+                .gallery-item img {
+                    width: 100%;
+                    height: 200px;
+                    object-fit: cover;
+                    display: block;
+                }
+                .gallery-item .caption {
+                    padding: 10px;
+                    text-align: center;
+                    font-size: 0.9em;
+                    color: #333;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+                .back-button {
+                    display: inline-block;
+                    margin: 10px 20px;
+                    padding: 8px 15px;
+                    background: #667eea;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 4px;
+                }
+                .fullscreen {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0,0,0,0.9);
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    z-index: 1000;
+                    cursor: pointer;
+                }
+                .fullscreen img {
+                    max-width: 90%;
+                    max-height: 90%;
+                    object-fit: contain;
+                }
+                .nav-buttons {
+                    display: flex;
+                    justify-content: center;
+                    gap: 10px;
+                    margin: 10px 0;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <a href="/">🏠 Inicio</a>
+                <a href="/utils">🛠️ Utilidades</a>
+                <a href="/downloads">📥 Descargas</a>
+                <a href="/browse?path={{ requested_path }}">📂 Volver al explorador</a>
+            </div>
+
+            <div class="nav-buttons">
+                <a href="?path={{ requested_path }}&view=grid" class="nav-btn">🖼️ Vista Cuadrícula</a>
+                <a href="?path={{ requested_path }}&view=slideshow" class="nav-btn">🎬 Vista Presentación</a>
+            </div>
+
+            <div class="gallery-container">
+                {% for image in image_files %}
+                <div class="gallery-item" onclick="openFullscreen('{{ image.url_path }}')">
+                    <img src="{{ image.url_path }}" alt="{{ image.name }}">
+                    <div class="caption">{{ image.name }}</div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div id="fullscreen-view" class="fullscreen" style="display:none;" onclick="closeFullscreen()">
+                <img id="fullscreen-img" src="">
+            </div>
+
+            <script>
+                function openFullscreen(src) {
+                    document.getElementById('fullscreen-img').src = src;
+                    document.getElementById('fullscreen-view').style.display = 'flex';
+                    document.body.style.overflow = 'hidden';
+                }
+                
+                function closeFullscreen() {
+                    document.getElementById('fullscreen-view').style.display = 'none';
+                    document.body.style.overflow = 'auto';
+                }
+                
+                // Cerrar con ESC
+                document.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape') closeFullscreen();
+                });
+            </script>
+        </body>
+        </html>
+        """

@@ -18,3 +18,4 @@ selenium
 libtorrent==2.0.11
 pytz
 cloudscraper
+yt_dlp
