@@ -37,6 +37,8 @@ def login_required(f):
 
 def validate_path(input_path):
     """Valida que una ruta esté dentro del directorio base permitido"""
+    if not input_path:
+        return False
     abs_base = os.path.abspath(BASE_DIR)
     abs_path = os.path.abspath(input_path)
     return abs_path.startswith(abs_base)
@@ -102,7 +104,7 @@ def browse():
             items.append({
                 "name": name,
                 "rel_path": rel_item_path,
-                "full_path": full_path,  # Asegurar que full_path esté disponible
+                "full_path": full_path,
                 "is_dir": is_dir,
                 "size_mb": size_mb
             })
@@ -366,7 +368,7 @@ def delete_file():
         else:
             return "<h3>❌ Elemento no válido para eliminar.</h3>", 400
             
-        return redirect("/")
+        return redirect(request.referrer or "/")
     except Exception as e:
         return f"<h3>Error al eliminar: {e}</h3>", 500
 
@@ -379,10 +381,12 @@ def compress_items():
     if not archive_name or not selected:
         return "<h3>❌ Debes proporcionar un nombre y seleccionar archivos.</h3>", 400
 
+    # Filtrar elementos vacíos
     selected = [path for path in selected if path.strip()]
     if not selected:
         return "<h3>❌ No se seleccionaron archivos válidos.</h3>", 400
 
+    # Validar que todas las rutas estén dentro del directorio base
     for path in selected:
         if not validate_path(path):
             return "<h3>❌ Ruta no válida detectada.</h3>", 400
@@ -402,6 +406,7 @@ def compress_items():
         if result.returncode != 0:
             return f"<h3>❌ Error al comprimir: {result.stderr}</h3>", 500
 
+        # Eliminar archivos originales después de comprimir exitosamente
         for path in selected:
             if os.path.exists(path):
                 if os.path.isfile(path):
@@ -409,7 +414,7 @@ def compress_items():
                 elif os.path.isdir(path):
                     shutil.rmtree(path)
 
-        return redirect("/")
+        return redirect(request.referrer or "/")
     except Exception as e:
         return f"<h3>❌ Error al comprimir: {e}</h3>", 500
 
@@ -453,7 +458,7 @@ def extract_archive():
         else:
             return "<h3>❌ Formato de archivo no compatible para descompresión.</h3>", 400
         
-        return redirect("/")
+        return redirect(request.referrer or "/")
     except Exception as e:
         return f"<h3>Error al descomprimir archivo: {e}</h3>", 500
 
@@ -466,17 +471,19 @@ def rename_item():
     if not old_path or not new_name:
         return "<h3>❌ Datos inválidos para renombrar.</h3>", 400
     
+    # Validar que la ruta antigua esté dentro del directorio base
     if not validate_path(old_path):
         return "<h3>❌ Ruta no válida.</h3>", 400
     
     try:
         new_path = os.path.join(os.path.dirname(old_path), new_name)
         
+        # Validar que la nueva ruta también esté dentro del directorio base
         if not validate_path(new_path):
             return "<h3>❌ El nuevo nombre crea una ruta no válida.</h3>", 400
             
         os.rename(old_path, new_path)
-        return redirect("/")
+        return redirect(request.referrer or "/")
     except Exception as e:
         return f"<h3>Error al renombrar: {e}</h3>", 500
 
