@@ -575,6 +575,7 @@ DOWNLOADS_TEMPLATE = """
 </body>
 </html>
 """
+
 MAIN_TEMPLATE = """
 <!doctype html>
 <html>
@@ -832,6 +833,7 @@ MAIN_TEMPLATE = """
 </body>
 </html>
 """
+   
 GALLERY_TEMPLATE = """
 <!doctype html>
 <html>
