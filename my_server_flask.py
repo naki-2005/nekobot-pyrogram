@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 import subprocess
-from flask import Flask, request, send_from_directory, render_template_string, redirect, session, jsonify, url_for
+from flask import Flask, request, send_from_directory, render_template_string, redirect, session, jsonify, url_for, abort
 from threading import Thread, Lock
 from command.torrets_tools import download_from_magnet, get_download_progress, cleanup_old_downloads
 from command.htools import crear_cbz_desde_fuente
@@ -35,6 +35,28 @@ def login_required(f):
     wrapper.__name__ = f.__name__
     return wrapper
 
+@explorer.route("/", defaults={"path": ""})
+@explorer.route("/<path:path>")
+def serve_root(path):
+    abs_path = os.path.abspath(os.path.join(BASE_DIR, path))
+    abs_base = os.path.abspath(BASE_DIR)
+    
+    if not abs_path.startswith(abs_base):
+        abort(404)
+    
+    if os.path.isfile(abs_path):
+        return send_from_directory(
+            os.path.dirname(abs_path), 
+            os.path.basename(abs_path), 
+            as_attachment=False
+        )
+    if os.path.isdir(abs_path):
+        rel_path = os.path.relpath(abs_path, abs_base)
+        if rel_path == ".":
+            rel_path = ""
+        return redirect(url_for("browse", path=rel_path))
+    abort(404)
+
 @explorer.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -53,7 +75,6 @@ def login():
 
     return render_template_string(LOGIN_TEMPLATE)
 
-@explorer.route("/")
 @explorer.route("/browse")
 @login_required
 def browse():
@@ -116,8 +137,7 @@ def gallery():
             if os.path.isfile(full_path) and any(name.lower().endswith(ext) for ext in image_extensions):
                 image_files.append({
                     "name": name,
-                    "full_path": full_path,
-                    "url_path": f"/download?path={os.path.relpath(full_path, abs_base)}"
+                    "url_path": f"/{os.path.relpath(full_path, abs_base)}"
                 })
         
         current_rel_path = os.path.relpath(abs_requested, abs_base)
@@ -193,7 +213,6 @@ def download():
             as_attachment=True
         )
 
-@explorer.route("/crear_cbz", methods=["POST"])
 def crear_cbz():
     codigo_input = request.form.get("codigo", "").strip()
     tipo = request.form.get("tipo", "").strip()
