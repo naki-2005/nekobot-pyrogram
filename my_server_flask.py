@@ -342,6 +342,17 @@ def validate_path(input_path):
     return abs_path.startswith(abs_base)
 
 
+@explorer.route("/delete", methods=["POST"])
+@login_required
+def delete_file():
+    path = request.form.get("path")
+    if not path or not os.path.isfile(path):
+        return "<h3>❌ Archivo no válido para eliminar.</h3>", 400
+    try:
+        os.remove(path)
+        return redirect("/")
+    except Exception as e:
+        return f"<h3>Error al eliminar archivo: {e}</h3>", 500
 @explorer.route("/compress", methods=["POST"])
 @login_required
 def compress_items():
