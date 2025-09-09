@@ -35,6 +35,12 @@ def login_required(f):
     wrapper.__name__ = f.__name__
     return wrapper
 
+def validate_path(input_path):
+    """Valida que una ruta esté dentro del directorio base permitido"""
+    abs_base = os.path.abspath(BASE_DIR)
+    abs_path = os.path.abspath(input_path)
+    return abs_path.startswith(abs_base)
+
 @explorer.route("/", defaults={"path": ""})
 @explorer.route("/<path:path>")
 def serve_root(path):
@@ -96,6 +102,7 @@ def browse():
             items.append({
                 "name": name,
                 "rel_path": rel_item_path,
+                "full_path": full_path,  # Asegurar que full_path esté disponible
                 "is_dir": is_dir,
                 "size_mb": size_mb
             })
@@ -213,6 +220,7 @@ def download():
             as_attachment=True
         )
 
+@explorer.route("/crear_cbz", methods=["POST"])
 def crear_cbz():
     codigo_input = request.form.get("codigo", "").strip()
     tipo = request.form.get("tipo", "").strip()
@@ -336,11 +344,6 @@ def handle_magnet():
     except Exception as e:
         return f"<h3>Error al iniciar descarga: {e}</h3>", 500
 
-def validate_path(input_path):
-    abs_base = os.path.abspath(BASE_DIR)
-    abs_path = os.path.abspath(input_path)
-    return abs_path.startswith(abs_base)
-
 @explorer.route("/delete", methods=["POST"])
 @login_required
 def delete_file():
@@ -348,6 +351,7 @@ def delete_file():
     
     if not path:
         return "<h3>❌ Archivo no especificado.</h3>", 400
+        
     if not validate_path(path):
         return "<h3>❌ Ruta no válida.</h3>", 400
         
@@ -365,7 +369,7 @@ def delete_file():
         return redirect("/")
     except Exception as e:
         return f"<h3>Error al eliminar: {e}</h3>", 500
-        
+
 @explorer.route("/compress", methods=["POST"])
 @login_required
 def compress_items():
@@ -378,6 +382,7 @@ def compress_items():
     selected = [path for path in selected if path.strip()]
     if not selected:
         return "<h3>❌ No se seleccionaron archivos válidos.</h3>", 400
+
     for path in selected:
         if not validate_path(path):
             return "<h3>❌ Ruta no válida detectada.</h3>", 400
@@ -396,6 +401,7 @@ def compress_items():
         
         if result.returncode != 0:
             return f"<h3>❌ Error al comprimir: {result.stderr}</h3>", 500
+
         for path in selected:
             if os.path.exists(path):
                 if os.path.isfile(path):
@@ -414,6 +420,7 @@ def extract_archive():
     
     if not archive_path or not os.path.isfile(archive_path):
         return "<h3>❌ Archivo no válido para descomprimir.</h3>", 400
+    
     if not validate_path(archive_path):
         return "<h3>❌ Ruta no válida.</h3>", 400
     
@@ -458,11 +465,13 @@ def rename_item():
     
     if not old_path or not new_name:
         return "<h3>❌ Datos inválidos para renombrar.</h3>", 400
+    
     if not validate_path(old_path):
         return "<h3>❌ Ruta no válida.</h3>", 400
     
     try:
         new_path = os.path.join(os.path.dirname(old_path), new_name)
+        
         if not validate_path(new_path):
             return "<h3>❌ El nuevo nombre crea una ruta no válida.</h3>", 400
             
@@ -470,6 +479,6 @@ def rename_item():
         return redirect("/")
     except Exception as e:
         return f"<h3>Error al renombrar: {e}</h3>", 500
-        
+
 def run_flask():
     explorer.run(host="0.0.0.0", port=10000)
