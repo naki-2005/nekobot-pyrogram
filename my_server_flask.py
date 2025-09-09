@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 import subprocess
-from flask import Flask, request, send_from_directory, render_template_string, redirect, session, jsonify
+from flask import Flask, request, send_from_directory, render_template_string, redirect, session, jsonify, url_for, abort
 from threading import Thread, Lock
 from command.torrets_tools import download_from_magnet, get_download_progress, cleanup_old_downloads
 from command.htools import crear_cbz_desde_fuente
@@ -35,6 +35,28 @@ def login_required(f):
     wrapper.__name__ = f.__name__
     return wrapper
 
+@explorer.route("/", defaults={"path": ""})
+@explorer.route("/<path:path>")
+def serve_root(path):
+    abs_path = os.path.abspath(os.path.join(BASE_DIR, path))
+    abs_base = os.path.abspath(BASE_DIR)
+    
+    if not abs_path.startswith(abs_base):
+        abort(404)
+    
+    if os.path.isfile(abs_path):
+        return send_from_directory(
+            os.path.dirname(abs_path), 
+            os.path.basename(abs_path), 
+            as_attachment=False
+        )
+    if os.path.isdir(abs_path):
+        rel_path = os.path.relpath(abs_path, abs_base)
+        if rel_path == ".":
+            rel_path = ""
+        return redirect(url_for("browse", path=rel_path))
+    abort(404)
+
 @explorer.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -53,13 +75,12 @@ def login():
 
     return render_template_string(LOGIN_TEMPLATE)
 
-@explorer.route("/")
 @explorer.route("/browse")
 @login_required
 def browse():
-    requested_path = request.args.get("path", BASE_DIR)
+    rel_path = request.args.get("path", "")
+    abs_requested = os.path.abspath(os.path.join(BASE_DIR, rel_path))
     abs_base = os.path.abspath(BASE_DIR)
-    abs_requested = os.path.abspath(requested_path)
 
     if not abs_requested.startswith(abs_base):
         return "<h3>❌ Acceso denegado: ruta fuera de 'vault_files'.</h3>", 403
@@ -70,9 +91,11 @@ def browse():
             full_path = os.path.join(abs_requested, name)
             is_dir = os.path.isdir(full_path)
             size_mb = round(os.path.getsize(full_path) / (1024 * 1024), 2) if not is_dir else "-"
+            
+            rel_item_path = os.path.relpath(full_path, abs_base)
             items.append({
                 "name": name,
-                "full_path": full_path,
+                "rel_path": rel_item_path,
                 "is_dir": is_dir,
                 "size_mb": size_mb
             })
@@ -84,22 +107,28 @@ def browse():
             for name in os.listdir(abs_requested)
         )
         
-        return render_template_string(MAIN_TEMPLATE, items=items, has_images=has_images, current_path=requested_path)
+        current_rel_path = os.path.relpath(abs_requested, abs_base)
+        if current_rel_path == ".":
+            current_rel_path = ""
+            
+        return render_template_string(MAIN_TEMPLATE, 
+                                    items=items, 
+                                    has_images=has_images, 
+                                    current_path=current_rel_path)
     except Exception as e:
         return f"<h3>Error al acceder a los archivos: {e}</h3>", 500
 
 @explorer.route("/gallery")
 @login_required
 def gallery():
-    requested_path = request.args.get("path", BASE_DIR)
+    rel_path = request.args.get("path", "")
+    abs_requested = os.path.abspath(os.path.join(BASE_DIR, rel_path))
     abs_base = os.path.abspath(BASE_DIR)
-    abs_requested = os.path.abspath(requested_path)
 
     if not abs_requested.startswith(abs_base):
         return "<h3>❌ Acceso denegado: ruta fuera de 'vault_files'.</h3>", 403
 
     try:
-        # Obtener solo archivos de imagen
         image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff'}
         image_files = []
         
@@ -108,13 +137,16 @@ def gallery():
             if os.path.isfile(full_path) and any(name.lower().endswith(ext) for ext in image_extensions):
                 image_files.append({
                     "name": name,
-                    "full_path": full_path,
-                    "url_path": f"/download?path={full_path}"
+                    "url_path": f"/{os.path.relpath(full_path, abs_base)}"
                 })
         
+        current_rel_path = os.path.relpath(abs_requested, abs_base)
+        if current_rel_path == ".":
+            current_rel_path = ""
+            
         return render_template_string(GALLERY_TEMPLATE, 
                                     image_files=image_files, 
-                                    requested_path=requested_path)
+                                    current_path=current_rel_path)
     except Exception as e:
         return f"<h3>Error al acceder a la galería: {e}</h3>", 500
 
@@ -154,27 +186,33 @@ def api_downloads():
 
 @explorer.route("/download")
 def download():
-    path = request.args.get("path")
-    if os.path.isfile(path):
-        if 'Range' in request.headers:
-            range_header = request.headers.get('Range')
-            range_start = int(range_header.split('=')[1].split('-')[0])
-            return send_from_directory(
-                os.path.dirname(path), 
-                os.path.basename(path), 
-                as_attachment=True,
-                conditional=True,
-                download_name=os.path.basename(path)
-            )
-        else:
-            return send_from_directory(
-                os.path.dirname(path), 
-                os.path.basename(path), 
-                as_attachment=True
-            )
-    return "<h3>Archivo no válido para descarga.</h3>"
+    rel_path = request.args.get("path")
+    if not rel_path:
+        return "<h3>Archivo no especificado.</h3>", 400
+        
+    abs_path = os.path.abspath(os.path.join(BASE_DIR, rel_path))
+    abs_base = os.path.abspath(BASE_DIR)
+    
+    if not abs_path.startswith(abs_base) or not os.path.isfile(abs_path):
+        return "<h3>Archivo no válido para descarga.</h3>", 400
+        
+    if 'Range' in request.headers:
+        range_header = request.headers.get('Range')
+        range_start = int(range_header.split('=')[1].split('-')[0])
+        return send_from_directory(
+            os.path.dirname(abs_path), 
+            os.path.basename(abs_path), 
+            as_attachment=True,
+            conditional=True,
+            download_name=os.path.basename(abs_path)
+        )
+    else:
+        return send_from_directory(
+            os.path.dirname(abs_path), 
+            os.path.basename(abs_path), 
+            as_attachment=True
+        )
 
-@explorer.route("/crear_cbz", methods=["POST"])
 def crear_cbz():
     codigo_input = request.form.get("codigo", "").strip()
     tipo = request.form.get("tipo", "").strip()

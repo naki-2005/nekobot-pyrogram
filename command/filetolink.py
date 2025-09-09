@@ -57,9 +57,13 @@ async def clear_vault_files(client: Client, message: Message):
         await message.reply(f"❌ Error al borrar: {e}")
 
 async def handle_up_command(client: Client, message: Message):
+    from arg_parser import get_args
+    args = get_args()
+
     if not message.reply_to_message or not message.reply_to_message.media:
         await message.reply("❌ Este comando debe responder a un archivo.")
         return
+
     fname, fid, size_mb = get_info(message.reply_to_message)
     parts = message.text.strip().split(maxsplit=1)
     raw_path = parts[1].strip() if len(parts) == 2 else fname or "archivo"
@@ -67,8 +71,14 @@ async def handle_up_command(client: Client, message: Message):
     relative_path = os.path.join(*safe_parts)
     full_path = os.path.join(VAULT_FOLDER, relative_path)
     os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
     await client.download_media(message.reply_to_message, full_path)
-    await message.reply(f"✅ Archivo guardado como `{relative_path}` en `{VAULT_FOLDER}`.")
+
+    if args.web:
+        download_link = f"{args.web.rstrip('/')}/{relative_path.replace(os.sep, '/')}"
+        await message.reply(f"🔗 Link de descarga: {download_link}")
+    else:
+        await message.reply(f"✅ Archivo guardado como `{relative_path}` en `{VAULT_FOLDER}`.")
 
 async def list_vault_files(client: Client, message: Message):
     if not os.path.isdir(VAULT_FOLDER):

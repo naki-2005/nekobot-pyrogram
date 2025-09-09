@@ -32,6 +32,10 @@ if [ -n "$OWNER" ]; then
   CMD="$CMD -owner \"$OWNER\""
 fi
 
+if [ -n "$WEB_LINK" ]; then
+  CMD="$CMD -w \"$WEB_LINK\""
+fi
+
 if [ -n "$TOKEN" ]; then
   CMD="$CMD -t \"$TOKEN\""
 else
