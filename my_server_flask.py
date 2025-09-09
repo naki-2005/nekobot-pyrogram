@@ -336,39 +336,27 @@ def handle_magnet():
     except Exception as e:
         return f"<h3>Error al iniciar descarga: {e}</h3>", 500
 
-@explorer.route("/delete", methods=["POST"])
-@login_required
-def delete_file():
-    path = request.form.get("path")
-    if not path or not os.path.isfile(path):
-        return "<h3>❌ Archivo no válido para eliminar.</h3>", 400
-    try:
-        os.remove(path)
-        return redirect("/")
-    except Exception as e:
-        return f"<h3>Error al eliminar archivo: {e}</h3>", 500
+def validate_path(input_path):
+    abs_base = os.path.abspath(BASE_DIR)
+    abs_path = os.path.abspath(input_path)
+    return abs_path.startswith(abs_base)
 
-@explorer.route("/rename", methods=["POST"])
-@login_required
-def rename_item():
-    old_path = request.form.get("old_path")
-    new_name = request.form.get("new_name")
-    if not old_path or not new_name:
-        return "<h3>❌ Datos inválidos para renombrar.</h3>", 400
-    try:
-        new_path = os.path.join(os.path.dirname(old_path), new_name)
-        os.rename(old_path, new_path)
-        return redirect("/")
-    except Exception as e:
-        return f"<h3>Error al renombrar: {e}</h3>", 500
 
 @explorer.route("/compress", methods=["POST"])
 @login_required
 def compress_items():
     archive_name = request.form.get("archive_name", "").strip()
     selected = request.form.getlist("selected")
+    
     if not archive_name or not selected:
         return "<h3>❌ Debes proporcionar un nombre y seleccionar archivos.</h3>", 400
+
+    selected = [path for path in selected if path.strip()]
+    if not selected:
+        return "<h3>❌ No se seleccionaron archivos válidos.</h3>", 400
+    for path in selected:
+        if not validate_path(path):
+            return "<h3>❌ Ruta no válida detectada.</h3>", 400
 
     archive_path = os.path.join(BASE_DIR, f"{archive_name}.7z")
     try:
@@ -379,14 +367,16 @@ def compress_items():
             '-v2000m',
             archive_path
         ] + selected
-        subprocess.run(cmd_args, check=True)
-
+        
+        result = subprocess.run(cmd_args, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            return f"<h3>❌ Error al comprimir: {result.stderr}</h3>", 500
         for path in selected:
             if os.path.exists(path):
                 if os.path.isfile(path):
                     os.remove(path)
                 elif os.path.isdir(path):
-                    import shutil
                     shutil.rmtree(path)
 
         return redirect("/")
@@ -397,8 +387,11 @@ def compress_items():
 @login_required
 def extract_archive():
     archive_path = request.form.get("path")
+    
     if not archive_path or not os.path.isfile(archive_path):
         return "<h3>❌ Archivo no válido para descomprimir.</h3>", 400
+    if not validate_path(archive_path):
+        return "<h3>❌ Ruta no válida.</h3>", 400
     
     try:
         extract_dir = os.path.splitext(archive_path)[0]
@@ -433,5 +426,26 @@ def extract_archive():
     except Exception as e:
         return f"<h3>Error al descomprimir archivo: {e}</h3>", 500
 
+@explorer.route("/rename", methods=["POST"])
+@login_required
+def rename_item():
+    old_path = request.form.get("old_path")
+    new_name = request.form.get("new_name")
+    
+    if not old_path or not new_name:
+        return "<h3>❌ Datos inválidos para renombrar.</h3>", 400
+    if not validate_path(old_path):
+        return "<h3>❌ Ruta no válida.</h3>", 400
+    
+    try:
+        new_path = os.path.join(os.path.dirname(old_path), new_name)
+        if not validate_path(new_path):
+            return "<h3>❌ El nuevo nombre crea una ruta no válida.</h3>", 400
+            
+        os.rename(old_path, new_path)
+        return redirect("/")
+    except Exception as e:
+        return f"<h3>Error al renombrar: {e}</h3>", 500
+        
 def run_flask():
     explorer.run(host="0.0.0.0", port=10000)
