@@ -575,6 +575,7 @@ DOWNLOADS_TEMPLATE = """
 </body>
 </html>
 """
+
 MAIN_TEMPLATE = """
 <!doctype html>
 <html>
@@ -738,6 +739,14 @@ MAIN_TEMPLATE = """
                 checkbox.checked = selectAll;
             });
         }
+        
+        // Función para enviar formularios de forma segura
+        function submitForm(form, event) {
+            event.preventDefault();
+            if (confirm('¿Estás seguro de que quieres realizar esta acción?')) {
+                form.submit();
+            }
+        }
     </script>
 </head>
 <body>
@@ -806,13 +815,13 @@ MAIN_TEMPLATE = """
                     <div class="file-actions">
                         <form action="/delete" method="post" style="display:inline;">
                             <input type="hidden" name="path" value="{{ item['full_path'] }}">
-                            <button class="delete-btn" onclick="return confirm('¿Eliminar {{ item['name'] }}?')">Eliminar</button>
+                            <button type="submit" class="delete-btn" onclick="return confirm('¿Eliminar {{ item['name'] }}?')">Eliminar</button>
                         </form>
                         <button class="rename-btn" onclick="toggleRename('{{ loop.index }}')">✏️ Renombrar</button>
                         {% if item['name'].lower().endswith('.7z') or item['name'].lower().endswith('.cbz') or item['name'].lower().endswith('.zip') %}
                         <form action="/extract" method="post" style="display:inline;">
                             <input type="hidden" name="path" value="{{ item['full_path'] }}">
-                            <button class="extract-btn" onclick="return confirm('¿Descomprimir {{ item['name'] }}?')">📦 Descomprimir</button>
+                            <button type="submit" class="extract-btn" onclick="return confirm('¿Descomprimir {{ item['name'] }}?')">📦 Descomprimir</button>
                         </form>
                         {% endif %}
                         {% if item['name'].lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff')) %}
@@ -832,6 +841,7 @@ MAIN_TEMPLATE = """
 </body>
 </html>
 """
+   
 GALLERY_TEMPLATE = """
 <!doctype html>
 <html>
