@@ -83,14 +83,14 @@ async def handle_message(client, message):
                 raise 
 
     global bot_is_sleeping, start_sleep_time, sleep_duration
-    if message.from_user and message.from_user.is_anonymous:
+    is_anonymous = message.sender_chat is not None and message.from_user is None
+    
+    if is_anonymous:
         user_id = message.sender_chat.id
         username = message.sender_chat.title if message.sender_chat else "Anonymous Admin"
-        is_anonymous = True
     else:
         user_id = message.from_user.id if message.from_user else None
         username = message.from_user.username if message.from_user else ""
-        is_anonymous = False
     
     chat_id = message.chat.id if message.chat else ""
 
