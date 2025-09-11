@@ -30,22 +30,67 @@ doujin_lock = Lock()
 def login_required(f):
     def wrapper(*args, **kwargs):
         if not session.get("logged_in"):
+            u = request.args.get("u", "").strip()
+            p = request.args.get("p", "").strip()
+            
+            if u and p:
+                try:
+                    with open(WEBACCESS_FILE, "r", encoding="utf-8") as f:
+                        users = json.load(f)
+                except:
+                    users = {}
+                
+                for uid, creds in users.items():
+                    if creds.get("user") == u and creds.get("pass") == p:
+                        session["logged_in"] = True
+                        current_path = request.path
+                        query_params = request.args.to_dict()
+                        query_params.pop('u', None)
+                        query_params.pop('p', None)
+                        
+                        if query_params:
+                            new_url = f"{current_path}?{'&'.join([f'{k}={v}' for k, v in query_params.items()])}"
+                        else:
+                            new_url = current_path
+                            
+                        return redirect(new_url)
+            
             return redirect("/login")
         return f(*args, **kwargs)
     wrapper.__name__ = f.__name__
     return wrapper
 
 def validate_path(input_path):
-    """Valida que una ruta esté dentro del directorio base permitido"""
     if not input_path:
         return False
     abs_base = os.path.abspath(BASE_DIR)
     abs_path = os.path.abspath(input_path)
     return abs_path.startswith(abs_base)
 
+def try_auto_login():
+    """Intenta hacer login automático desde parámetros de URL"""
+    if not session.get("logged_in"):
+        u = request.args.get("u", "").strip()
+        p = request.args.get("p", "").strip()
+        
+        if u and p:
+            try:
+                with open(WEBACCESS_FILE, "r", encoding="utf-8") as f:
+                    users = json.load(f)
+            except:
+                users = {}
+            
+            for uid, creds in users.items():
+                if creds.get("user") == u and creds.get("pass") == p:
+                    session["logged_in"] = True
+                    return True
+    return False
+
 @explorer.route("/", defaults={"path": ""})
 @explorer.route("/<path:path>")
 def serve_root(path):
+    try_auto_login()
+    
     abs_path = os.path.abspath(os.path.join(BASE_DIR, path))
     abs_base = os.path.abspath(BASE_DIR)
     
@@ -67,6 +112,9 @@ def serve_root(path):
 
 @explorer.route("/login", methods=["GET", "POST"])
 def login():
+    if session.get("logged_in"):
+        return redirect("/")
+        
     if request.method == "POST":
         u = request.form.get("username", "").strip()
         p = request.form.get("password", "").strip()
@@ -195,6 +243,9 @@ def api_downloads():
 
 @explorer.route("/download")
 def download():
+    # Intentar autologin si hay parámetros en la URL
+    try_auto_login()
+    
     rel_path = request.args.get("path")
     if not rel_path:
         return "<h3>Archivo no especificado.</h3>", 400
@@ -223,6 +274,7 @@ def download():
         )
 
 @explorer.route("/crear_cbz", methods=["POST"])
+@login_required
 def crear_cbz():
     codigo_input = request.form.get("codigo", "").strip()
     tipo = request.form.get("tipo", "").strip()
@@ -313,6 +365,7 @@ def crear_cbz():
     return response_msg
 
 @explorer.route("/upload", methods=["POST"])
+@login_required
 def upload_file():
     if not os.path.exists(BASE_DIR):
         os.makedirs(BASE_DIR)
@@ -325,6 +378,7 @@ def upload_file():
     return "Archivo inválido.", 400
 
 @explorer.route("/magnet", methods=["POST"])
+@login_required
 def handle_magnet():
     link = request.form.get("magnet", "").strip()
     if not link:
@@ -381,12 +435,10 @@ def compress_items():
     if not archive_name or not selected:
         return "<h3>❌ Debes proporcionar un nombre y seleccionar archivos.</h3>", 400
 
-    # Filtrar elementos vacíos
     selected = [path for path in selected if path.strip()]
     if not selected:
         return "<h3>❌ No se seleccionaron archivos válidos.</h3>", 400
 
-    # Validar que todas las rutas estén dentro del directorio base
     for path in selected:
         if not validate_path(path):
             return "<h3>❌ Ruta no válida detectada.</h3>", 400
@@ -406,7 +458,6 @@ def compress_items():
         if result.returncode != 0:
             return f"<h3>❌ Error al comprimir: {result.stderr}</h3>", 500
 
-        # Eliminar archivos originales después de comprimir exitosamente
         for path in selected:
             if os.path.exists(path):
                 if os.path.isfile(path):
@@ -470,15 +521,11 @@ def rename_item():
     
     if not old_path or not new_name:
         return "<h3>❌ Datos inválidos para renombrar.</h3>", 400
-    
-    # Validar que la ruta antigua esté dentro del directorio base
     if not validate_path(old_path):
         return "<h3>❌ Ruta no válida.</h3>", 400
     
     try:
         new_path = os.path.join(os.path.dirname(old_path), new_name)
-        
-        # Validar que la nueva ruta también esté dentro del directorio base
         if not validate_path(new_path):
             return "<h3>❌ El nuevo nombre crea una ruta no válida.</h3>", 400
             
@@ -486,6 +533,24 @@ def rename_item():
         return redirect(request.referrer or "/")
     except Exception as e:
         return f"<h3>Error al renombrar: {e}</h3>", 500
+
+@explorer.route("/<path:folder>")
+def folder_shortcut(folder):
+    try_auto_login()
+    
+    if not session.get("logged_in"):
+        return redirect("/login")
+    
+    abs_path = os.path.abspath(os.path.join(BASE_DIR, folder))
+    abs_base = os.path.abspath(BASE_DIR)
+    
+    if not abs_path.startswith(abs_base):
+        abort(404)
+    
+    if os.path.isdir(abs_path):
+        return redirect(url_for("browse", path=folder))
+    else:
+        abort(404)
 
 def run_flask():
     explorer.run(host="0.0.0.0", port=10000)
