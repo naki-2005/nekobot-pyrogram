@@ -36,6 +36,7 @@ else:
 bot_is_sleeping = False
 sleep_duration = 0
 start_sleep_time = 0
+flask_thread = None
 
 def is_bot_public() -> bool:
     ruta_db = os.path.join(os.getcwd(), 'bot_cmd.db')
@@ -68,9 +69,21 @@ def format_time(seconds):
     if seconds: result.append(f"{seconds} segundo" if seconds == 1 else f"{seconds} segundos")
     return ", ".join(result)
 
+def restart_flask():
+    global flask_thread
+    if flask_thread and flask_thread.is_alive():
+        print("[INFO] Reiniciando servidor Flask...")
+        flask_thread = threading.Thread(target=run_flask, daemon=True)
+        flask_thread.start()
+    else:
+        print("[INFO] Iniciando servidor Flask...")
+        flask_thread = threading.Thread(target=run_flask, daemon=True)
+        flask_thread.start()
+
 @app.on_message()
 async def handle_message(client, message):
-    global cmd_list_initialized
+    global cmd_list_initialized, bot_is_sleeping, start_sleep_time, sleep_duration
+
     if not cmd_list_initialized and args.bot_token is not None:
         try:
             await lista_cmd(app)
@@ -82,7 +95,6 @@ async def handle_message(client, message):
             else:
                 raise 
 
-    global bot_is_sleeping, start_sleep_time, sleep_duration
     is_anonymous = message.sender_chat is not None and message.from_user is None
     
     if is_anonymous:
@@ -111,11 +123,9 @@ async def handle_message(client, message):
     if int_lvl == 0:
         return
 
-    if not is_anonymous: 
-        if not is_bot_public():
-            if int_lvl < 2:
-                print(f"Acceso a {user_id} rechazado, Bot Public = {is_bot_public()}")
-                return
+    if not is_anonymous and not is_bot_public() and int_lvl < 2:
+        print(f"Acceso a {user_id} rechazado, Bot Public = {is_bot_public()}")
+        return
 
     if not is_anonymous and is_bot_public():
         if lvl is None or (lvl not in ["1", "2", "3", "4", "5", "6"] and int_lvl < 2):
@@ -153,6 +163,11 @@ async def handle_message(client, message):
             await message.reply("Por favor, proporciona un número válido en segundos.")
         return
 
+    if message.text and message.text.startswith("/flaskreset") and int_lvl >= 5:
+        restart_flask()
+        await message.reply("Servidor Flask reiniciado.")
+        return
+
     await process_command(client, message, user_id, username, chat_id, int_lvl)
 
 @app.on_callback_query()
@@ -162,10 +177,12 @@ async def callback_handler(client, callback_query):
 logging.basicConfig(level=logging.ERROR)
 
 async def main():
+    global flask_thread
     if args.owner:
         start_data()
     start_data_2()
-    threading.Thread(target=run_flask, daemon=True).start()
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
     await app.start()
     print("Bot iniciado y servidor Flask corriendo en puerto 5000.")
     await asyncio.Event().wait()
