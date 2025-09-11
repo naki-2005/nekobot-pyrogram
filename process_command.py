@@ -185,7 +185,8 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
                 return
 
             if command == "/searchnh" :
-                query = ' '.join(message.command[1:])
+                #query = ' '.join(message.command[1:])
+                query = arg_text
                 from command.get_files.scraper_nh import send_nhentai_results
                 await send_nhentai_results(message, client, query)
 
