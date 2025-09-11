@@ -3,6 +3,7 @@ from command.help import handle_help_callback
 from command.admintools import send_setting_editor, process_access_callback, guardar_parametro, get_accesscmd_buttons, get_main_buttons
 from command.db.db import subir_bot_config
 from command.mangatools import handle_manga_callback
+from command.torrets_tools import handle_nyaa_callback
 
 async def process_query(client, callback_query):
     data = callback_query.data
@@ -15,6 +16,8 @@ async def process_query(client, callback_query):
     help_related = [f"help_{x}" for x in [1, 2, 3, 4, 5]] + ["help_back"]
 
     manga_related = data.startswith("manga_") or data.startswith("chapter_") or data in ["first_page", "prev_page", "next_page", "last_page", "noop"]
+
+    nyaa_related = data.startswith("nyaa_")
 
     if data in mail_related:
         await mail_query(client, callback_query)
@@ -58,6 +61,9 @@ async def process_query(client, callback_query):
 
     elif manga_related:
         await handle_manga_callback(client, callback_query)
+
+    elif nyaa_related:
+        await handle_nyaa_callback(client, callback_query)
 
     else:
         await callback_query.answer("No se ha encontrado una respuesta Query correcta.", show_alert=True)
