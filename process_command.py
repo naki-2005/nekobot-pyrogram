@@ -78,7 +78,7 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
         from command.help import handle_help
         await asyncio.create_task(handle_help(client, message))
 
-    elif command in ("/magnet", "/nyaa"):
+    elif command in ("/magnet", "/nyaa", "/nyaa18"):
         if command == "/magnet":
             if cmd("torrent", int_lvl):
                 from command.torrets_tools import process_magnet_download_telegram
@@ -133,7 +133,17 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
                 search_query = parts[1]
                 from command.torrets_tools import search_in_nyaa
                 await search_in_nyaa(client, message, search_query)
-
+        elif command == "/nyaa18":
+            if cmd("torrent", int_lvl):
+                parts = text.strip().split(maxsplit=1)
+                if len(parts) < 2:
+                    await message.reply("❗ Debes proporcionar un término de búsqueda después de /nyaa18.")
+                    return
+                
+                search_query = parts[1]
+                from command.torrets_tools import search_in_sukebei
+                await search_in_sukebei(client, message, search_query)
+                
     elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt", "/dltxt", "/hito"):
         if cmd("htools", int_lvl):
             from command.htools import nh_combined_operation, nh_combined_operation_txt, cambiar_default_selection
