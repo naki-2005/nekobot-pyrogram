@@ -262,51 +262,69 @@ async def send_nhentai_results(message, client, query):
         except:
             await message.reply_text(f"❌ Error: {str(e)}")
 
+from pyrogram.types import InputMediaPhoto
+
 async def handle_nhentai_callback(callback_query, client, action, data):
-    """Maneja los callbacks de navegación"""
+    """Maneja los callbacks de navegación de nhentai"""
     try:
         await callback_query.answer("Cargando...")
         
-        parts = data.split('_')
-        
         if action == 'page':
-            page_num = int(parts[0])
-            query = '_'.join(parts[1:])
-            
-            await callback_query.message.edit_text("🔍 Cargando nueva página...")
+            page_num = int(data.split('_')[0])
+            query = '_'.join(data.split('_')[1:])
             await handle_page_change(callback_query, client, page_num, query)
             
         elif action == 'next':
+            parts = data.split('_')
             current_index = int(parts[0])
             current_page = int(parts[1])
             query = '_'.join(parts[2:])
             await handle_doujin_navigation(callback_query, client, current_index + 1, current_page, query)
             
         elif action == 'prev':
+            parts = data.split('_')
             current_index = int(parts[0])
             current_page = int(parts[1])
             query = '_'.join(parts[2:])
             await handle_doujin_navigation(callback_query, client, current_index - 1, current_page, query)
             
         elif action == 'first':
+            parts = data.split('_')
             current_page = int(parts[0])
             query = '_'.join(parts[1:])
             await handle_doujin_navigation(callback_query, client, 0, current_page, query)
             
         elif action == 'last':
+            parts = data.split('_')
             current_page = int(parts[0])
             query = '_'.join(parts[1:])
             await callback_query.message.edit_text("🔄 Cargando último resultado...")
             
         elif action == 'dl':
+            parts = data.split('_')
             current_index = int(parts[0])
             current_page = int(parts[1])
             query = '_'.join(parts[2:])
             await callback_query.message.edit_text("📥 Preparando descarga...")
             
     except Exception as e:
-        print(f"Error en callback: {e}")
+        print(f"Error en callback nhentai: {e}")
         await callback_query.answer("❌ Error procesando la solicitud")
+
+def parse_callback_data(data):
+    """Parsea los datos del callback de nhentai"""
+    if not data.startswith('nh_'):
+        return None, None
+        
+    parts = data.split('_')
+    if len(parts) < 2:
+        return None, None
+        
+    action = parts[1]
+    remaining_data = '_'.join(parts[2:]) if len(parts) > 2 else ""
+    
+    return action, remaining_data
+
 
 async def handle_page_change(callback_query, client, page_num, query):
     """Maneja el cambio de página"""
@@ -378,11 +396,3 @@ async def handle_doujin_navigation(callback_query, client, new_index, current_pa
         reply_markup=reply_markup
     )
 
-def parse_callback_data(data):
-    """Parsea los datos del callback"""
-    if data.startswith('nh_'):
-        parts = data[3:].split('_')
-        action = parts[0]
-        remaining_data = '_'.join(parts[1:]) if len(parts) > 1 else ""
-        return action, remaining_data
-    return None, None
