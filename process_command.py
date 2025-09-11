@@ -78,50 +78,72 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
         from command.help import handle_help
         await asyncio.create_task(handle_help(client, message))
 
-    elif command == "/magnet":
-        if cmd("torrent", int_lvl):
-            from command.torrets_tools import process_magnet_download_telegram
-            reply = message.reply_to_message
-            parts = text.strip().split(maxsplit=2)
+    elif command in ("/magnet", "/nyaa", "/nyaa18"):
+        if command == "/magnet":
+            if cmd("torrent", int_lvl):
+                from command.torrets_tools import process_magnet_download_telegram
+                reply = message.reply_to_message
+                parts = text.strip().split(maxsplit=2)
             
-            link = None
-            if reply and (reply.text or reply.caption):
-                text_reply = reply.text or reply.caption
-                magnet_match = re.search(r'magnet:\?[^\s]+', text_reply)
-                torrent_match = re.search(r'https?://[^\s]+\.torrent', text_reply)
-                if magnet_match:
-                    link = magnet_match.group(0)
-                elif torrent_match:
-                    link = torrent_match.group(0)
+                link = None
+                if reply and (reply.text or reply.caption):
+                    text_reply = reply.text or reply.caption
+                    magnet_match = re.search(r'magnet:\?[^\s]+', text_reply)
+                    torrent_match = re.search(r'https?://[^\s]+\.torrent', text_reply)
+                    if magnet_match:
+                        link = magnet_match.group(0)
+                    elif torrent_match:
+                        link = torrent_match.group(0)
             
-            if not link:
-                if len(parts) < 2:
-                    await message.reply("❗ Debes proporcionar un enlace magnet or .torrent.")
-                    return
-
-                use_compression = False
-                if parts[1] == "-z":
-                    use_compression = True
-                    if len(parts) < 3:
-                        await message.reply("❗ Debes proporcionar un enlace después de -z.")
+                if not link:
+                    if len(parts) < 2:
+                        await message.reply("❗ Debes proporcionar un enlace magnet or .torrent.")
                         return
-                    arg_text = parts[2]
-                else:
-                    arg_text = parts[1]
+
+                    use_compression = False
+                    if parts[1] == "-z":
+                        use_compression = True
+                        if len(parts) < 3:
+                            await message.reply("❗ Debes proporcionar un enlace después de -z.")
+                            return
+                        arg_text = parts[2]
+                    else:
+                        arg_text = parts[1]
                 
-                magnet_match = re.search(r'magnet:\?[^\s]+', arg_text)
-                torrent_match = re.search(r'https?://[^\s]+\.torrent', arg_text)
+                    magnet_match = re.search(r'magnet:\?[^\s]+', arg_text)
+                    torrent_match = re.search(r'https?://[^\s]+\.torrent', arg_text)
                 
-                if magnet_match:
-                    link = magnet_match.group(0)
-                elif torrent_match:
-                    link = torrent_match.group(0)
-                else:
-                    await message.reply("❗ El enlace debe ser un magnet o un archivo .torrent.")
+                    if magnet_match:
+                        link = magnet_match.group(0)
+                    elif torrent_match:
+                        link = torrent_match.group(0)
+                    else:
+                        await message.reply("❗ El enlace debe ser un magnet o un archivo .torrent.")
+                        return
+
+                await process_magnet_download_telegram(client, message, link, use_compression)
+
+        elif command == "/nyaa":
+            if cmd("torrent", int_lvl):
+                parts = text.strip().split(maxsplit=1)
+                if len(parts) < 2:
+                    await message.reply("❗ Debes proporcionar un término de búsqueda después de /nyaa.")
                     return
-
-            await process_magnet_download_telegram(client, message, link, use_compression)
-
+                
+                search_query = parts[1]
+                from command.torrets_tools import search_in_nyaa
+                await search_in_nyaa(client, message, search_query)
+        elif command == "/nyaa18":
+            if cmd("torrent", int_lvl):
+                parts = text.strip().split(maxsplit=1)
+                if len(parts) < 2:
+                    await message.reply("❗ Debes proporcionar un término de búsqueda después de /nyaa18.")
+                    return
+                
+                search_query = parts[1]
+                from command.torrets_tools import search_in_sukebei
+                await search_in_sukebei(client, message, search_query)
+                
     elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt", "/dltxt", "/hito"):
         if cmd("htools", int_lvl):
             from command.htools import nh_combined_operation, nh_combined_operation_txt, cambiar_default_selection

@@ -381,12 +381,9 @@ def compress_items():
     if not archive_name or not selected:
         return "<h3>❌ Debes proporcionar un nombre y seleccionar archivos.</h3>", 400
 
-    # Filtrar elementos vacíos
     selected = [path for path in selected if path.strip()]
     if not selected:
         return "<h3>❌ No se seleccionaron archivos válidos.</h3>", 400
-
-    # Validar que todas las rutas estén dentro del directorio base
     for path in selected:
         if not validate_path(path):
             return "<h3>❌ Ruta no válida detectada.</h3>", 400
@@ -470,15 +467,11 @@ def rename_item():
     
     if not old_path or not new_name:
         return "<h3>❌ Datos inválidos para renombrar.</h3>", 400
-    
-    # Validar que la ruta antigua esté dentro del directorio base
     if not validate_path(old_path):
         return "<h3>❌ Ruta no válida.</h3>", 400
     
     try:
         new_path = os.path.join(os.path.dirname(old_path), new_name)
-        
-        # Validar que la nueva ruta también esté dentro del directorio base
         if not validate_path(new_path):
             return "<h3>❌ El nuevo nombre crea una ruta no válida.</h3>", 400
             
