@@ -437,7 +437,6 @@ def move_completed_files(temp_path, final_path):
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.move(src, dst)
             log(f"📦 Archivo movido: {rel_path}")
-
 async def download_from_magnet(link, save_path=BASE_DIR, progress_data=None, download_id=None):
     try:
         os.makedirs(TEMP_DIR, exist_ok=True)
@@ -477,12 +476,14 @@ async def download_from_magnet(link, save_path=BASE_DIR, progress_data=None, dow
 
         move_completed_files(TEMP_DIR, save_path)
 
+    except Exception as e: 
+        log(f"❌ Error en download_from_magnet: {e}")
         if download_id:
             with downloads_lock:
                 if download_id in active_downloads:
                     active_downloads[download_id]["state"] = "error"
                     active_downloads[download_id]["error"] = str(e)
-
+        raise e  
 def get_download_progress():
     with downloads_lock:
         return active_downloads.copy()
