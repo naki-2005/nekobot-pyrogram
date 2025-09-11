@@ -1,79 +1,159 @@
-# Neko Bot
+```markdown
+# 🐾 Neko Bot
 
-## Variables de Entorno
+Bot de Telegram multifuncional con herramientas para:
 
-### Necesarias
-```
-API_ID = Ingrese su API ID para acceder a Telegram.
-API_HASH = Ingrese la API HASH de su API ID
-TOKEN =  Ingrese el Token de su bot
-ADMINS = Ingrese el User ID de los administradores del bot
-USERS = Ingrese el User ID de los usuarios del bot
-```
+- 📦 Gestión de archivos
+- 📧 Envío por correo
+- 🎥 Conversión de video
+- 🔍 Búsqueda de contenido
+- 🍥 Descarga de manga hentai
+- 🧲 Descarga de enlaces Torrent/Magnet
+- 🖼️ Publicación de imágenes
 
-### Extras
-```
-BOT_IS_PUBLIC = Coloque el valor "True" para que cualquiera pueda usar el bot (Aún asi, coloque 0 en USERS)
-CODEWORD = Coloque una contraseña para que otros usen el comanndo /access
-PROTECT_CONTENT = Escribe True para bloquear el renvio y descarga de multimedia de el bot
-VIP_USERS = Coloca User IDs de usuarios que podran renviar contenido (No es necesario colocar a ADMINS)
-MAIL_ADMIN = Coloque el @ del administrador general del bot para varias acciones.
-MAILDIR = Coloque un correo de electrónico para el bot
-MAILPASS = Coloque la contraseña del correo anterior
-MAIL_SERVER = Coloque la configuración del smtp de la manera servidor_smtp:puerto:seguridad , ejemplo, con un correo @disroot.org colocar disroot.org:587:tls
-MAIL_MB = Cloque un límite hasta de 20MB para el envio de multimedia en el bot, cada usuario puede cambiar este valor luego para ellos. Si el limite se supera, la multimedia se comprime en partes.
-MAIL_DELAY = Establece una duración en segundos del delay entre el envio de partes de archivos al bot.
-MAIL_CONFIRMED: Establece una lista de confianza de correos a usuarios de confianza, estos no tendrán que verificar su correo, llenar de la manera "UserID1=correo@user.uno;correo2@user.uno,UserID2=correo@user.dos"
-IMGAPI = Coloque su API de Imgchest para publicar fotos con el comando /imgchest
+No requiere configuración manual en BotFather: los comandos se registran automáticamente al iniciar.
+
+---
+
+## 🚀 Instalación rápida
+
+```bash
+git clone https://github.com/nakigeplayer/nekobot-pyrogram
+cd nekobot-pyrogram
+pip install -r requirements.txt
 ```
 
-### Activar comandos
+---
 
-Las variables de entorno **ACTIVE_CMD** o **ADMIN_CMD** no son necesarias para el arranque del bot, pero sin ellas el bot es inutil.
-Introdusca en esta variable, separado por comas, los nombres de los archivos de la carpeta [command](https://github.com/nakigeplayer/nekobot-pyrogram/tree/main/command)  para que el bot use estos comandos.
-Los **ACTIVE_CMD** son comandos para todos mientras **ADMIN_CMD** son comandos para admin
+## ⚙️ Cómo iniciar el bot
 
-```
-all - permite el uso de todos los comandos
-videotools - permite el uso de /convert y /calidad
-mailtools - permite el uso de /sendmail y /setmail
-filetools - permite el uso de /rename, /compress y /setsize
-htools - permite el uso de /nh , /3h , /covernh y /cover3h
-webtools - permite el comando de /scan , /multiscan y /resumecodes
-imgtools - permite el uso del comando /imgchest
+### Opción 1: Ejecutar directamente `neko.py`
+
+```bash
+python3 neko.py -a API_ID -H API_HASH -b GIT_API -r GIT_REPO -t TOKEN
 ```
 
+#### Argumentos disponibles:
+- `-a` → API ID de Telegram (obtenido en [my.telegram.org](https://my.telegram.org))
+- `-H` → API HASH asociado
+- `-b` → API del repositorio de comandos (puede ser tu GitHub API)
+- `-r` → URL del repositorio con los comandos
+- `-t` → Token del bot (si usas sesión de bot)
+- `-ss` → SESSION_STRING (si usas sesión de usuario)
+- `-id` → USER_ID (requerido si usas SESSION_STRING)
+- `-owner` → *(opcional pero recomendado)* ID del propietario del bot
+- `-w` → *(opcional)* Enlace web del bot
 
-## Comandos del bot
+---
 
-Envie esto a BotFather para configurar los comandos:
-```
-start - Comprobar actividad  
-setsize - Defina el tamaño en Mb para /compress (Default: 10MB)  
-compress - Comprimir un archivo en partes  
-rename - Cambia el nombre de un archivo  
-convert - Convierte un video  
-calidad - Ajusta la calidad de /convert  
-setmail - Configure su correo para usar /send  
-sendmail - Envía un archivo a su correo
-verify - Verifica tu correo con un código
-setfile - Define su preferencia de descarga de Hentai
-nh - Descarga un manga hentai de Nhentai
-3h - Descarga un manga hentai de 3Hentai
-covernh - Obtener info de un manga hentai de Nhentai
-cover3h - Obtener info de un manga hentai de 3Hentai
-scan - Escanea los links dentro de un link indicando
-resumecodes - Extrae codigos Hentai de archivos txt del scan
-imgchest - Publica una imagen en Imgchest
-access - Obten acceso al bot mediante una contraseña
+### Opción 2: Usar `start.sh`
+
+Este script lanza un servidor HTTP y ejecuta el bot automáticamente con las variables de entorno definidas.
+
+```bash
+./start.sh
 ```
 
-## Comandos admin
+#### Variables necesarias:
+```env
+API_ID=...           # API ID de Telegram
+API_HASH=...         # API HASH de Telegram
+TOKEN=...            # Token del bot (o SESSION_STRING + USER_ID)
+SESSION_STRING=...   # (opcional) sesión de usuario
+USER_ID=...          # (requerido si usas SESSION_STRING)
+GIT_API=...          # API para acceder al repositorio
+GIT_REPO=...         # URL del repositorio con comandos
 ```
-adduser - Permite a un usuario usar el bot
-remuser - Quita el acceso
-addchat - Permite al chat actual el uso del bot
-remchat - Quita el acceso
-ban - Banea a un usuario 
-unban - Desbanea a un usuario 
+
+#### Variables opcionales:
+```env
+OWNER=...            # ID del propietario del bot
+WEB_LINK=...         # Enlace web del bot
+```
+
+---
+
+## 🔐 Uso del argumento `-owner` y el comando `/settings`
+
+Aunque `-owner` es opcional, **se recomienda usarlo en la primera ejecución** para habilitar el acceso al comando `/settings`, exclusivo para el propietario del bot.
+
+Este comando permite configurar el comportamiento del bot directamente desde Telegram:
+
+- `/settings` → Abre el panel de configuración si eres el owner
+- `/settings public` → Activa o desactiva el modo público del bot
+- `/settings protect` → Activa o desactiva la protección de contenido (bloquea reenvío)
+- `/settings web <usuario> <contraseña>` → Guarda credenciales para acceso web
+- `/settings web reload` → Recarga configuración web desde GitHub
+- `/settings copy <bot_id>` → Copia configuración de otro bot
+- `/settings mail <correo> <contraseña> <servidor>` → Configura el correo del bot
+- `/settings imgapi <clave>` → Guarda la API de Imgchest
+
+Este sistema permite restringir funciones a ciertos usuarios o abrir el bot a todos, según tus necesidades.
+
+---
+
+## 📦 Comandos del bot
+
+### 🟢 Generales
+- `/start` — Comprobar actividad  
+- `/help` — Tutorial de comandos  
+- `/mydata` — Muestra el perfil del usuario  
+
+### 📦 Gestión de archivos
+- `/setsize` — Defina el tamaño en Mb para /compress  
+- `/compress` — Comprimir un archivo en partes  
+- `/split` — Dividir un archivo en partes  
+- `/rename` — Cambia el nombre de un archivo  
+- `/upfile` — Sube un archivo al servidor  
+- `/listfiles` — Mostrar lista de archivos en el servidor  
+- `/sendfile` — Subir un archivo almacenado en el servidor  
+- `/clearfiles` — Borra los archivos en el servidor  
+
+### 🎥 Multimedia
+- `/convert` — Convierte un video  
+- `/calidad` — Ajusta la calidad de /convert  
+
+### 📧 Envío por correo
+- `/setmail` — Configure su correo para usar /send  
+- `/verify` — Verifica tu correo con un código  
+- `/setdelay` — Configure el delay del correo  
+- `/setmb` — Configure el peso de las partes  
+- `/sendmail` — Envía un archivo dividido en 7z a su correo  
+- `/sendmailb` — Envía un archivo dividido en bytes a su correo  
+
+### 🔍 Búsqueda de contenido
+- `/manga` — Busca un manga para descargar  
+- `/nyaa` — Busca en Nyaa Torrents  
+- `/nyaa18` — Busca algo en Nyaa Torrents (+18)  
+- `/magnet` — Descarga un enlace magnet  
+- `/megadl` — Descarga un enlace de Mega  
+
+### 🍥 Contenido hentai
+- `/setfile` — Define su preferencia de descarga de Hentai  
+- `/nh` — Descarga un manga hentai de Nhentai  
+- `/3h` — Descarga un manga hentai de 3Hentai  
+- `/covernh` — Obtener info de un manga hentai de Nhentai  
+- `/cover3h` — Obtener info de un manga hentai de 3Hentai  
+- `/hito` — Descarga un manga hentai de Hitomi.la  
+
+### 🧠 Procesamiento de códigos
+- `/scan` — Escanea los links dentro de un link indicado  
+- `/resumecodes` — Extrae códigos Hentai de archivos txt del scan  
+- `/resumetxtcodes` — Extrae códigos Hentai y los envía en txt  
+- `/codesplit` — Divide la cantidad de códigos en un txt  
+
+### 🖼️ Imágenes
+- `/imgchest` — Publica una imagen en Imgchest  
+
+### 🔐 Administración
+- `/settings` — *(owner)* configura el bot  
+- `/edituser` — *(admin)* controla el acceso al bot  
+
+---
+
+## ☁️ Deploy en Render
+
+Puedes desplegar el bot fácilmente en Render con solo un clic:
+
+[![Deploy en Render](https://render.com/images/deploy-to-render-button.svg)](https://dashboard.render.com/blueprint/new?repo=https%3A%2F%2Fgithub.com%2Fnakigeplayer%2Fnekobot-pyrogram)
 ```
