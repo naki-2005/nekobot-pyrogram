@@ -15,12 +15,106 @@ SEVEN_ZIP_EXE = os.path.join("7z", "7zz")
 BASE_DIR = "vault_files/torrent_dl"
 TEMP_DIR = os.path.join(BASE_DIR, "downloading")
 
-# Variable global para almacenar el progreso de las descargas
 active_downloads = {}
 downloads_lock = threading.Lock()
 
 def log(msg):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}")
+
+def search_nyaa(query):
+    import requests
+    from bs4 import BeautifulSoup
+    import urllib.parse
+
+    base_url = "https://nyaa.si/"
+    search_query = urllib.parse.quote_plus(query)
+    page = 1
+    results = []
+    previous_results = []
+    
+    while True:
+        url = f"{base_url}?q={search_query}&f=0&c=0_0&p={page}"
+        
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            table = soup.find('table', class_='torrent-list')
+            
+            if not table:
+                break
+                
+            current_page_results = []
+            rows = table.find_all('tr')[1:]
+            
+            for row in rows:
+                try:
+                    name_link = row.find('a', href=lambda x: x and '/view/' in x)
+                    if not name_link:
+                        continue
+                    
+                    name = name_link.get_text(strip=True)
+                    
+                    torrent_link = None
+                    magnet_link = None
+                    
+                    download_links = row.find_all('a')
+                    for link in download_links:
+                        href = link.get('href', '')
+                        if href.startswith('/download/'):
+                            torrent_link = f"https://nyaa.si{href}"
+                        elif href.startswith('magnet:'):
+                            magnet_link = href
+                    
+                    size_td = row.find('td', class_='text-center', string=lambda x: x and 'MiB' in x)
+                    size = size_td.get_text(strip=True) if size_td else "N/A"
+                    
+                    date_td = row.find('td', class_='text-center', attrs={'data-timestamp': True})
+                    date = date_td.get_text(strip=True) if date_td else "N/A"
+                    
+                    current_page_results.append({
+                        'name': name,
+                        'torrent': torrent_link,
+                        'magnet': magnet_link,
+                        'size': size,
+                        'date': date
+                    })
+                    
+                except Exception as e:
+                    continue
+            
+            if not current_page_results:
+                break
+                
+            if previous_results and current_page_results == previous_results:
+                break
+                
+            results.extend(current_page_results)
+            previous_results = current_page_results
+            page += 1
+            
+        except requests.RequestException:
+            break
+        except Exception as e:
+            break
+    
+    output = ""
+    for i, result in enumerate(results, 1):
+        output += f"Resultado {i}\n"
+        output += f"{result['name']}\n"
+        output += f"Tamaño: {result['size']}\n"
+        output += f"Fecha: {result['date']}\n"
+        if result['torrent']:
+            output += f"Link de Torrent: {result['torrent']}\n"
+        if result['magnet']:
+            output += f"Link de Magnet: {result['magnet']}\n"
+        output += "\n"
+    
+    return output
 
 def get_magnet_from_torrent(torrent_path):
     from torf import Torrent
