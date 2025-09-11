@@ -83,26 +83,41 @@ async def handle_message(client, message):
                 raise 
 
     global bot_is_sleeping, start_sleep_time, sleep_duration
-    user_id = message.from_user.id if message.from_user else ""
-    username = message.from_user.username if message.from_user else ""
+    is_anonymous = message.sender_chat is not None and message.from_user is None
+    
+    if is_anonymous:
+        user_id = message.sender_chat.id
+        username = message.sender_chat.title if message.sender_chat else "Anonymous Admin"
+    else:
+        user_id = message.from_user.id if message.from_user else None
+        username = message.from_user.username if message.from_user else ""
+    
     chat_id = message.chat.id if message.chat else ""
 
-    try:
-        lvl = load_user_config(user_id, "lvl")
-        int_lvl = int(lvl) if lvl is not None and lvl.isdigit() else 0
-    except Exception as e:
-        await message.reply(f"Error al verificar nivel remoto: {e}")
+    if is_anonymous and not is_bot_public():
+        print(f"Admin anónimo {user_id} rechazado - Bot no es público")
         return
+
+    if is_anonymous:
+        int_lvl = 1
+    else:
+        try:
+            lvl = load_user_config(user_id, "lvl")
+            int_lvl = int(lvl) if lvl is not None and lvl.isdigit() else 0
+        except Exception as e:
+            await message.reply(f"Error al verificar nivel remoto: {e}")
+            return
 
     if int_lvl == 0:
         return
 
-    if not is_bot_public():
-        if int_lvl < 2:
-            print(f"Acceso a {user_id} rechazado, Bot Public = {is_bot_public()}")
-            return
+    if not is_anonymous: 
+        if not is_bot_public():
+            if int_lvl < 2:
+                print(f"Acceso a {user_id} rechazado, Bot Public = {is_bot_public()}")
+                return
 
-    if is_bot_public():
+    if not is_anonymous and is_bot_public():
         if lvl is None or (lvl not in ["1", "2", "3", "4", "5", "6"] and int_lvl < 2):
             try:
                 save_user_data_to_db(user_id, "lvl", "1")

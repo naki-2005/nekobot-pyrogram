@@ -4,9 +4,24 @@ services:
     env: python
     plan: free
     region: oregon
+    buildCommand: "pip install -r requirements.txt"
     startCommand: "sh start.sh"
     envVars:
-      - key: BOT_TOKEN
+      - key: TOKEN
         sync: false
       - key: SESSION_STRING
+        sync: false
+      - key: API_ID
+        sync: false
+      - key: API_HASH
+        sync: false
+      - key: USER_ID
+        sync: false
+      - key: GIT_API
+        sync: false
+      - key: GIT_REPO
+        sync: false
+      - key: OWNER
+        sync: false
+      - key: WEB_LINK
         sync: false
