@@ -10,7 +10,11 @@ import aiofiles
 import threading
 import uuid
 from pyrogram import enums
+import time
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+nyaa_cache = {}
+CACHE_DURATION = 600
 SEVEN_ZIP_EXE = os.path.join("7z", "7zz")
 BASE_DIR = "vault_files/torrent_dl"
 TEMP_DIR = os.path.join(BASE_DIR, "downloading")
@@ -116,6 +120,167 @@ def search_nyaa(query):
     
     return output
 
+
+async def search_in_nyaa(client, message, search_query):
+    current_time = time.time()
+    expired_keys = [key for key, data in nyaa_cache.items() if current_time - data['timestamp'] > CACHE_DURATION]
+    for key in expired_keys:
+        del nyaa_cache[key]
+    cache_key = f"{message.chat.id}_{search_query.lower()}"
+    
+    if cache_key in nyaa_cache:
+        results = nyaa_cache[cache_key]['results']
+    else:
+        results_data = search_nyaa(search_query)
+        if not results_data.strip():
+            await message.reply("❌ No se encontraron resultados para tu búsqueda.")
+            return
+        
+        results = []
+        current_result = {}
+        for line in results_data.split('\n'):
+            line = line.strip()
+            if line.startswith('Resultado'):
+                if current_result:
+                    results.append(current_result)
+                current_result = {'index': int(line.split()[1])}
+            elif line and not line.startswith(('Link de Torrent:', 'Link de Magnet:')):
+                if 'name' not in current_result:
+                    current_result['name'] = line
+                elif line.startswith('Tamaño:'):
+                    current_result['size'] = line.replace('Tamaño: ', '')
+                elif line.startswith('Fecha:'):
+                    current_result['date'] = line.replace('Fecha: ', '')
+            elif line.startswith('Link de Torrent:'):
+                current_result['torrent'] = line.replace('Link de Torrent: ', '')
+            elif line.startswith('Link de Magnet:'):
+                current_result['magnet'] = line.replace('Link de Magnet: ', '')
+        
+        if current_result:
+            results.append(current_result)
+    
+        nyaa_cache[cache_key] = {
+            'results': results,
+            'timestamp': current_time,
+            'current_index': 0
+        }
+        
+    await show_nyaa_result(client, message, cache_key, 0)
+
+async def show_nyaa_result(client, message, cache_key, index):
+    if cache_key not in nyaa_cache:
+        await message.reply("❌ Los resultados de búsqueda han expirado.")
+        return
+    
+    cache_data = nyaa_cache[cache_key]
+    results = cache_data['results']
+    
+    if index < 0 or index >= len(results):
+        await message.reply("❌ Índice de resultado inválido.")
+        return
+    
+    result = results[index]
+    cache_data['current_index'] = index
+    
+    keyboard = []
+    row_buttons = []
+    if 'torrent' in result:
+        row_buttons.append(InlineKeyboardButton("📥 Torrent", callback_data=f"nyaa_torrent:{cache_key}:{index}"))
+    if 'magnet' in result:
+        row_buttons.append(InlineKeyboardButton("🧲 Magnet", callback_data=f"nyaa_magnet:{cache_key}:{index}"))
+    
+    if row_buttons:
+        keyboard.append(row_buttons)
+    
+    nav_buttons = []
+    if index > 0:
+        nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"nyaa_prev:{cache_key}"))
+        nav_buttons.append(InlineKeyboardButton("⏪", callback_data=f"nyaa_first:{cache_key}"))
+    if index < len(results) - 1:
+        nav_buttons.append(InlineKeyboardButton("⏩", callback_data=f"nyaa_next:{cache_key}"))
+        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"nyaa_last:{cache_key}"))
+    
+    if nav_buttons:
+        keyboard.append(nav_buttons)
+    
+    reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+    
+    message_text = f"**Resultado {index + 1}/{len(results)}**\n"
+    message_text += f"**Nombre:** {result['name']}\n"
+    message_text += f"**Fecha:** {result.get('date', 'N/A')}\n"
+    message_text += f"**Tamaño:** {result.get('size', 'N/A')}"
+    
+    if cache_data.get('message_id'):
+        try:
+            await client.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=cache_data['message_id'],
+                text=message_text,
+                reply_markup=reply_markup
+            )
+            return
+        except:
+            pass
+    
+    sent_message = await message.reply(message_text, reply_markup=reply_markup)
+    cache_data['message_id'] = sent_message.id
+
+async def handle_nyaa_callback(client, callback_query):
+    data = callback_query.data
+    parts = data.split(':')
+    
+    if len(parts) < 2:
+        await callback_query.answer("❌ Error en los datos")
+        return
+    
+    action = parts[0]
+    cache_key = parts[1]
+    
+    if cache_key not in nyaa_cache:
+        await callback_query.answer("❌ Los resultados han expirado")
+        await callback_query.message.delete()
+        return
+    
+    cache_data = nyaa_cache[cache_key]
+    results = cache_data['results']
+    current_index = cache_data['current_index']
+    
+    if action == "nyaa_torrent":
+        index = int(parts[2])
+        result = results[index]
+        await callback_query.answer("📥 Enviando torrent...")
+        await client.send_document(
+            chat_id=callback_query.message.chat.id,
+            document=result['torrent']
+        )
+        
+    elif action == "nyaa_magnet":
+        index = int(parts[2])
+        result = results[index]
+        await callback_query.answer("🧲 Enviando magnet...")
+        await client.send_message(
+            chat_id=callback_query.message.chat.id,
+            text=result['magnet']
+        )
+        
+    elif action == "nyaa_prev":
+        new_index = max(0, current_index - 1)
+        await show_nyaa_result(client, callback_query.message, cache_key, new_index)
+        await callback_query.answer()
+        
+    elif action == "nyaa_next":
+        new_index = min(len(results) - 1, current_index + 1)
+        await show_nyaa_result(client, callback_query.message, cache_key, new_index)
+        await callback_query.answer()
+        
+    elif action == "nyaa_first":
+        await show_nyaa_result(client, callback_query.message, cache_key, 0)
+        await callback_query.answer()
+        
+    elif action == "nyaa_last":
+        await show_nyaa_result(client, callback_query.message, cache_key, len(results) - 1)
+        await callback_query.answer()
+        
 def get_magnet_from_torrent(torrent_path):
     from torf import Torrent
     t = Torrent.read(torrent_path)
