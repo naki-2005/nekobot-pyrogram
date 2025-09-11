@@ -144,7 +144,7 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
                 from command.torrets_tools import search_in_sukebei
                 await search_in_sukebei(client, message, search_query)
                 
-    elif command in ("/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt", "/dltxt", "/hito"):
+    elif command in ("/searchnh", "/nh", "/3h", "/cover3h", "/covernh", "/setfile", "/nhtxt", "/3htxt", "/dltxt", "/hito"):
         if cmd("htools", int_lvl):
             from command.htools import nh_combined_operation, nh_combined_operation_txt, cambiar_default_selection
             reply = message.reply_to_message
@@ -184,11 +184,17 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
                     await message.reply("Opción inválida. Usa: '/setfile cbz', '/setfile pdf', '/setfile both' o '/setfile none'.")
                 return
 
+            if command == "/searchnh" :
+                query = ' '.join(message.command[1:])
+                from command.get_files.scraper_nh import send_nhentai_results
+                await send_nhentai_results(message, client, query)
+
             codes = arg_text.split(',') if ',' in arg_text else [arg_text] if arg_text else []
             codes_limpiados = [
                 re.sub(r"https://nhentai\.net|https://[a-z]{2}\.3hentai\.net|https://3hentai\.net|/d/|/g/|/", "", code).strip()
                 for code in codes
             ]
+            
 
             if codes_limpiados != codes:
                 codes = codes_limpiados
