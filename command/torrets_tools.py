@@ -227,44 +227,6 @@ async def show_nyaa_result(client, message, cache_key, index):
     sent_message = await message.reply(message_text, reply_markup=reply_markup)
     cache_data['message_id'] = sent_message.id
 
-async def download_torrent_file(url, download_path):
-    try:
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        
-        prefs = {
-            "download.default_directory": download_path,
-            "download.prompt_for_download": False,
-            "download.directory_upgrade": True,
-            "safebrowsing.enabled": True
-        }
-        chrome_options.add_experimental_option("prefs", prefs)
-        
-        driver = webdriver.Chrome(options=chrome_options)
-        
-        driver.get(url)
-        
-        wait = WebDriverWait(driver, 10)
-        download_link = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, '/download/')]")))
-        download_link.click()
-        
-        time.sleep(5)
-        
-        driver.quit()
-        
-        for file in os.listdir(download_path):
-            if file.endswith('.torrent'):
-                return os.path.join(download_path, file)
-        
-        return None
-        
-    except Exception as e:
-        log(f"Error al descargar torrent con Selenium: {e}")
-        return None
-
 async def handle_nyaa_callback(client, callback_query):
     data = callback_query.data
     parts = data.split(':')
@@ -289,31 +251,11 @@ async def handle_nyaa_callback(client, callback_query):
         index = int(parts[2])
         result = results[index]
         
-        await callback_query.answer("📥 Descargando torrent...")
-        
-        temp_dir = os.path.join(TEMP_DIR, "temp_torrents")
-        os.makedirs(temp_dir, exist_ok=True)
-        
-        torrent_file = await download_torrent_file(result['torrent'], temp_dir)
-        
-        if torrent_file:
-            try:
-                await client.send_document(
-                    chat_id=callback_query.message.chat.id,
-                    document=torrent_file
-                )
-                os.remove(torrent_file)
-            except Exception as e:
-                log(f"Error al enviar archivo torrent: {e}")
-                await client.send_message(
-                    chat_id=callback_query.message.chat.id,
-                    text=f"❌ No se pudo enviar el archivo torrent. Aquí está el enlace: {result['torrent']}"
-                )
-        else:
-            await client.send_message(
-                chat_id=callback_query.message.chat.id,
-                text=f"❌ No se pudo descargar el torrent. Aquí está el enlace: {result['torrent']}"
-            )
+        await callback_query.answer("📥 Enviando link de torrent...")
+        await client.send_message(
+            chat_id=callback_query.message.chat.id,
+            text=result['torrent']
+        )
         
     elif action == "nyaa_magnet":
         index = int(parts[2])
