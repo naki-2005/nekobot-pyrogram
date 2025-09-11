@@ -21,12 +21,12 @@ CHROMEDRIVER_PATH = "selenium/chromedriver-linux64/chromedriver"
 
 def setup_driver():
     chrome_options = Options()
-    chrome_options.add_argument('--headless')
+    chrome_options.add_argument('--headless=new')  # Nueva sintaxis para headless
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--window-size=1920,1080')
-    chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36')
+    chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
     chrome_options.add_argument('--accept-language=en-US,en;q=0.9')
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
@@ -39,6 +39,160 @@ def setup_driver():
     
     return driver
 
+def scrape_nhentai_search(query, page=1):
+    """Realiza scraping de búsqueda en nHentai"""
+    driver = None
+    try:
+        driver = setup_driver()
+        # Codificar correctamente la query
+        from urllib.parse import quote
+        encoded_query = quote(query)
+        url = f"https://nhentai.net/search/?q={encoded_query}&page={page}"
+        print(f"🌐 Accediendo a: {url}")
+        
+        driver.get(url)
+        
+        # Esperar más tiempo y verificar diferentes elementos
+        try:
+            WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((By.CLASS_NAME, "gallery"))
+            )
+        except:
+            # Intentar con otro selector
+            try:
+                WebDriverWait(driver, 20).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "container"))
+                )
+            except:
+                print("No se pudo encontrar el elemento esperado")
+                return None
+        
+        time.sleep(5)  # Esperar más tiempo
+        
+        # Verificar si estamos bloqueados por Cloudflare
+        page_source = driver.page_source
+        if "Just a moment" in page_source or "Verifying you are human" in page_source:
+            print("⚠️ Cloudflare detectado, esperando 15 segundos...")
+            time.sleep(15)
+            page_source = driver.page_source
+            if "Just a moment" in page_source or "Verifying you are human" in page_source:
+                print("❌ Cloudflare sigue bloqueando")
+                return None
+        
+        # Verificar si no hay resultados
+        if "No results found" in page_source or "No results" in page_source:
+            print("No se encontraron resultados")
+            return {'doujins': [], 'pagination': {}, 'current_page': page, 'query': query}
+        
+        doujins = []
+        
+        # Intentar diferentes selectores para las galerías
+        gallery_selectors = [
+            (By.CLASS_NAME, "gallery"),
+            (By.CSS_SELECTOR, ".gallery"),
+            (By.CLASS_NAME, "index-container"),
+        ]
+        
+        gallery_elements = None
+        for selector in gallery_selectors:
+            try:
+                gallery_elements = driver.find_elements(*selector)
+                if gallery_elements:
+                    break
+            except:
+                continue
+        
+        if not gallery_elements:
+            print("No se encontraron elementos de galería")
+            return None
+        
+        print(f"Encontradas {len(gallery_elements)} galerías")
+        
+        for gallery in gallery_elements:
+            try:
+                # Buscar enlace
+                try:
+                    link_element = gallery.find_element(By.TAG_NAME, "a")
+                    href = link_element.get_attribute("href")
+                    if not href:
+                        continue
+                    
+                    doujin_id = re.search(r'/g/(\d+)/', href)
+                    if not doujin_id:
+                        continue
+                    
+                    doujin_id = doujin_id.group(1)
+                except:
+                    continue
+                
+                # Buscar imagen
+                try:
+                    img_element = gallery.find_element(By.TAG_NAME, "img")
+                    image_url = img_element.get_attribute("data-src") or img_element.get_attribute("src")
+                    if not image_url:
+                        continue
+                except:
+                    continue
+                
+                # Buscar título
+                title = "Sin título"
+                try:
+                    caption_selectors = [
+                        (By.CLASS_NAME, "caption"),
+                        (By.CSS_SELECTOR, ".caption"),
+                        (By.CLASS_NAME, "title"),
+                    ]
+                    
+                    for selector in caption_selectors:
+                        try:
+                            caption_element = gallery.find_element(*selector)
+                            title = caption_element.text.strip()
+                            if title:
+                                break
+                        except:
+                            continue
+                except:
+                    pass
+                
+                # Obtener tags
+                tags = []
+                try:
+                    tags_str = gallery.get_attribute("data-tags")
+                    if tags_str:
+                        tags = tags_str.split()
+                except:
+                    pass
+                
+                doujins.append({
+                    'id': doujin_id,
+                    'title': title,
+                    'image_url': image_url,
+                    'tags': tags,
+                    'url': f"https://nhentai.net/g/{doujin_id}/"
+                })
+                
+            except Exception as e:
+                print(f"Error procesando gallery: {e}")
+                continue
+        
+        pagination_info = extract_pagination_info(driver)
+        
+        return {
+            'doujins': doujins,
+            'pagination': pagination_info,
+            'current_page': page,
+            'query': query
+        }
+        
+    except Exception as e:
+        print(f"Error en scraping: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+    finally:
+        if driver:
+            driver.quit()
+            
 def download_webp_to_png(image_url):
     try:
         servers = ['t1', 't2', 't4', 't9', 't7', 't5']
@@ -64,76 +218,6 @@ def download_webp_to_png(image_url):
         print(f"Error descargando imagen: {e}")
         return None
 
-def scrape_nhentai_search(query, page=1):
-    """Realiza scraping de búsqueda en nHentai"""
-    driver = None
-    try:
-        driver = setup_driver()
-        url = f"https://nhentai.net/search/?q={query}&page={page}"
-        print(f"🌐 Accediendo a: {url}")
-        
-        driver.get(url)
-        
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.CLASS_NAME, "gallery"))
-        )
-        
-        time.sleep(3)
-        
-        page_source = driver.page_source
-        if "Just a moment" in page_source or "Verifying you are human" in page_source:
-            print("⚠️ Cloudflare detectado, esperando...")
-            time.sleep(10)
-        
-        doujins = []
-        gallery_elements = driver.find_elements(By.CLASS_NAME, "gallery")
-        
-        for gallery in gallery_elements:
-            try:
-                link_element = gallery.find_element(By.TAG_NAME, "a")
-                href = link_element.get_attribute("href")
-                doujin_id = re.search(r'/g/(\d+)/', href)
-                if not doujin_id:
-                    continue
-                
-                doujin_id = doujin_id.group(1)
-                
-                img_element = gallery.find_element(By.TAG_NAME, "img")
-                image_url = img_element.get_attribute("data-src") or img_element.get_attribute("src")
-                
-                caption_element = gallery.find_element(By.CLASS_NAME, "caption")
-                title = caption_element.text.strip()
-                
-                tags_str = gallery.get_attribute("data-tags")
-                tags = tags_str.split() if tags_str else []
-                
-                doujins.append({
-                    'id': doujin_id,
-                    'title': title,
-                    'image_url': image_url,
-                    'tags': tags,
-                    'url': f"https://nhentai.net/g/{doujin_id}/"
-                })
-                
-            except Exception as e:
-                print(f"Error procesando gallery: {e}")
-                continue
-        
-        pagination_info = extract_pagination_info(driver)
-        
-        return {
-            'doujins': doujins,
-            'pagination': pagination_info,
-            'current_page': page,
-            'query': query
-        }
-        
-    except Exception as e:
-        print(f"Error en scraping: {e}")
-        return None
-    finally:
-        if driver:
-            driver.quit()
 
 def extract_pagination_info(driver):
     """Extrae información de paginación de la página"""
@@ -215,11 +299,20 @@ def create_navigation_keyboards(current_index, total_doujins, pagination_info, q
 
 async def send_nhentai_results(message, client, query):
     try:
+        if not query or query.strip() == "":
+            await message.reply_text("❌ Debes proporcionar un término de búsqueda")
+            return
+            
         loading_msg = await message.reply_text("🔍 Buscando en nHentai...")
         
         search_data = scrape_nhentai_search(query)
-        if not search_data or not search_data['doujins']:
-            await loading_msg.edit_text("❌ No se encontraron resultados o error en el scraping")
+        
+        if not search_data:
+            await loading_msg.edit_text("❌ Error al conectarse con nHentai. Intenta más tarde.")
+            return
+            
+        if not search_data.get('doujins'):
+            await loading_msg.edit_text("❌ No se encontraron resultados para tu búsqueda.")
             return
         
         doujins = search_data['doujins']
@@ -257,11 +350,12 @@ async def send_nhentai_results(message, client, query):
         
     except Exception as e:
         print(f"Error en send_nhentai_results: {e}")
+        import traceback
+        traceback.print_exc()
         try:
             await loading_msg.edit_text(f"❌ Error: {str(e)}")
         except:
             await message.reply_text(f"❌ Error: {str(e)}")
-
 from pyrogram.types import InputMediaPhoto
 
 async def handle_nhentai_callback(callback_query, client, action, data):
