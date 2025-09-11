@@ -128,19 +128,26 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
             reply = message.reply_to_message
             parts = text.split(maxsplit=1)
             arg_text = parts[1] if len(parts) > 1 else ""
-            
+
             if command == "/hito":
                 if len(parts) < 2 or not parts[1].startswith("https://"):
                     await message.reply("Debes colocar un enlace válido después de /hito")
                     return
                 link_hitomi = parts[1].strip()
-                await message.reply("Procesando enlace de Hitomi.la...")
+                processing_msg = await message.reply("Procesando enlace de Hitomi.la...")
                 try:
                     from command.get_files.hitomi import descargar_y_comprimir_hitomi
                     path_cbz = descargar_y_comprimir_hitomi(link_hitomi)
-                    await client.send_document(chat_id=message.chat.id, document=path_cbz, protect_content=protect_content)
+                    await processing_msg.delete()
+                    await client.send_document(
+                        chat_id=message.chat.id,
+                        document=path_cbz,
+                        reply_to_message_id=message.id,
+                        protect_content=protect_content
+                    )
                     os.remove(path_cbz)
                 except Exception as e:
+                    await processing_msg.delete()
                     await message.reply(f"Error al procesar el enlace: {e}")
                 return
 
@@ -187,6 +194,7 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
                     return
                 path_cbz = txt_a_cbz(path_txt)
                 await client.send_document(chat_id=message.chat.id, document=path_cbz)
+
 
     elif command == "/megadl":
         if not cmd("download", int_lvl):
