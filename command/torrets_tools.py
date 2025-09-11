@@ -21,6 +21,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 
 nyaa_cache = {}
+sukebei_cache = {}
 CACHE_DURATION = 600
 SEVEN_ZIP_EXE = os.path.join("7z", "7zz")
 BASE_DIR = "vault_files/torrent_dl"
@@ -32,12 +33,11 @@ downloads_lock = threading.Lock()
 def log(msg):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}")
 
-def search_nyaa(query):
-    base_url = "https://nyaa.si/"
+def search_sukebei(query):
+    base_url = "https://sukebei.nyaa.si/"
     search_query = urllib.parse.quote_plus(query)
     page = 1
     results = []
-    previous_results = []
     
     while True:
         url = f"{base_url}?q={search_query}&f=0&c=0_0&p={page}"
@@ -58,6 +58,9 @@ def search_nyaa(query):
             current_page_results = []
             rows = table.find_all('tr')[1:]
             
+            if not rows:
+                break
+                
             for row in rows:
                 try:
                     name_link = row.find('a', href=lambda x: x and '/view/' in x)
@@ -73,11 +76,11 @@ def search_nyaa(query):
                     for link in download_links:
                         href = link.get('href', '')
                         if href.startswith('/download/'):
-                            torrent_link = f"https://nyaa.si{href}"
+                            torrent_link = f"https://sukebei.nyaa.si{href}"
                         elif href.startswith('magnet:'):
                             magnet_link = href
                     
-                    size_td = row.find('td', class_='text-center', string=lambda x: x and 'MiB' in x)
+                    size_td = row.find('td', class_='text-center', string=lambda x: x and 'MiB' in x or 'GiB' in x)
                     size = size_td.get_text(strip=True) if size_td else "N/A"
                     
                     date_td = row.find('td', class_='text-center', attrs={'data-timestamp': True})
@@ -97,11 +100,7 @@ def search_nyaa(query):
             if not current_page_results:
                 break
                 
-            if previous_results and current_page_results == previous_results:
-                break
-                
             results.extend(current_page_results)
-            previous_results = current_page_results
             page += 1
             
         except requests.RequestException:
@@ -123,17 +122,17 @@ def search_nyaa(query):
     
     return output
 
-async def search_in_nyaa(client, message, search_query):
+async def search_in_sukebei(client, message, search_query):
     current_time = time.time()
-    expired_keys = [key for key, data in nyaa_cache.items() if current_time - data['timestamp'] > CACHE_DURATION]
+    expired_keys = [key for key, data in sukebei_cache.items() if current_time - data['timestamp'] > CACHE_DURATION]
     for key in expired_keys:
-        del nyaa_cache[key]
-    cache_key = f"{message.chat.id}_{search_query.lower()}"
+        del sukebei_cache[key]
+    cache_key = f"sukebei_{message.chat.id}_{search_query.lower()}"
     
-    if cache_key in nyaa_cache:
-        results = nyaa_cache[cache_key]['results']
+    if cache_key in sukebei_cache:
+        results = sukebei_cache[cache_key]['results']
     else:
-        results_data = search_nyaa(search_query)
+        results_data = search_sukebei(search_query)
         if not results_data.strip():
             await message.reply("❌ No se encontraron resultados para tu búsqueda.")
             return
@@ -161,20 +160,20 @@ async def search_in_nyaa(client, message, search_query):
         if current_result:
             results.append(current_result)
     
-        nyaa_cache[cache_key] = {
+        sukebei_cache[cache_key] = {
             'results': results,
             'timestamp': current_time,
             'current_index': 0
         }
         
-    await show_nyaa_result(client, message, cache_key, 0)
+    await show_sukebei_result(client, message, cache_key, 0)
 
-async def show_nyaa_result(client, message, cache_key, index):
-    if cache_key not in nyaa_cache:
+async def show_sukebei_result(client, message, cache_key, index):
+    if cache_key not in sukebei_cache:
         await message.reply("❌ Los resultados de búsqueda han expirado.")
         return
     
-    cache_data = nyaa_cache[cache_key]
+    cache_data = sukebei_cache[cache_key]
     results = cache_data['results']
     
     if index < 0 or index >= len(results):
@@ -187,20 +186,20 @@ async def show_nyaa_result(client, message, cache_key, index):
     keyboard = []
     row_buttons = []
     if 'torrent' in result:
-        row_buttons.append(InlineKeyboardButton("📥 Torrent", callback_data=f"nyaa_torrent:{cache_key}:{index}"))
+        row_buttons.append(InlineKeyboardButton("📥 Torrent", callback_data=f"sukebei_torrent:{cache_key}:{index}"))
     if 'magnet' in result:
-        row_buttons.append(InlineKeyboardButton("🧲 Magnet", callback_data=f"nyaa_magnet:{cache_key}:{index}"))
+        row_buttons.append(InlineKeyboardButton("🧲 Magnet", callback_data=f"sukebei_magnet:{cache_key}:{index}"))
     
     if row_buttons:
         keyboard.append(row_buttons)
     
     nav_buttons = []
     if index > 0:
-        nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"nyaa_prev:{cache_key}"))
-        nav_buttons.append(InlineKeyboardButton("⏪", callback_data=f"nyaa_first:{cache_key}"))
+        nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"sukebei_prev:{cache_key}"))
+        nav_buttons.append(InlineKeyboardButton("⏪", callback_data=f"sukebei_first:{cache_key}"))
     if index < len(results) - 1:
-        nav_buttons.append(InlineKeyboardButton("⏩", callback_data=f"nyaa_next:{cache_key}"))
-        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"nyaa_last:{cache_key}"))
+        nav_buttons.append(InlineKeyboardButton("⏩", callback_data=f"sukebei_next:{cache_key}"))
+        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"sukebei_last:{cache_key}"))
     
     if nav_buttons:
         keyboard.append(nav_buttons)
@@ -227,7 +226,7 @@ async def show_nyaa_result(client, message, cache_key, index):
     sent_message = await message.reply(message_text, reply_markup=reply_markup)
     cache_data['message_id'] = sent_message.id
 
-async def handle_nyaa_callback(client, callback_query):
+async def handle_sukebei_callback(client, callback_query):
     data = callback_query.data
     parts = data.split(':')
     
@@ -238,16 +237,16 @@ async def handle_nyaa_callback(client, callback_query):
     action = parts[0]
     cache_key = parts[1]
     
-    if cache_key not in nyaa_cache:
+    if cache_key not in sukebei_cache:
         await callback_query.answer("❌ Los resultados han expirado")
         await callback_query.message.delete()
         return
     
-    cache_data = nyaa_cache[cache_key]
+    cache_data = sukebei_cache[cache_key]
     results = cache_data['results']
     current_index = cache_data['current_index']
     
-    if action == "nyaa_torrent":
+    if action == "sukebei_torrent":
         index = int(parts[2])
         result = results[index]
         
@@ -257,7 +256,7 @@ async def handle_nyaa_callback(client, callback_query):
             text=result['torrent']
         )
         
-    elif action == "nyaa_magnet":
+    elif action == "sukebei_magnet":
         index = int(parts[2])
         result = results[index]
         await callback_query.answer("🧲 Enviando magnet...")
@@ -266,22 +265,22 @@ async def handle_nyaa_callback(client, callback_query):
             text=result['magnet']
         )
         
-    elif action == "nyaa_prev":
+    elif action == "sukebei_prev":
         new_index = max(0, current_index - 1)
-        await show_nyaa_result(client, callback_query.message, cache_key, new_index)
+        await show_sukebei_result(client, callback_query.message, cache_key, new_index)
         await callback_query.answer()
         
-    elif action == "nyaa_next":
+    elif action == "sukebei_next":
         new_index = min(len(results) - 1, current_index + 1)
-        await show_nyaa_result(client, callback_query.message, cache_key, new_index)
+        await show_sukebei_result(client, callback_query.message, cache_key, new_index)
         await callback_query.answer()
         
-    elif action == "nyaa_first":
-        await show_nyaa_result(client, callback_query.message, cache_key, 0)
+    elif action == "sukebei_first":
+        await show_sukebei_result(client, callback_query.message, cache_key, 0)
         await callback_query.answer()
         
-    elif action == "nyaa_last":
-        await show_nyaa_result(client, callback_query.message, cache_key, len(results) - 1)
+    elif action == "sukebei_last":
+        await show_sukebei_result(client, callback_query.message, cache_key, len(results) - 1)
         await callback_query.answer()
 
 def get_magnet_from_torrent(torrent_path):
@@ -379,6 +378,7 @@ def move_completed_files(temp_path, final_path):
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.move(src, dst)
             log(f"📦 Archivo movido: {rel_path}")
+
 async def download_from_magnet(link, save_path=BASE_DIR, progress_data=None, download_id=None):
     try:
         os.makedirs(TEMP_DIR, exist_ok=True)
@@ -425,7 +425,8 @@ async def download_from_magnet(link, save_path=BASE_DIR, progress_data=None, dow
                 if download_id in active_downloads:
                     active_downloads[download_id]["state"] = "error"
                     active_downloads[download_id]["error"] = str(e)
-        raise e  
+        raise e
+
 def get_download_progress():
     with downloads_lock:
         return active_downloads.copy()
