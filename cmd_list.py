@@ -19,6 +19,8 @@ async def lista_cmd(app):
         BotCommand("setmb", "Configure el peso de las partes"),
         BotCommand("sendmail", "Envía un archivo dividido en 7z a su correo"),
         BotCommand("sendmailb", "Envía un archivo dividido en bytes a su correo"),
+        BotCommand("nyaa", "Busca en Nyaa Torrents"),
+        BotCommand("nyaa18", "Busca algo en Nyaa Torrens (+18)"),
         BotCommand("upfile", "Sube un archivo al servidor"),
         BotCommand("listfiles", "Mostrar lista de archivos en el servidor"),
         BotCommand("sendfile", "Subir un archivo almacenado en el servidor"),
