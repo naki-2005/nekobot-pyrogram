@@ -30,56 +30,22 @@ doujin_lock = Lock()
 def login_required(f):
     def wrapper(*args, **kwargs):
         if not session.get("logged_in"):
-            u = request.args.get("u", "").strip()
-            p = request.args.get("p", "").strip()
-            
-            if u and p:
-                try:
-                    with open(WEBACCESS_FILE, "r", encoding="utf-8") as f:
-                        users = json.load(f)
-                except:
-                    users = {}
-                
-                for uid, creds in users.items():
-                    if creds.get("user") == u and creds.get("pass") == p:
-                        session["logged_in"] = True
-                        return f(*args, **kwargs)
-            
-            return jsonify({"error": "Authentication required"}), 401
+            return redirect("/login")
         return f(*args, **kwargs)
     wrapper.__name__ = f.__name__
     return wrapper
 
 def validate_path(input_path):
+    """Valida que una ruta esté dentro del directorio base permitido"""
     if not input_path:
         return False
     abs_base = os.path.abspath(BASE_DIR)
     abs_path = os.path.abspath(input_path)
     return abs_path.startswith(abs_base)
 
-def try_auto_login():
-    if not session.get("logged_in"):
-        u = request.args.get("u", "").strip()
-        p = request.args.get("p", "").strip()
-        
-        if u and p:
-            try:
-                with open(WEBACCESS_FILE, "r", encoding="utf-8") as f:
-                    users = json.load(f)
-            except:
-                users = {}
-            
-            for uid, creds in users.items():
-                if creds.get("user") == u and creds.get("pass") == p:
-                    session["logged_in"] = True
-                    return True
-    return False
-
 @explorer.route("/", defaults={"path": ""})
 @explorer.route("/<path:path>")
 def serve_root(path):
-    try_auto_login()
-    
     abs_path = os.path.abspath(os.path.join(BASE_DIR, path))
     abs_base = os.path.abspath(BASE_DIR)
     
@@ -101,9 +67,6 @@ def serve_root(path):
 
 @explorer.route("/login", methods=["GET", "POST"])
 def login():
-    if session.get("logged_in"):
-        return redirect("/")
-        
     if request.method == "POST":
         u = request.form.get("username", "").strip()
         p = request.form.get("password", "").strip()
@@ -124,24 +87,18 @@ def login():
 @login_required
 def browse():
     rel_path = request.args.get("path", "")
-    if rel_path == "":
-        abs_requested = os.path.abspath(BASE_DIR)
-    else:
-        abs_requested = os.path.abspath(os.path.join(BASE_DIR, rel_path))
+    abs_requested = os.path.abspath(os.path.join(BASE_DIR, rel_path))
     abs_base = os.path.abspath(BASE_DIR)
 
     if not abs_requested.startswith(abs_base):
-        return jsonify({"error": "Access denied: path outside vault_files"}), 403
+        return "<h3>❌ Acceso denegado: ruta fuera de 'vault_files'.</h3>", 403
 
     try:
         items = []
         for name in sorted(os.listdir(abs_requested), key=natural_sort_key):
             full_path = os.path.join(abs_requested, name)
             is_dir = os.path.isdir(full_path)
-            try:
-                size_mb = round(os.path.getsize(full_path) / (1024 * 1024), 2) if not is_dir else "-"
-            except (OSError, FileNotFoundError):
-                size_mb = "N/A"
+            size_mb = round(os.path.getsize(full_path) / (1024 * 1024), 2) if not is_dir else "-"
             
             rel_item_path = os.path.relpath(full_path, abs_base)
             items.append({
@@ -163,32 +120,22 @@ def browse():
         if current_rel_path == ".":
             current_rel_path = ""
             
-        if request.headers.get('Accept') == 'application/json':
-            return jsonify({
-                "items": items,
-                "has_images": has_images,
-                "current_path": current_rel_path
-            })
-            
         return render_template_string(MAIN_TEMPLATE, 
                                     items=items, 
                                     has_images=has_images, 
                                     current_path=current_rel_path)
     except Exception as e:
-        return jsonify({"error": f"Error accessing files: {e}"}), 500
+        return f"<h3>Error al acceder a los archivos: {e}</h3>", 500
 
 @explorer.route("/gallery")
 @login_required
 def gallery():
     rel_path = request.args.get("path", "")
-    if rel_path == "":
-        abs_requested = os.path.abspath(BASE_DIR)
-    else:
-        abs_requested = os.path.abspath(os.path.join(BASE_DIR, rel_path))
+    abs_requested = os.path.abspath(os.path.join(BASE_DIR, rel_path))
     abs_base = os.path.abspath(BASE_DIR)
 
     if not abs_requested.startswith(abs_base):
-        return jsonify({"error": "Access denied: path outside vault_files"}), 403
+        return "<h3>❌ Acceso denegado: ruta fuera de 'vault_files'.</h3>", 403
 
     try:
         image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff'}
@@ -206,23 +153,15 @@ def gallery():
         if current_rel_path == ".":
             current_rel_path = ""
             
-        if request.headers.get('Accept') == 'application/json':
-            return jsonify({
-                "image_files": image_files,
-                "current_path": current_rel_path
-            })
-            
         return render_template_string(GALLERY_TEMPLATE, 
                                     image_files=image_files, 
                                     current_path=current_rel_path)
     except Exception as e:
-        return jsonify({"error": f"Error accessing gallery: {e}"}), 500
+        return f"<h3>Error al acceder a la galería: {e}</h3>", 500
 
 @explorer.route("/utils")
 @login_required
 def utils_page():
-    if request.headers.get('Accept') == 'application/json':
-        return jsonify({"message": "Utils page"})
     return render_template_string(UTILS_TEMPLATE)
 
 @explorer.route("/downloads")
@@ -237,14 +176,11 @@ def downloads_page():
         for download_id, download_info in doujin_downloads.items():
             if download_info.get("state") == "completed" and "end_time" in download_info:
                 end_time = datetime.fromisoformat(download_info["end_time"])
-                if (current_time - end_time).total_seconds() > 3600:
+                if (current_time - end_time).total_seconds() > 3600:  # 1 hora
                     to_delete.append(download_id)
         
         for download_id in to_delete:
             del doujin_downloads[download_id]
-    
-    if request.headers.get('Accept') == 'application/json':
-        return jsonify({"torrents": downloads, "doujins": doujin_downloads})
     
     return render_template_string(DOWNLOADS_TEMPLATE, 
                                 downloads=downloads, 
@@ -259,17 +195,15 @@ def api_downloads():
 
 @explorer.route("/download")
 def download():
-    try_auto_login()
-    
     rel_path = request.args.get("path")
     if not rel_path:
-        return jsonify({"error": "File not specified"}), 400
+        return "<h3>Archivo no especificado.</h3>", 400
         
     abs_path = os.path.abspath(os.path.join(BASE_DIR, rel_path))
     abs_base = os.path.abspath(BASE_DIR)
     
     if not abs_path.startswith(abs_base) or not os.path.isfile(abs_path):
-        return jsonify({"error": "Invalid file for download"}), 400
+        return "<h3>Archivo no válido para descarga.</h3>", 400
         
     if 'Range' in request.headers:
         range_header = request.headers.get('Range')
@@ -289,18 +223,12 @@ def download():
         )
 
 @explorer.route("/crear_cbz", methods=["POST"])
-@login_required
 def crear_cbz():
-    if request.headers.get('Accept') == 'application/json':
-        data = request.get_json()
-        codigo_input = data.get("codigo", "").strip()
-        tipo = data.get("tipo", "").strip()
-    else:
-        codigo_input = request.form.get("codigo", "").strip()
-        tipo = request.form.get("tipo", "").strip()
+    codigo_input = request.form.get("codigo", "").strip()
+    tipo = request.form.get("tipo", "").strip()
 
     if not codigo_input or tipo not in ["nh", "h3", "hito"]:
-        return jsonify({"error": "Invalid code or type"}), 400
+        return "<h3>❌ Código o tipo inválido.</h3>", 400
 
     if tipo == "hito":
         codigos = [codigo_input]
@@ -311,7 +239,13 @@ def crear_cbz():
             codigos = [codigo_input]
     
     if not codigos:
-        return jsonify({"error": "No valid codes provided"}), 400
+        return "<h3>❌ No se proporcionaron códigos válidos.</h3>", 400
+
+    total_codigos = len(codigos)
+    plural = "s" if total_codigos > 1 else ""
+    response_msg = f"<h3>✅ Iniciando descarga de {total_codigos} doujin{plural}</h3>"
+    response_msg += f"<p>Procesando: {', '.join(codigos[:3])}{'...' if total_codigos > 3 else ''}</p>"
+    response_msg += "<p>Puedes ver el progreso en la <a href='/downloads'>página de descargas</a></p>"
 
     download_id = str(uuid.uuid4())
     
@@ -325,7 +259,7 @@ def crear_cbz():
             "completados": 0,
             "errores": 0,
             "start_time": datetime.now().isoformat(),
-            "current_item": f"Preparing {codigos[0]}" if codigos else "Starting",
+            "current_item": f"Preparando {codigos[0]}" if codigos else "Iniciando",
             "resultados": []
         }
 
@@ -338,7 +272,7 @@ def crear_cbz():
             for i, codigo in enumerate(codigos):
                 with doujin_lock:
                     doujin_downloads[download_id]["progress"] = i + 1
-                    doujin_downloads[download_id]["current_item"] = f"Processing {codigo} ({i+1}/{len(codigos)})"
+                    doujin_downloads[download_id]["current_item"] = f"Procesando {codigo} ({i+1}/{total_codigos})"
                 
                 try:
                     cbz_path = loop.run_until_complete(crear_cbz_desde_fuente(codigo, tipo))
@@ -365,7 +299,7 @@ def crear_cbz():
             with doujin_lock:
                 doujin_downloads[download_id]["state"] = "completed"
                 doujin_downloads[download_id]["end_time"] = datetime.now().isoformat()
-                doujin_downloads[download_id]["current_item"] = "Download completed"
+                doujin_downloads[download_id]["current_item"] = "Descarga completada"
             
         except Exception as e:
             with doujin_lock:
@@ -376,32 +310,25 @@ def crear_cbz():
             loop.close()
 
     Thread(target=run_async_download, daemon=True).start()
-    
-    if request.headers.get('Accept') == 'application/json':
-        return jsonify({
-            "message": f"Started download of {len(codigos)} doujin(s)",
-            "download_id": download_id,
-            "codigos": codigos
-        })
-    
-    total_codigos = len(codigos)
-    plural = "s" if total_codigos > 1 else ""
-    response_msg = f"<h3>✅ Iniciando descarga de {total_codigos} doujin{plural}</h3>"
-    response_msg += f"<p>Procesando: {', '.join(codigos[:3])}{'...' if total_codigos > 3 else ''}</p>"
-    response_msg += "<p>Puedes ver el progreso en la <a href='/downloads'>página de descargas</a></p>"
     return response_msg
 
+@explorer.route("/upload", methods=["POST"])
+def upload_file():
+    if not os.path.exists(BASE_DIR):
+        os.makedirs(BASE_DIR)
+
+    file = request.files.get("file")
+    if file and file.filename:
+        save_path = os.path.join(BASE_DIR, file.filename)
+        file.save(save_path)
+        return redirect("/")
+    return "Archivo inválido.", 400
+
 @explorer.route("/magnet", methods=["POST"])
-@login_required
 def handle_magnet():
-    if request.headers.get('Accept') == 'application/json':
-        data = request.get_json()
-        link = data.get("magnet", "").strip()
-    else:
-        link = request.form.get("magnet", "").strip()
-        
+    link = request.form.get("magnet", "").strip()
     if not link:
-        return jsonify({"error": "Empty magnet link"}), 400
+        return "<h3>❌ Magnet link vacío.</h3>", 400
 
     try:
         download_id = str(uuid.uuid4())
@@ -415,48 +342,23 @@ def handle_magnet():
                 loop.close()
 
         Thread(target=run_async_download).start()
-        
-        if request.headers.get('Accept') == 'application/json':
-            return jsonify({
-                "message": "Magnet download started",
-                "download_id": download_id,
-                "magnet": link
-            })
-            
         return redirect("/downloads")
     except Exception as e:
-        return jsonify({"error": f"Error starting download: {e}"}), 500
-
-@explorer.route("/upload", methods=["POST"])
-@login_required
-def upload_file():
-    if not os.path.exists(BASE_DIR):
-        os.makedirs(BASE_DIR)
-
-    file = request.files.get("file")
-    if file and file.filename:
-        save_path = os.path.join(BASE_DIR, file.filename)
-        file.save(save_path)
-        return jsonify({"message": "File uploaded successfully"})
-    return jsonify({"error": "Invalid file"}), 400
+        return f"<h3>Error al iniciar descarga: {e}</h3>", 500
 
 @explorer.route("/delete", methods=["POST"])
 @login_required
 def delete_file():
-    if request.headers.get('Accept') == 'application/json':
-        data = request.get_json()
-        path = data.get("path")
-    else:
-        path = request.form.get("path")
+    path = request.form.get("path")
     
     if not path:
-        return jsonify({"error": "File not specified"}), 400
+        return "<h3>❌ Archivo no especificado.</h3>", 400
         
     if not validate_path(path):
-        return jsonify({"error": "Invalid path"}), 400
+        return "<h3>❌ Ruta no válida.</h3>", 400
         
     if not os.path.exists(path):
-        return jsonify({"error": "File not found"}), 404
+        return "<h3>❌ Archivo no encontrado.</h3>", 404
         
     try:
         if os.path.isfile(path):
@@ -464,33 +366,27 @@ def delete_file():
         elif os.path.isdir(path):
             shutil.rmtree(path)
         else:
-            return jsonify({"error": "Invalid item for deletion"}), 400
+            return "<h3>❌ Elemento no válido para eliminar.</h3>", 400
             
-        return jsonify({"message": "Item deleted successfully"})
+        return redirect(request.referrer or "/")
     except Exception as e:
-        return jsonify({"error": f"Error deleting: {e}"}), 500
+        return f"<h3>Error al eliminar: {e}</h3>", 500
 
 @explorer.route("/compress", methods=["POST"])
 @login_required
 def compress_items():
-    if request.headers.get('Accept') == 'application/json':
-        data = request.get_json()
-        archive_name = data.get("archive_name", "").strip()
-        selected = data.get("selected", [])
-    else:
-        archive_name = request.form.get("archive_name", "").strip()
-        selected = request.form.getlist("selected")
+    archive_name = request.form.get("archive_name", "").strip()
+    selected = request.form.getlist("selected")
     
     if not archive_name or not selected:
-        return jsonify({"error": "Must provide name and select files"}), 400
+        return "<h3>❌ Debes proporcionar un nombre y seleccionar archivos.</h3>", 400
 
     selected = [path for path in selected if path.strip()]
     if not selected:
-        return jsonify({"error": "No valid files selected"}), 400
-
+        return "<h3>❌ No se seleccionaron archivos válidos.</h3>", 400
     for path in selected:
         if not validate_path(path):
-            return jsonify({"error": "Invalid path detected"}), 400
+            return "<h3>❌ Ruta no válida detectada.</h3>", 400
 
     archive_path = os.path.join(BASE_DIR, f"{archive_name}.7z")
     try:
@@ -505,8 +401,9 @@ def compress_items():
         result = subprocess.run(cmd_args, capture_output=True, text=True)
         
         if result.returncode != 0:
-            return jsonify({"error": f"Compression error: {result.stderr}"}), 500
+            return f"<h3>❌ Error al comprimir: {result.stderr}</h3>", 500
 
+        # Eliminar archivos originales después de comprimir exitosamente
         for path in selected:
             if os.path.exists(path):
                 if os.path.isfile(path):
@@ -514,24 +411,20 @@ def compress_items():
                 elif os.path.isdir(path):
                     shutil.rmtree(path)
 
-        return jsonify({"message": "Compression completed successfully"})
+        return redirect(request.referrer or "/")
     except Exception as e:
-        return jsonify({"error": f"Compression error: {e}"}), 500
+        return f"<h3>❌ Error al comprimir: {e}</h3>", 500
 
 @explorer.route("/extract", methods=["POST"])
 @login_required
 def extract_archive():
-    if request.headers.get('Accept') == 'application/json':
-        data = request.get_json()
-        archive_path = data.get("path")
-    else:
-        archive_path = request.form.get("path")
+    archive_path = request.form.get("path")
     
     if not archive_path or not os.path.isfile(archive_path):
-        return jsonify({"error": "Invalid file for extraction"}), 400
+        return "<h3>❌ Archivo no válido para descomprimir.</h3>", 400
     
     if not validate_path(archive_path):
-        return jsonify({"error": "Invalid path"}), 400
+        return "<h3>❌ Ruta no válida.</h3>", 400
     
     try:
         extract_dir = os.path.splitext(archive_path)[0]
@@ -554,61 +447,38 @@ def extract_archive():
             result = subprocess.run(cmd_args, capture_output=True, text=True)
             
             if result.returncode != 0:
-                return jsonify({"error": f"7z extraction error: {result.stderr}"}), 500
+                return f"<h3>❌ Error al descomprimir archivo 7z: {result.stderr}</h3>", 500
                 
         elif archive_path.lower().endswith('.cbz') or archive_path.lower().endswith('.zip'):
             with zipfile.ZipFile(archive_path, 'r') as z:
                 z.extractall(extract_dir)
         else:
-            return jsonify({"error": "Unsupported file format for extraction"}), 400
+            return "<h3>❌ Formato de archivo no compatible para descompresión.</h3>", 400
         
-        return jsonify({"message": "Extraction completed successfully"})
+        return redirect(request.referrer or "/")
     except Exception as e:
-        return jsonify({"error": f"Extraction error: {e}"}), 500
+        return f"<h3>Error al descomprimir archivo: {e}</h3>", 500
 
 @explorer.route("/rename", methods=["POST"])
 @login_required
 def rename_item():
-    if request.headers.get('Accept') == 'application/json':
-        data = request.get_json()
-        old_path = data.get("old_path")
-        new_name = data.get("new_name")
-    else:
-        old_path = request.form.get("old_path")
-        new_name = request.form.get("new_name")
+    old_path = request.form.get("old_path")
+    new_name = request.form.get("new_name")
     
     if not old_path or not new_name:
-        return jsonify({"error": "Invalid data for rename"}), 400
+        return "<h3>❌ Datos inválidos para renombrar.</h3>", 400
     if not validate_path(old_path):
-        return jsonify({"error": "Invalid path"}), 400
+        return "<h3>❌ Ruta no válida.</h3>", 400
     
     try:
         new_path = os.path.join(os.path.dirname(old_path), new_name)
         if not validate_path(new_path):
-            return jsonify({"error": "New name creates invalid path"}), 400
+            return "<h3>❌ El nuevo nombre crea una ruta no válida.</h3>", 400
             
         os.rename(old_path, new_path)
-        return jsonify({"message": "Item renamed successfully"})
+        return redirect(request.referrer or "/")
     except Exception as e:
-        return jsonify({"error": f"Rename error: {e}"}), 500
-
-@explorer.route("/<path:folder>")
-def folder_shortcut(folder):
-    try_auto_login()
-    
-    if not session.get("logged_in"):
-        return jsonify({"error": "Authentication required"}), 401
-    
-    abs_path = os.path.abspath(os.path.join(BASE_DIR, folder))
-    abs_base = os.path.abspath(BASE_DIR)
-    
-    if not abs_path.startswith(abs_base):
-        abort(404)
-    
-    if os.path.isdir(abs_path):
-        return redirect(url_for("browse", path=folder))
-    else:
-        abort(404)
+        return f"<h3>Error al renombrar: {e}</h3>", 500
 
 def run_flask():
     explorer.run(host="0.0.0.0", port=10000)
