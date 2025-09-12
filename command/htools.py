@@ -87,7 +87,7 @@ async def send_nhentai_results(message, client, arg_text):
             caption = (
                 f"📚 *Título:* {result['name']}\n"
                 f"📥 Puedes descargar este doujin usando el comando:\n"
-                f"`/nh {result['code']`}"
+                f"`/nh {result['code']}`"
             )
 
             try:
