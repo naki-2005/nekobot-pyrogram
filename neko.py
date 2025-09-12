@@ -93,34 +93,28 @@ async def handle_message(client, message):
                 print("[WARN] USER_BOT_REQUIRED: Ignorando set_bot_commands para User Bot")
                 cmd_list_initialized = True
             else:
-                raise 
+                raise
 
     is_anonymous = message.sender_chat is not None and message.from_user is None
-    
-    if is_anonymous:
-        user_id = message.sender_chat.id
-        username = message.sender_chat.title if message.sender_chat else "Anonymous Admin"
-    else:
-        user_id = message.from_user.id if message.from_user else None
-        username = message.from_user.username if message.from_user else ""
-    
+
+    user_id = message.from_user.id if message.from_user else None
+    username = message.from_user.username if message.from_user else ""
     chat_id = message.chat.id if message.chat else ""
 
-    if is_anonymous and not is_bot_public():
-        print(f"Admin anónimo {user_id} rechazado - Bot no es público")
+    id_para_nivel = user_id if user_id == chat_id else chat_id
+
+    try:
+        lvl = load_user_config(id_para_nivel, "lvl")
+        int_lvl = int(lvl) if lvl is not None and lvl.isdigit() else 0
+    except Exception as e:
+        await message.reply(f"Error al verificar nivel remoto: {e}")
         return
 
-    if is_anonymous:
-        int_lvl = 1
-    else:
-        try:
-            lvl = load_user_config(user_id, "lvl")
-            int_lvl = int(lvl) if lvl is not None and lvl.isdigit() else 0
-        except Exception as e:
-            await message.reply(f"Error al verificar nivel remoto: {e}")
-            return
-
     if int_lvl == 0:
+        return
+
+    if is_anonymous and not is_bot_public():
+        print(f"Admin anónimo {chat_id} rechazado - Bot no es público")
         return
 
     if not is_anonymous and not is_bot_public() and int_lvl < 2:
@@ -168,7 +162,7 @@ async def handle_message(client, message):
         await message.reply("Servidor Flask reiniciado.")
         return
 
-    await process_command(client, message, user_id, username, chat_id, int_lvl)
+    await process_command(client, message, user_id or chat_id, username, chat_id, int_lvl)
 
 @app.on_callback_query()
 async def callback_handler(client, callback_query):
