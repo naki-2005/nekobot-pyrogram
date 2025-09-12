@@ -20,7 +20,7 @@ async def process_query(client, callback_query):
 
     nyaa_related = data.startswith("nyaa_")
     
-    sukebei_related = data.startswith("sukebei_")  # Añadir esta línea
+    sukebei_related = data.startswith("sukebei_")
 
     if data in mail_related:
         await mail_query(client, callback_query)
@@ -70,6 +70,7 @@ async def process_query(client, callback_query):
         
     elif sukebei_related:
         await handle_sukebei_callback(client, callback_query)
+
 
     else:
         await callback_query.answer("No se ha encontrado una respuesta Query correcta.", show_alert=True)

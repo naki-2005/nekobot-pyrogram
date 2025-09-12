@@ -1,16 +1,87 @@
-import os
-import re
-import tempfile
-import shutil
-import subprocess
 import aiohttp
 import asyncio
-import uuid
-from PIL import Image
-from pyrogram.types import InputMediaPhoto
-from pyrogram.errors import FloodWait
+import json
+import os
+import requests
+import shutil
+import subprocess
+import tempfile
+import time
 import unicodedata
+import uuid
 from datetime import datetime
+from io import BytesIO
+from PIL import Image
+from pyrogram.errors import FloodWait
+from pyrogram.types import InputMediaPhoto
+from command.get_files.scrap_nh import scrape_nhentai_with_selenium
+
+async def send_nhentai_results(message, client, arg_text):
+    try:
+        parts = arg_text.split()
+        page = 1
+        if '-p' in parts:
+            try:
+                p_index = parts.index('-p')
+                page = int(parts[p_index + 1])
+                parts = parts[:p_index]
+            except (ValueError, IndexError):
+                pass
+
+        query = ' '.join(parts).strip()
+
+        galleries = scrape_nhentai_with_selenium(search_term=query, page=page)
+        if not galleries:
+            await message.reply("No se encontraron resultados.")
+            return
+
+        for result in galleries[:25]:
+            image_data = None
+
+            for link in result.get('image_links', []):
+                try:
+                    response = requests.get(link, timeout=10)
+                    if response.status_code == 200:
+                        image_data = response.content
+                        break
+                except Exception:
+                    continue
+
+            if not image_data:
+                await message.reply(f"No se pudo descargar imagen para: {result['name']}")
+                continue
+
+            try:
+                img = Image.open(BytesIO(image_data))
+                if img.format == 'WEBP':
+                    img = img.convert('RGB')
+                buffer = BytesIO()
+                img.save(buffer, format='PNG')
+                buffer.seek(0)
+            except Exception as e:
+                await message.reply(f"Error procesando imagen: {e}")
+                continue
+
+            caption = (
+                f"📚 *Título:* {result['name']}\n"
+                f"📥 Puedes descargar este doujin usando el comando:\n"
+                f"`/nh {result['code']}`"
+            )
+
+            try:
+                await client.send_photo(
+                    chat_id=message.chat.id,
+                    photo=buffer,
+                    caption=caption
+                )
+            except Exception as e:
+                await message.reply(f"Error enviando imagen: {e}")
+                continue
+
+            time.sleep(3)
+
+    except Exception as e:
+        await message.reply(f"Error general: {e}")
 
 BASE_DIR = "vault_files/doujins"
 os.makedirs(BASE_DIR, exist_ok=True)

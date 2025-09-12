@@ -39,6 +39,7 @@ async def lista_cmd(app):
 
         # 🍥 Contenido hentai
         BotCommand("setfile", "Define su preferencia de descarga de Hentai"),
+        BotCommand("searchnh", "Obten hasta 25 resultados de una busqueda en Nhentai"),
         BotCommand("nh", "Descarga un manga hentai de Nhentai"),
         BotCommand("3h", "Descarga un manga hentai de 3Hentai"),
         BotCommand("covernh", "Obtener info de un manga hentai de Nhentai"),
