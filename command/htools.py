@@ -72,8 +72,7 @@ async def send_nhentai_results(message, client, arg_text):
                 await client.send_photo(
                     chat_id=message.chat.id,
                     photo=buffer,
-                    caption=caption,
-                    parse_mode='Markdown'
+                    caption=caption
                 )
             except Exception as e:
                 await message.reply(f"Error enviando imagen: {e}")
