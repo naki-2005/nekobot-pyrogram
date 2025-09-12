@@ -14,6 +14,7 @@ from io import BytesIO
 from PIL import Image
 from pyrogram.errors import FloodWait
 from pyrogram.types import InputMediaPhoto
+from command.get_files.scrap_nh import scrape_nhentai_with_selenium
 
 async def send_nhentai_results(message, client, arg_text):
     try:
@@ -28,35 +29,13 @@ async def send_nhentai_results(message, client, arg_text):
                 pass
 
         query = ' '.join(parts).strip()
-        query_quoted = f'"{query}"'
 
-        command = [
-            'python3',
-            'command/get_files/scrap_nh.py',
-            '--search', query_quoted,
-            '--page', str(page)
-        ]
-
-        result = subprocess.run(
-            ' '.join(command),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            shell=True,
-            text=True
-        )
-
-        output = result.stdout
-        start = output.find('[')
-        end = output.rfind(']') + 1
-        json_data = output[start:end]
-
-        galleries = json.loads(json_data)
+        galleries = scrape_nhentai_with_selenium(search_term=query, page=page)
         if not galleries:
             await message.reply("No se encontraron resultados.")
             return
 
         for result in galleries[:25]:
-            image_url = None
             image_data = None
 
             for link in result.get('image_links', []):
@@ -64,7 +43,6 @@ async def send_nhentai_results(message, client, arg_text):
                     response = requests.get(link, timeout=10)
                     if response.status_code == 200:
                         image_data = response.content
-                        image_url = link
                         break
                 except Exception:
                     continue
@@ -101,11 +79,11 @@ async def send_nhentai_results(message, client, arg_text):
                 await message.reply(f"Error enviando imagen: {e}")
                 continue
 
-            time.sleep(5)
+            time.sleep(3)
 
     except Exception as e:
         await message.reply(f"Error general: {e}")
-            
+
 BASE_DIR = "vault_files/doujins"
 os.makedirs(BASE_DIR, exist_ok=True)
 
