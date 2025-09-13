@@ -125,7 +125,7 @@ async def handle_message(client, message):
             if should_block:
                 break
 
-        if should_block and user_id not in free_users:
+        if should_block and not (is_anonymous or user_id in free_users):
             try:
                 await message.delete()
                 return
