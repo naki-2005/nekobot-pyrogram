@@ -101,9 +101,9 @@ async def handle_message(client, message):
     chat_id = message.chat.id if message.chat else ""
     id_para_nivel = user_id if user_id == chat_id else chat_id
 
-    group_ids = getattr(args, "group_id", [])
-    black_words = getattr(args, "black_words", [])
-    free_users = getattr(args, "free_users", [])
+    group_ids = getattr(args, "group_id", []) or []
+    black_words = getattr(args, "black_words", []) or []
+    free_users = getattr(args, "free_users", []) or []
 
     if chat_id in group_ids and message.text:
         content = (message.text or "") + " " + (message.caption or "")
