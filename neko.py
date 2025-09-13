@@ -79,7 +79,7 @@ def restart_flask():
         print("[INFO] Iniciando servidor Flask...")
         flask_thread = threading.Thread(target=run_flask, daemon=True)
         flask_thread.start()
-
+        
 @app.on_message()
 async def handle_message(client, message):
     global cmd_list_initialized, bot_is_sleeping, start_sleep_time, sleep_duration
@@ -195,7 +195,7 @@ async def handle_message(client, message):
         await message.reply("Servidor Flask reiniciado.")
         return
 
-    await process_command(client, message, user_id or chat_id, username, chat_id, int_lvl_user)
+    await process_command(client, message, user_id, username, chat_id, int_lvl_user)
         
 @app.on_callback_query()
 async def callback_handler(client, callback_query):
