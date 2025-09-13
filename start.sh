@@ -1,10 +1,8 @@
 #!/bin/sh
 
-# Inicia un servidor HTTP en segundo plano
 mkdir -p server
 python3 -m http.server -d server &
 
-# Validaciones de entorno
 if [ -n "$TOKEN" ] && [ -n "$SESSION_STRING" ]; then
   echo "❌ No puedes usar TOKEN y SESSION_STRING al mismo tiempo."
   exit 1
@@ -45,6 +43,7 @@ CMD="python3 neko.py \
 [ -n "$GROUP_ID" ] && CMD="$CMD -g $GROUP_ID"
 [ -n "$BLACKWORDS" ] && CMD="$CMD -bw $BLACKWORDS"
 [ -n "$FRIENDS" ] && CMD="$CMD -fu $FRIENDS"
+[ -n "$SAFE_LINKS" ] && CMD="$CMD -sb \"$SAFE_LINKS\""
 
 if [ -n "$TOKEN" ]; then
   CMD="$CMD -t \"$TOKEN\""
@@ -52,6 +51,5 @@ else
   CMD="$CMD -ss \"$SESSION_STRING\" -id \"$USER_ID\""
 fi
 
-# Ejecuta el bot
 echo "🚀 Ejecutando: $CMD"
 eval "$CMD"
