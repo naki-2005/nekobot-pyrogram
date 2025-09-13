@@ -59,10 +59,10 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
     
     textori = message.text.strip() if message.text else ""
 
-    if user_id == me_bot_id and textori.startswith('/'):
+    if user_id is not None and str(user_id) == me_bot_id and textori.startswith('/'):
         return
     
-    if user_id == me_bot_id and textori.startswith('.'):
+    if user_id is not None and str(user_id) == me_bot_id and textori.startswith('.'):
         textori = textori.replace('.', '/', 1)
     
     text = textori.lower()
