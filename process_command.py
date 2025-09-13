@@ -54,7 +54,17 @@ def cmd(command_env, int_lvl):
         return False
 
 async def process_command(client, message, user_id, username, chat_id, int_lvl):
+    bot_info = await client.get_me()
+    me_bot_id = str(bot_info.id)
+    
     textori = message.text.strip() if message.text else ""
+
+    if user_id == me_bot_id and textori.startswith('/'):
+        return
+    
+    if user_id == me_bot_id and textori.startswith('.'):
+        textori = textori.replace('.', '/', 1)
+    
     text = textori.lower()
 
     is_anonymous = message.from_user is None
