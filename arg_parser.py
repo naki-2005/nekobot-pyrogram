@@ -15,7 +15,7 @@ def get_args():
     parser.add_argument("-w", "--web", help="URL web opcional para configuración adicional")
     parser.add_argument("-g", "--group_id", nargs="*", type=int, help="IDs de grupos para moderación")
     parser.add_argument("-bw", "--black_words", nargs="*", help="Palabras prohibidas")
-    parser.add_argument("-fu", "--free_users", nargs="*", type=int, help="Usuarios exentos del filtro")
+    parser.add_argument("-fu", "--free_users", type=str, help="Usuarios exentos del filtro (separados por comas)")
 
     args = parser.parse_args()
 
