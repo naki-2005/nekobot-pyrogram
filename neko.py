@@ -84,7 +84,7 @@ def restart_flask():
 async def handle_message(client, message):
     global cmd_list_initialized, bot_is_sleeping, start_sleep_time, sleep_duration
 
-    if not cmd_list_initialized and args.bot_token is not None:
+    if not cmd_list_initialized and getattr(args, "bot_token", None) is not None:
         try:
             await lista_cmd(app)
             cmd_list_initialized = True
@@ -96,12 +96,25 @@ async def handle_message(client, message):
                 raise
 
     is_anonymous = message.sender_chat is not None and message.from_user is None
-
     user_id = message.from_user.id if message.from_user else None
     username = message.from_user.username if message.from_user else ""
     chat_id = message.chat.id if message.chat else ""
-
     id_para_nivel = user_id if user_id == chat_id else chat_id
+
+    group_ids = getattr(args, "group_id", [])
+    black_words = getattr(args, "black_words", [])
+    free_users = getattr(args, "free_users", [])
+
+    if chat_id in group_ids and message.text:
+        content = (message.text or "") + " " + (message.caption or "")
+        if any(word.lower() in content.lower() for word in black_words):
+            if user_id not in free_users:
+                try:
+                    await message.delete()
+                    print(f"[Filtro] Mensaje eliminado de {user_id} en grupo {chat_id}")
+                    return
+                except Exception as e:
+                    print(f"[Filtro] No se pudo eliminar el mensaje: {e}")
 
     try:
         lvl = load_user_config(id_para_nivel, "lvl")
