@@ -119,7 +119,7 @@ async def handle_message(client, message):
         for word in words:
             for black in black_words:
                 if black in word:
-                    if word not in [safe.strip().lower() for safe in safe_block]:
+                    if not any(safe.strip().lower() in word for safe in safe_block):
                         should_block = True
                         break
             if should_block:
@@ -196,7 +196,7 @@ async def handle_message(client, message):
         return
 
     await process_command(client, message, user_id or chat_id, username, chat_id, int_lvl_user)
-
+        
 @app.on_callback_query()
 async def callback_handler(client, callback_query):
     await process_query(client, callback_query)
