@@ -80,7 +80,6 @@ def restart_flask():
         flask_thread = threading.Thread(target=run_flask, daemon=True)
         flask_thread.start()
 
-
 @app.on_message()
 async def handle_message(client, message):
     global cmd_list_initialized, bot_is_sleeping, start_sleep_time, sleep_duration
@@ -114,16 +113,13 @@ async def handle_message(client, message):
 
     if chat_id in group_ids and (message.text or message.caption):
         content = (message.text or "") + " " + (message.caption or "")
-        content_lower = content.lower()
-
-        import re
-        words = re.findall(r"\S+", content_lower)
+        words = content.lower().split(" ")
 
         should_block = False
         for word in words:
             for black in black_words:
                 if black in word:
-                    if not any(word == safe.strip().lower() for safe in safe_block):
+                    if word not in [safe.strip().lower() for safe in safe_block]:
                         should_block = True
                         break
             if should_block:
@@ -200,7 +196,6 @@ async def handle_message(client, message):
         return
 
     await process_command(client, message, user_id or chat_id, username, chat_id, int_lvl_user)
-
 
 @app.on_callback_query()
 async def callback_handler(client, callback_query):
