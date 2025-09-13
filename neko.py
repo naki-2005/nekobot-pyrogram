@@ -79,64 +79,91 @@ def restart_flask():
         print("[INFO] Iniciando servidor Flask...")
         flask_thread = threading.Thread(target=run_flask, daemon=True)
         flask_thread.start()
-
+        
 @app.on_message()
 async def handle_message(client, message):
     global cmd_list_initialized, bot_is_sleeping, start_sleep_time, sleep_duration
 
-    if not cmd_list_initialized and args.bot_token is not None:
+    if not cmd_list_initialized and getattr(args, "bot_token", None):
         try:
             await lista_cmd(app)
             cmd_list_initialized = True
         except Exception as e:
             if "USER_BOT_REQUIRED" in str(e):
-                print("[WARN] USER_BOT_REQUIRED: Ignorando set_bot_commands para User Bot")
                 cmd_list_initialized = True
             else:
-                raise 
+                raise
 
     is_anonymous = message.sender_chat is not None and message.from_user is None
-    
-    if is_anonymous:
-        user_id = message.sender_chat.id
-        username = message.sender_chat.title if message.sender_chat else "Anonymous Admin"
-    else:
-        user_id = message.from_user.id if message.from_user else None
-        username = message.from_user.username if message.from_user else ""
-    
+    user_id = message.from_user.id if message.from_user else None
+    username = message.from_user.username if message.from_user else ""
     chat_id = message.chat.id if message.chat else ""
 
-    if is_anonymous and not is_bot_public():
-        print(f"Admin anónimo {user_id} rechazado - Bot no es público")
+    raw_group_ids = getattr(args, "group_id", []) or []
+    group_ids = list(map(int, raw_group_ids.split(","))) if isinstance(raw_group_ids, str) else raw_group_ids
+
+    raw_black_words = getattr(args, "black_words", []) or []
+    black_words = raw_black_words.split(",") if isinstance(raw_black_words, str) else raw_black_words
+
+    raw_free_users = getattr(args, "free_users", []) or []
+    free_users = list(map(int, raw_free_users.split(","))) if isinstance(raw_free_users, str) else raw_free_users
+
+    raw_safe_block = getattr(args, "safe_block", "") or ""
+    safe_block = raw_safe_block.split(",") if isinstance(raw_safe_block, str) else raw_safe_block
+
+    if chat_id in group_ids and (message.text or message.caption):
+        content = (message.text or "") + " " + (message.caption or "")
+        words = content.lower().split(" ")
+
+        should_block = False
+        for word in words:
+            for black in black_words:
+                if black in word:
+                    if not any(safe.strip().lower() in word for safe in safe_block):
+                        should_block = True
+                        break
+            if should_block:
+                break
+
+        if should_block and not (is_anonymous or user_id in free_users):
+            try:
+                await message.delete()
+                return
+            except Exception:
+                pass
+
+    try:
+        lvl_user = load_user_config(user_id, "lvl") if user_id else None
+        int_lvl_user = int(lvl_user) if lvl_user and lvl_user.isdigit() else 0
+    except Exception:
         return
 
-    if is_anonymous:
-        int_lvl = 1
-    else:
+    if int_lvl_user < 2:
         try:
-            lvl = load_user_config(user_id, "lvl")
-            int_lvl = int(lvl) if lvl is not None and lvl.isdigit() else 0
-        except Exception as e:
-            await message.reply(f"Error al verificar nivel remoto: {e}")
+            lvl_group = load_user_config(chat_id, "lvl")
+            int_lvl_group = int(lvl_group) if lvl_group and lvl_group.isdigit() else 0
+        except Exception:
             return
 
-    if int_lvl == 0:
+        if int_lvl_group < 2:
+            return
+
+    if is_anonymous and not is_bot_public():
         return
 
-    if not is_anonymous and not is_bot_public() and int_lvl < 2:
-        print(f"Acceso a {user_id} rechazado, Bot Public = {is_bot_public()}")
+    if not is_anonymous and not is_bot_public() and int_lvl_user < 2:
         return
 
     if not is_anonymous and is_bot_public():
-        if lvl is None or (lvl not in ["1", "2", "3", "4", "5", "6"] and int_lvl < 2):
+        if lvl_user is None or (lvl_user not in ["1", "2", "3", "4", "5", "6"] and int_lvl_user < 2):
             try:
                 save_user_data_to_db(user_id, "lvl", "1")
                 await message.reply("Registrado como usuario público, disfrute del bot")
-                int_lvl = 1
-            except Exception as e:
-                await message.reply(f"Error {e}")
+                int_lvl_user = 1
+            except Exception:
+                pass
 
-    if message.text and message.text.startswith("/reactive") and int_lvl == 6:
+    if message.text and message.text.startswith("/reactive") and int_lvl_user == 6:
         if bot_is_sleeping:
             bot_is_sleeping = False
             await app.send_sticker(chat_id, sticker=random.choice(STICKER_REACTIVADO))
@@ -149,7 +176,7 @@ async def handle_message(client, message):
         await message.reply(f"Actualmente estoy descansando, no recibo comandos.\n\nRegresaré en {format_time(remaining)}")
         return
 
-    if message.text and message.text.startswith("/sleep") and int_lvl == 6:
+    if message.text and message.text.startswith("/sleep") and int_lvl_user == 6:
         try:
             sleep_duration = int(message.text.split(" ")[1])
             bot_is_sleeping = True
@@ -163,13 +190,13 @@ async def handle_message(client, message):
             await message.reply("Por favor, proporciona un número válido en segundos.")
         return
 
-    if message.text and message.text.startswith("/flaskreset") and int_lvl >= 5:
+    if message.text and message.text.startswith("/flaskreset") and int_lvl_user >= 5:
         restart_flask()
         await message.reply("Servidor Flask reiniciado.")
         return
 
-    await process_command(client, message, user_id, username, chat_id, int_lvl)
-
+    await process_command(client, message, user_id, username, chat_id, int_lvl_user)
+        
 @app.on_callback_query()
 async def callback_handler(client, callback_query):
     await process_query(client, callback_query)

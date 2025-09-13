@@ -13,15 +13,20 @@ def get_args():
     parser.add_argument("-r", "--repo", required=True, help="Repositorio o URL del repositorio")
     parser.add_argument("-owner", help="Owner o propietario (opcional)")
     parser.add_argument("-w", "--web", help="URL web opcional para configuración adicional")
+    parser.add_argument("-g", "--group_id", nargs="*", type=int, help="IDs de grupos para moderación")
+    parser.add_argument("-bw", "--black_words", nargs="*", help="Palabras prohibidas")
+    parser.add_argument("-fu", "--free_users", type=str, help="Usuarios exentos del filtro (separados por comas)")
+    parser.add_argument("-sb", "--safe_block", type=str, help="Dominios seguros que no se bloquean aunque contengan palabras prohibidas (separados por comas)")
+    
 
     args = parser.parse_args()
 
     if args.bot_token and args.session_string:
-        sys.exit(1)
+        sys.exit("No puedes usar bot_token y session_string al mismo tiempo.")
     elif not args.bot_token and not args.session_string:
-        sys.exit(1)
+        sys.exit("Debes proporcionar bot_token o session_string.")
 
     if args.session_string and not args.id:
-        sys.exit(1)
+        sys.exit("Si usas session_string, debes proporcionar un ID personalizado.")
 
     return args

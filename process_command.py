@@ -54,22 +54,40 @@ def cmd(command_env, int_lvl):
         return False
 
 async def process_command(client, message, user_id, username, chat_id, int_lvl):
+    bot_info = await client.get_me()
+    me_bot_id = str(bot_info.id)
+    
     textori = message.text.strip() if message.text else ""
-    text = textori.lower()
-    if message.from_user is None:
-        return
 
-    user_id = message.from_user.id
+    if user_id is not None and str(user_id) == me_bot_id and textori.startswith('/'):
+        return
+    
+    if user_id is not None and str(user_id) == me_bot_id and textori.startswith('.'):
+        textori = textori.replace('.', '/', 1)
+    
+    text = textori.lower()
+
+    is_anonymous = message.from_user is None
+
     protect_content = int_lvl < 3
     if not is_bot_protect() and protect_content:
         protect_content = False
 
-    command = text.split()[0] if text else ""
+    command = text.split()[0]
 
     if command == "/start":
         from command.admintools import handle_start
         await asyncio.create_task(handle_start(client, message))
 
+    elif command == "/where":
+        user_id_str = str(message.from_user.id) if message.from_user else "No disponible"
+        chat_id_str = str(message.chat.id) if message.chat else "No disponible"
+
+        await message.reply(
+            f"User: {user_id_str}\nChat: {chat_id_str}",
+            quote=True
+        )
+        
     elif command == "/mydata":
         from command.mailtools.set_values import mydata
         await asyncio.create_task(mydata(client, message))
