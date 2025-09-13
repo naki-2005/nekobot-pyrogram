@@ -11,6 +11,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from urllib.parse import unquote
 
 BASE_DIR = "vault_files/doujins"
 
@@ -32,7 +33,7 @@ def obtener_titulo_y_autor(link_hitomi: str, chrome_path: str, driver_path: str)
     
     try:
         driver.get(link_hitomi)
-        WebDriverWait(driver, 5).until(
+        WebDriverWait(driver, 3).until(
             lambda d: d.title and d.title.strip() != "" and "Hitomi.la" in d.title
         )
 
@@ -58,27 +59,37 @@ def truncar_nombre(nombre: str, max_len: int = 100) -> str:
     return (nombre[:max_len - 4] + "...") if len(nombre) > max_len else nombre + ".cbz"
 
 def procesar_id_o_enlace(entrada: str) -> tuple[str, str]:
+    entrada_decodificada = unquote(entrada)
+    
     if entrada.isdigit():
         return f"https://hitomi.la/reader/{entrada}.html", entrada
-    if entrada.startswith("https://hitomi.la/"):
-        # Convertir URL de galería/manga a URL de reader
-        if "/gallery/" in entrada or "/manga/" in entrada:
-            match = re.search(r'(\d+)', entrada)
-            if match:
-                return f"https://hitomi.la/reader/{match.group(1)}.html", match.group(1)
-        elif "/reader/" in entrada:
-            match = re.search(r'/(\d+)\.html', entrada)
-            if match:
-                return entrada, match.group(1)
-        return entrada, re.search(r'(\d+)', entrada).group(1) if re.search(r'(\d+)', entrada) else "0"
     
-    match = re.search(r'(\d+)', entrada)
+    if entrada_decodificada.startswith("https://hitomi.la/"):
+        patterns = [
+            r'hitomi\.la/(?:reader|gallery|manga)/(\d+)',
+            r'hitomi\.la/.*-(\d+)\.html',
+            r'/(\d+)\.html'
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, entrada_decodificada)
+            if match:
+                id_enlace = match.group(1)
+                return f"https://hitomi.la/reader/{id_enlace}.html", id_enlace
+        
+        match = re.search(r'(\d+)', entrada_decodificada)
+        if match:
+            id_enlace = match.group(1)
+            return f"https://hitomi.la/reader/{id_enlace}.html", id_enlace
+    
+    match = re.search(r'(\d+)', entrada_decodificada)
     if match:
-        return f"https://hitomi.la/reader/{match.group(1)}.html", match.group(1)
+        id_enlace = match.group(1)
+        return f"https://hitomi.la/reader/{id_enlace}.html", id_enlace
     
-    raise ValueError("Formato de entrada no válido. Debe ser un ID numérico o una URL de Hitomi.la")
+    raise ValueError("Formato de entrada no válido.")
 
-def esperar_imagen_cargada(driver, timeout=10):
+def esperar_imagen_cargada(driver, timeout=3):
     try:
         WebDriverWait(driver, timeout).until(
             EC.presence_of_element_located((By.TAG_NAME, "img"))
@@ -98,57 +109,49 @@ def esperar_imagen_cargada(driver, timeout=10):
     except:
         return False
 
-def descargar_imagen_con_reintentos(url, ruta_destino, headers, max_intentos=5):
+def descargar_imagen_con_reintentos(url, ruta_destino, headers, max_intentos=3):
     intento = 0
     while intento < max_intentos:
         try:
-            response = requests.get(url, headers=headers, timeout=60, stream=True)
+            response = requests.get(url, headers=headers, timeout=30, stream=True)
             if response.status_code == 200:
                 with open(ruta_destino, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         if chunk:
                             f.write(chunk)
-                # Verificar que el archivo se descargó correctamente
                 if os.path.exists(ruta_destino) and os.path.getsize(ruta_destino) > 0:
                     return True
                 else:
-                    raise Exception("Archivo descargado vacío o no existe")
+                    raise Exception("Archivo vacío")
             else:
                 raise Exception(f"HTTP {response.status_code}")
         except Exception as e:
             intento += 1
-            tiempo_espera = 3 + (intento * 2)
-            print(f"❌ Error descargando imagen (intento {intento}): {str(e)}")
+            tiempo_espera = 2
+            print(f"❌ Error descargando (intento {intento}): {str(e)}")
             if intento < max_intentos:
-                print(f"⏳ Reintentando en {tiempo_espera} segundos...")
                 time.sleep(tiempo_espera)
-            # Eliminar archivo corrupto si existe
             if os.path.exists(ruta_destino):
                 os.remove(ruta_destino)
     return False
 
-def obtener_url_imagen_pagina(driver, url_pagina, max_intentos=5):
+def obtener_url_imagen_pagina(driver, url_pagina, max_intentos=3):
     intento = 0
     while intento < max_intentos:
         try:
-            print(f"🌐 Cargando página: {url_pagina}")
             driver.get(url_pagina)
             
-            if not esperar_imagen_cargada(driver, timeout=10):
+            if not esperar_imagen_cargada(driver, timeout=3):
                 raise Exception("Timeout esperando imagen")
             
-            # Buscar la imagen principal en diferentes elementos
             urls_imagenes = []
             
-            # 1. Buscar en elementos picture (prioridad alta)
             picture_elements = driver.find_elements(By.TAG_NAME, 'picture')
             for picture in picture_elements:
-                # Buscar source con webp
                 sources = picture.find_elements(By.TAG_NAME, 'source')
                 for source in sources:
                     srcset = source.get_attribute('srcset')
                     if srcset and ('webp' in srcset or '.webp' in srcset):
-                        # Tomar la mejor URL del srcset (última que suele ser la de mayor calidad)
                         urls = [url.strip() for url in srcset.split(',')]
                         for url_desc in urls:
                             if 'webp' in url_desc or '.webp' in url_desc:
@@ -157,7 +160,6 @@ def obtener_url_imagen_pagina(driver, url_pagina, max_intentos=5):
                                     url_parte = 'https:' + url_parte
                                 urls_imagenes.append(url_parte)
                 
-                # Buscar img dentro de picture
                 img_elements = picture.find_elements(By.TAG_NAME, 'img')
                 for img in img_elements:
                     src = img.get_attribute('src')
@@ -166,7 +168,6 @@ def obtener_url_imagen_pagina(driver, url_pagina, max_intentos=5):
                             src = 'https:' + src
                         urls_imagenes.append(src)
             
-            # 2. Buscar imágenes directas
             img_elements = driver.find_elements(By.TAG_NAME, 'img')
             for img in img_elements:
                 src = img.get_attribute('src')
@@ -175,21 +176,7 @@ def obtener_url_imagen_pagina(driver, url_pagina, max_intentos=5):
                         src = 'https:' + src
                     urls_imagenes.append(src)
             
-            # 3. Buscar en div de preload
-            try:
-                preload_div = driver.find_element(By.ID, 'preload')
-                preload_imgs = preload_div.find_elements(By.TAG_NAME, 'img')
-                for img in preload_imgs:
-                    src = img.get_attribute('src')
-                    if src and ('.webp' in src or 'webp' in src):
-                        if src.startswith('//'):
-                            src = 'https:' + src
-                        urls_imagenes.append(src)
-            except:
-                pass
-            
             if urls_imagenes:
-                # Eliminar duplicados manteniendo el orden
                 seen = set()
                 unique_urls = []
                 for url in urls_imagenes:
@@ -197,40 +184,31 @@ def obtener_url_imagen_pagina(driver, url_pagina, max_intentos=5):
                         seen.add(url)
                         unique_urls.append(url)
                 
-                # Priorizar URLs que parezcan ser de imágenes principales
                 for url in unique_urls:
-                    if 'gold-usergeneratedcontent.net' in url and '.webp' in url:
-                        print(f"✅ URL encontrada: {url}")
+                    if 'gold-usergeneratedcontent.net' in url and ('.webp' in url or '.jpg' in url or '.png' in url):
                         return url
                 
-                # Si no hay URLs de gold-usergeneratedcontent, tomar la primera
                 if unique_urls:
-                    print(f"✅ URL encontrada: {unique_urls[0]}")
                     return unique_urls[0]
             
             raise Exception("No se encontraron imágenes válidas")
                 
         except Exception as e:
             intento += 1
-            tiempo_espera = 3 + (intento * 2)
-            print(f"❌ Error obteniendo URL de imagen (intento {intento}): {str(e)}")
+            tiempo_espera = 2
+            print(f"❌ Error obteniendo URL (intento {intento}): {str(e)}")
             if intento < max_intentos:
-                print(f"⏳ Reintentando en {tiempo_espera} segundos...")
                 time.sleep(tiempo_espera)
     return None
 
 def descargar_y_comprimir_hitomi(entrada: str) -> str:
     try:
         link_hitomi, id_enlace = procesar_id_o_enlace(entrada)
-        print(f"🔗 URL procesada: {link_hitomi}")
-        print(f"🔢 ID: {id_enlace}")
         
         chrome_path = "selenium/chrome-linux64/chrome"
         driver_path = "selenium/chromedriver-linux64/chromedriver"
 
-        # Obtener título y autor desde la página de galería
-        gallery_link = f"https://hitomi.la/gallery/{id_enlace}.html"
-        titulo, autor = obtener_titulo_y_autor(gallery_link, chrome_path, driver_path)
+        titulo, autor = obtener_titulo_y_autor(entrada, chrome_path, driver_path)
 
         nombre_final = f"{autor} - {titulo}".strip()
         nombre_final = limpiar_nombre(nombre_final)
@@ -245,18 +223,12 @@ def descargar_y_comprimir_hitomi(entrada: str) -> str:
             'Referer': 'https://hitomi.la/',
             'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Sec-Fetch-Dest': 'image',
-            'Sec-Fetch-Mode': 'no-cors',
-            'Sec-Fetch-Site': 'cross-site',
         }
 
         def calcular_hash_imagen(ruta):
             with open(ruta, 'rb') as f:
                 return hashlib.md5(f.read()).hexdigest()
 
-        # Configurar driver
         options = Options()
         options.binary_location = chrome_path
         options.add_argument('--headless')
@@ -275,23 +247,18 @@ def descargar_y_comprimir_hitomi(entrada: str) -> str:
         hashes = {}
         duplicados_consecutivos = 0
         contador = 1
-        max_duplicados_consecutivos = 10  # Detener después de 10 duplicados seguidos
+        max_duplicados_consecutivos = 10
         imagenes_descargadas = 0
-
-        print("🚀 Iniciando descarga de imágenes...")
 
         while duplicados_consecutivos < max_duplicados_consecutivos:
             url_pagina = f"https://hitomi.la/reader/{id_enlace}.html#{contador}"
-            print(f"📖 Página {contador}: {url_pagina}")
             
             img_url = obtener_url_imagen_pagina(driver, url_pagina)
             if not img_url:
-                print(f"❌ No se pudo obtener URL para página {contador}")
                 duplicados_consecutivos += 1
                 contador += 1
                 continue
             
-            # Determinar extensión del archivo
             if '.webp' in img_url:
                 extension = '.webp'
             elif '.jpg' in img_url or '.jpeg' in img_url:
@@ -299,48 +266,38 @@ def descargar_y_comprimir_hitomi(entrada: str) -> str:
             elif '.png' in img_url:
                 extension = '.png'
             else:
-                extension = '.webp'  # default
+                extension = '.webp'
             
             nombre_archivo = f"{contador:04d}{extension}"
             ruta_destino = os.path.join(carpeta_temporal, nombre_archivo)
 
             if descargar_imagen_con_reintentos(img_url, ruta_destino, headers):
-                # Verificar si la imagen es duplicada
                 if os.path.exists(ruta_destino) and os.path.getsize(ruta_destino) > 0:
                     hash_actual = calcular_hash_imagen(ruta_destino)
                     if hash_actual in hashes.values():
-                        print(f"⚠️  Imagen duplicada: {nombre_archivo}")
                         duplicados_consecutivos += 1
                         os.remove(ruta_destino)
                         if duplicados_consecutivos >= max_duplicados_consecutivos:
-                            print("🛑 Demasiadas imágenes duplicadas consecutivas, finalizando descarga")
                             break
                     else:
                         hashes[nombre_archivo] = hash_actual
                         duplicados_consecutivos = 0
                         imagenes_descargadas += 1
-                        print(f"✅ Descargada: {nombre_archivo} ({imagenes_descargadas} imágenes)")
                 else:
-                    print(f"❌ Archivo vacío o corrupto: {nombre_archivo}")
                     duplicados_consecutivos += 1
             else:
-                print(f"❌ Error al descargar: {nombre_archivo}")
                 duplicados_consecutivos += 1
             
             contador += 1
-            time.sleep(1)  # Esperar entre páginas
+            time.sleep(1)
 
         driver.quit()
 
         archivos_descargados = [f for f in os.listdir(carpeta_temporal) if os.path.isfile(os.path.join(carpeta_temporal, f))]
         if not archivos_descargados:
-            print("❌ No se descargaron imágenes. Eliminando carpeta temporal.")
             os.rmdir(carpeta_temporal)
             return ""
 
-        print(f"✅ Descargadas {imagenes_descargadas} imágenes correctamente")
-
-        # Crear archivo CBZ
         ruta_cbz = os.path.join(BASE_DIR, nombre_cbz)
         with zipfile.ZipFile(ruta_cbz, 'w', zipfile.ZIP_DEFLATED) as cbz:
             for file in sorted(archivos_descargados):
@@ -348,23 +305,12 @@ def descargar_y_comprimir_hitomi(entrada: str) -> str:
                 arcname = os.path.join(nombre_final, file)
                 cbz.write(ruta_completa, arcname=arcname)
 
-        # Limpiar carpeta temporal
         for file in archivos_descargados:
             os.remove(os.path.join(carpeta_temporal, file))
         os.rmdir(carpeta_temporal)
 
-        print(f"✅ Archivo CBZ creado: {ruta_cbz}")
-        print(f"📦 Tamaño: {os.path.getsize(ruta_cbz) / (1024*1024):.2f} MB")
         return ruta_cbz
 
     except Exception as e:
-        print(f"❌ Error fatal en el proceso: {str(e)}")
+        print(f"❌ Error fatal: {str(e)}")
         return ""
-
-if __name__ == "__main__":
-    buscar = input()
-    resultado = descargar_y_comprimir_hitomi(buscar)
-    if resultado:
-        print(f"🎉 Proceso completado: {resultado}")
-    else:
-        print("Algo fallo")
