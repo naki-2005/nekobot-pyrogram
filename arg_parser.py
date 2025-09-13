@@ -16,6 +16,8 @@ def get_args():
     parser.add_argument("-g", "--group_id", nargs="*", type=int, help="IDs de grupos para moderación")
     parser.add_argument("-bw", "--black_words", nargs="*", help="Palabras prohibidas")
     parser.add_argument("-fu", "--free_users", type=str, help="Usuarios exentos del filtro (separados por comas)")
+    parser.add_argument("-sb", "--safe_block", type=str, help="Dominios seguros que no se bloquean aunque contengan palabras prohibidas (separados por comas)")
+    
 
     args = parser.parse_args()
 
