@@ -8,6 +8,7 @@ import subprocess
 import aiohttp
 import aiofiles
 import threading
+import re
 import uuid
 import requests
 from bs4 import BeautifulSoup
