@@ -152,10 +152,8 @@ async def send_video_with_thumbnail(client, chat_id, video_path, caption, progre
             if video_duration <= 0:
                 raise ValueError("No se pudo determinar la duración del video.")
 
-            fps = 24
-            max_frames = min(video_duration * fps, 10000)
-            random_frame = random.randint(0, int(max_frames) - 1)
-            random_time = random_frame / fps
+            max_time = min(video_duration, 10)
+            random_time = round(random.uniform(0.5, max_time), 2)
 
             output_thumb = f"{os.path.splitext(video_path)[0]}_miniatura.jpg"
 
@@ -192,7 +190,7 @@ async def send_video_with_thumbnail(client, chat_id, video_path, caption, progre
             os.remove(thumbnail)
         except Exception as e:
             print(f"⚠️ Error al borrar miniatura: {e}")
-            
+
 
 async def send_vault_file_by_index(client, message):
     text = message.text.strip()
