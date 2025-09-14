@@ -722,18 +722,24 @@ async def download_from_magnet_or_torrent(link, save_path=BASE_DIR, progress_dat
                     active_downloads[download_id]["state"] = "error"
                     active_downloads[download_id]["error"] = str(e)
         raise e
-
+        
 async def handle_torrent_command(client, message, progress_data=None):
     try:
-        parts = message.text.strip().split(maxsplit=2)
-
+        parts = message.text.strip().split()
+        
         if len(parts) < 2:
             await message.reply("❗ Debes proporcionar un enlace después del comando.")
             return [], "", False
 
-        arg1 = parts[1]
-        link = parts[2] if arg1 == "-z" and len(parts) > 2 else arg1
-        use_compression = arg1 == "-z"
+        use_compression = False
+        if parts[1] == "-z":
+            use_compression = True
+            if len(parts) < 3:
+                await message.reply("❗ Debes proporcionar un enlace después de -z.")
+                return [], "", False
+            link = parts[2]
+        else:
+            link = parts[1]
 
         if not (link.startswith("magnet:") or link.endswith(".torrent")):
             await message.reply("❗ El enlace debe ser un magnet o un archivo .torrent.")
@@ -824,7 +830,11 @@ async def process_magnet_download_telegram(client, message, link, use_compressio
     progress_task = asyncio.create_task(update_progress())
     
     try:
-        message.text = f"/magnet {link}"
+        if use_compression:
+            message.text = f"/magnet -z {link}"
+        else:
+            message.text = f"/magnet {link}"
+            
         files, final_save_path, use_compression = await handle_torrent_command(client, message, progress_data)
         progress_data["percent"] = 100
         progress_data["active"] = False
