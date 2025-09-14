@@ -733,36 +733,31 @@ async def download_from_magnet_or_torrent(link, save_path=BASE_DIR, progress_dat
 async def handle_torrent_command(client, message, progress_data=None):
     try:
         full_text = message.text.strip()
-        
+
         if not full_text:
             await message.reply("❗ Debes proporcionar un enlace después del comando.")
             return [], "", False
 
-        use_compression = False
-        link = ""
+        use_compression = " -z" in full_text.lower()
 
         torrent_match = re.search(r'https?://[^\s]+\.torrent', full_text)
-        if torrent_match:
-            link = torrent_match.group(0)
-        
-        if not link:
-            magnet_match = re.search(r'magnet:\?[^\s]+', full_text)
-            if magnet_match:
-                link = magnet_match.group(0)
-        
+        magnet_match = re.search(r'magnet:\?[^\s]+', full_text)
+
+        link = torrent_match.group(0) if torrent_match else (
+            magnet_match.group(0) if magnet_match else ""
+        )
+
         if not link:
             await message.reply("❗ El enlace debe ser un magnet o un archivo .torrent.")
             return [], "", False
 
-        compression_match = re.search(r' -[zZ]($|\s)', full_text)
-        if compression_match:
-            use_compression = True
-
         log(f"📥 Comando recibido con link: {link}")
         log(f"🗜️ Compresión: {use_compression}")
-        
+
         download_id = str(uuid.uuid4())
-        final_save_path = await download_from_magnet_or_torrent(link, BASE_DIR, progress_data, download_id)
+        final_save_path = await download_from_magnet_or_torrent(
+            link, BASE_DIR, progress_data, download_id
+        )
 
         if not final_save_path or not os.path.exists(final_save_path):
             await message.reply("❌ No se descargaron archivos.")
