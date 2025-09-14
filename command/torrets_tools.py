@@ -754,6 +754,7 @@ async def handle_torrent_command(client, message, progress_data=None):
 
         log(f"📥 Comando recibido con link: {link}")
         log(f"🗜️ Compresión: {use_compression}")
+        
         download_id = str(uuid.uuid4())
         final_save_path = await download_from_magnet_or_torrent(link, BASE_DIR, progress_data, download_id)
 
@@ -770,7 +771,6 @@ async def handle_torrent_command(client, message, progress_data=None):
         log(f"❌ Error en handle_torrent_command: {e}")
         await message.reply(f"❌ Error al procesar el comando: {e}")
         return [], "", False
-
 async def process_magnet_download_telegram(client, message, link, use_compression):
     from pyrogram.errors import FloodWait, MessageIdInvalid
 
