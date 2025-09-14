@@ -32,6 +32,12 @@ downloads_lock = threading.Lock()
 
 def log(msg):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}")
+
+def clean_filename(name):
+    allowed_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZáéíóúÁÉÍÓÚ0123456789 ()[]"
+    cleaned = ''.join(c for c in name if c in allowed_chars)
+    return cleaned[:50] + '.7z' if len(cleaned) > 50 else cleaned + '.7z'
+
 def search_nyaa(query):
     base_url = "https://nyaa.si/"
     search_query = urllib.parse.quote_plus(query)
@@ -199,8 +205,8 @@ async def show_nyaa_result(client, message, cache_key, index):
         nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"nyaa_prev:{cache_key}"))
         nav_buttons.append(InlineKeyboardButton("⏪", callback_data=f"nyaa_first:{cache_key}"))
     if index < len(results) - 1:
-        nav_buttons.append(InlineKeyboardButton("⏩", callback_data=f"nyaa_next:{cache_key}"))
-        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"nyaa_last:{cache_key}"))
+        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"nyaa_next:{cache_key}"))
+        nav_buttons.append(InlineKeyboardButton("⏩", callback_data=f"nyaa_last:{cache_key}"))
     
     if nav_buttons:
         keyboard.append(nav_buttons)
@@ -449,8 +455,8 @@ async def show_sukebei_result(client, message, cache_key, index):
         nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"sukebei_prev:{cache_key}"))
         nav_buttons.append(InlineKeyboardButton("⏪", callback_data=f"sukebei_first:{cache_key}"))
     if index < len(results) - 1:
-        nav_buttons.append(InlineKeyboardButton("⏩", callback_data=f"sukebei_next:{cache_key}"))
-        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"sukebei_last:{cache_key}"))
+        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"sukebei_next:{cache_key}"))
+        nav_buttons.append(InlineKeyboardButton("⏩", callback_data=f"sukebei_last:{cache_key}"))
     
     if nav_buttons:
         keyboard.append(nav_buttons)
@@ -871,7 +877,8 @@ async def process_magnet_download_telegram(client, message, arg_text, use_compre
                     await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
                     await safe_call(status_msg.edit_text, "🗜️ Comprimiendo archivos en partes de 2000MB con 7z...")
 
-                    archive_path = os.path.join(BASE_DIR, "compressed.7z")
+                    clean_name = clean_filename(progress_data['filename'])
+                    archive_path = os.path.join(BASE_DIR, clean_name)
                     cmd_args = [
                         SEVEN_ZIP_EXE,
                         'a',
@@ -889,9 +896,10 @@ async def process_magnet_download_telegram(client, message, arg_text, use_compre
 
                     archive_parts = sorted([
                         f for f in os.listdir(BASE_DIR)
-                        if f.startswith("compressed.7z")
+                        if f.startswith(clean_name.replace('.7z', ''))
                     ])
 
+                    total_parts = len(archive_parts)
                     for part in archive_parts:
                         full_path = os.path.join(BASE_DIR, part)
                         current_file_name = part
@@ -905,6 +913,13 @@ async def process_magnet_download_telegram(client, message, arg_text, use_compre
                         sent_mb += part_size
                         sent_count += 1
                         os.remove(full_path)
+
+                    await safe_call(status_msg.edit_text,
+                        f"📤 **Enviando archivos...**\n"
+                        f"📁 **Partes:** {sent_count}/{total_parts}\n"
+                        f"📊 **Progreso:** {sent_mb:.2f} MB / {total_mb:.2f} MB\n"
+                        f"⏱️ **Tiempo:** {format_time(int(time.time() - start_time))}"
+                    )
 
                 except Exception as e:
                     await safe_call(message.reply, f"⚠️ Error al comprimir y enviar archivos: {e}")
