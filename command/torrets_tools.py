@@ -24,7 +24,7 @@ nyaa_cache = {}
 sukebei_cache = {}
 CACHE_DURATION = 600
 SEVEN_ZIP_EXE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "7z", "7zz")
-BASE_DIR = "vault_files/torrent_dl"
+BASE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "vault_files", "torrent_dl")
 TEMP_DIR = os.path.join(BASE_DIR, "downloading")
 
 active_downloads = {}
@@ -723,35 +723,42 @@ async def download_from_magnet_or_torrent(link, save_path=BASE_DIR, progress_dat
                     active_downloads[download_id]["error"] = str(e)
         raise e
         
-
 async def handle_torrent_command(client, message, progress_data=None):
     try:
         full_text = message.text.strip()
         
-        if not full_text or len(full_text.split()) < 2:
+        if not full_text:
             await message.reply("❗ Debes proporcionar un enlace después del comando.")
             return [], "", False
 
-        parts = full_text.split(maxsplit=2)
+        parts = full_text.split()
+        
+        if len(parts) < 2:
+            await message.reply("❗ Debes proporcionar un enlace después del comando.")
+            return [], "", False
+
         use_compression = False
         link = ""
 
-        if len(parts) >= 2 and parts[1] == "-z":
+        if parts[1] == "-z":
             use_compression = True
             if len(parts) < 3:
                 await message.reply("❗ Debes proporcionar un enlace después de -z.")
                 return [], "", False
-            link = parts[2].strip()
+            link = full_text.split("-z", 1)[1].strip()
         else:
-            link = full_text.split(maxsplit=1)[1].strip() if len(full_text.split()) > 1 else ""
+            link = full_text.split(maxsplit=1)[1].strip()
 
         if not link:
             await message.reply("❗ No se pudo extraer el enlace.")
             return [], "", False
 
         if not (link.startswith("magnet:") or link.endswith(".torrent")):
-            await message.reply("❗ El enlace debe ser un magnet o un archivo .torrent.")
-            return [], "", False
+            if " " in link and ".torrent" in link:
+                link = link.split(" ")[0]
+            else:
+                await message.reply("❗ El enlace debe ser un magnet o un archivo .torrent.")
+                return [], "", False
 
         log(f"📥 Comando recibido con link: {link}")
         download_id = str(uuid.uuid4())
@@ -917,7 +924,7 @@ async def process_magnet_download_telegram(client, message, link, use_compressio
                         '-mx=0',
                         '-v2000m',
                         archive_path,
-                        os.path.join(final_save_path, '*')
+                        "."
                     ]
                     
                     result = subprocess.run(cmd_args, cwd=final_save_path, capture_output=True, text=True, timeout=3600)
@@ -927,7 +934,7 @@ async def process_magnet_download_telegram(client, message, link, use_compressio
 
                     archive_parts = sorted([
                         f for f in os.listdir(final_save_path)
-                        if f.startswith(clean_name.replace('.7z', '')) and (f.endswith('.7z') or f.endswith('.001'))
+                        if f.startswith(clean_name.replace('.7z', '')) and (f.endswith('.7z') or '.7z.' in f)
                     ])
 
                     if not archive_parts:
