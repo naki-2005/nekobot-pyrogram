@@ -944,7 +944,7 @@ async def process_magnet_download_telegram(client, message, link, use_compressio
                             os.remove(full_path)
                         except:
                             pass
-                    break
+                    return
                 except Exception as e:
                     await safe_call(message.reply, f"⚠️ Error al comprimir: {e}. Enviando archivos sin comprimir.")
                     use_compression = False
