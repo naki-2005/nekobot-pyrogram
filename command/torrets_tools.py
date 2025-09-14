@@ -636,54 +636,6 @@ def move_completed_files(temp_path, final_path):
             shutil.move(src, dst)
             log(f"📦 Archivo movido: {rel_path}")
 
-async def download_from_magnet(link, save_path=BASE_DIR, progress_data=None, download_id=None):
-    try:
-        os.makedirs(TEMP_DIR, exist_ok=True)
-
-        if download_id:
-            with downloads_lock:
-                active_downloads[download_id] = {
-                    "link": link,
-                    "percent": 0,
-                    "state": "starting",
-                    "filename": "Iniciando...",
-                    "speed": 0,
-                    "downloaded": 0,
-                    "total_size": 0,
-                    "start_time": datetime.datetime.now().isoformat(),
-                    "last_update": datetime.datetime.now().isoformat()
-                }
-
-        link = await download_torrent(link)
-        log(f"Usando magnet link: {link}")
-
-        ses = start_session()
-        handle = add_torrent(ses, link, TEMP_DIR)
-
-        begin = time.time()
-        await wait_for_metadata(handle)
-        log(f"Iniciando descarga: {handle.name()}")
-
-        if progress_data is not None:
-            progress_data["filename"] = handle.name()
-
-        await monitor_download(handle, progress_data, download_id)
-        end = time.time()
-
-        log(f"✅ {handle.name()} COMPLETADO")
-        log(f"⏱️ Tiempo total: {int((end - begin) // 60)} min {int((end - begin) % 60)} seg")
-
-        move_completed_files(TEMP_DIR, save_path)
-
-    except Exception as e: 
-        log(f"❌ Error en download_from_magnet: {e}")
-        if download_id:
-            with downloads_lock:
-                if download_id in active_downloads:
-                    active_downloads[download_id]["state"] = "error"
-                    active_downloads[download_id]["error"] = str(e)
-        raise e
-
 def get_download_progress():
     with downloads_lock:
         return active_downloads.copy()
@@ -705,6 +657,55 @@ def cleanup_old_downloads(max_age_hours=24):
         for download_id in to_remove:
             del active_downloads[download_id]
 
+async def download_from_magnet(link, save_path=BASE_DIR, progress_data=None, download_id=None):
+    try:
+        unique_dir = str(uuid.uuid4())
+        temp_download_path = os.path.join(TEMP_DIR, unique_dir)
+        final_save_path = os.path.join(save_path, unique_dir)
+        
+        os.makedirs(temp_download_path, exist_ok=True)
+
+        if download_id:
+            with downloads_lock:
+                active_downloads[download_id] = {
+                    "link": link,
+                    "percent": 0,
+                    "state": "starting",
+                    "filename": "Iniciando...",
+                    "speed": 0,
+                    "downloaded": 0,
+                    "total_size": 0,
+                    "start_time": datetime.datetime.now().isoformat(),
+                    "last_update": datetime.datetime.now().isoformat(),
+                    "unique_dir": unique_dir
+                }
+
+        link = await download_torrent(link)
+
+        ses = start_session()
+        handle = add_torrent(ses, link, temp_download_path)
+
+        begin = time.time()
+        await wait_for_metadata(handle)
+
+        if progress_data is not None:
+            progress_data["filename"] = handle.name()
+
+        await monitor_download(handle, progress_data, download_id)
+        end = time.time()
+
+        move_completed_files(temp_download_path, final_save_path)
+        
+        return final_save_path
+
+    except Exception as e: 
+        if download_id:
+            with downloads_lock:
+                if download_id in active_downloads:
+                    active_downloads[download_id]["state"] = "error"
+                    active_downloads[download_id]["error"] = str(e)
+        raise e
+
 async def handle_torrent_command(client, message, progress_data=None):
     try:
         parts = message.text.strip().split(maxsplit=2)
@@ -715,56 +716,39 @@ async def handle_torrent_command(client, message, progress_data=None):
 
         arg1 = parts[1]
         link = parts[2] if arg1 == "-z" and len(parts) > 2 else arg1
+        use_compression = arg1 == "-z"
 
         if not (link.startswith("magnet:") or link.endswith(".torrent")):
             await message.reply("❗ El enlace debe ser un magnet o un archivo .torrent.")
             return []
 
-        log(f"📥 Comando recibido con link: {link}")
         download_id = str(uuid.uuid4())
-        await download_from_magnet(link, BASE_DIR, progress_data, download_id)
+        final_save_path = await download_from_magnet(link, BASE_DIR, progress_data, download_id)
 
         moved_files = []
-        for root, _, files in os.walk(BASE_DIR):
+        for root, _, files in os.walk(final_save_path):
             for file in files:
                 full_path = os.path.join(root, file)
-                rel_path = os.path.relpath(full_path, BASE_DIR)
-                moved_files.append(rel_path)
+                rel_path = os.path.relpath(full_path, final_save_path)
+                moved_files.append((rel_path, full_path))
 
-        return moved_files
+        return moved_files, final_save_path, use_compression
 
     except Exception as e:
-        log(f"❌ Error en handle_torrent_command: {e}")
         await message.reply(f"❌ Error al procesar el comando: {e}")
-        return []
+        return [], "", False
 
 async def process_magnet_download_telegram(client, message, arg_text, use_compression):
-    import os
-    import asyncio
-    import subprocess
-    import time
-    from pyrogram import enums
-    from pyrogram.errors import FloodWait, MessageIdInvalid
-
     async def safe_call(func, *args, **kwargs):
         while True:
             try:
                 return await func(*args, **kwargs)
             except FloodWait as e:
-                print(f"⏳ Esperando {e.value} seg para continuar")
                 await asyncio.sleep(e.value)
             except MessageIdInvalid:
-                print("⚠️ El mensaje ya no existe, no se puede editar")
                 return None
             except Exception as e:
-                print(f"❌ Error inesperado en {func.__name__}: {type(e).__name__}: {e}")
                 raise
-
-    def format_time(seconds):
-        h = seconds // 3600
-        m = (seconds % 3600) // 60
-        s = seconds % 60
-        return f"{h:02d}:{m:02d}:{s:02d}"
 
     chat_id = message.chat.id
     message.text = f"/magnet {arg_text}"
@@ -783,216 +767,84 @@ async def process_magnet_download_telegram(client, message, arg_text, use_compre
         "active": True
     }
 
-    async def update_progress():
-        while progress_data["percent"] < 100 and progress_data["active"]:
-            try:
-                elapsed = int(time.time() - start_time)
-                formatted_time = format_time(elapsed)
-                speed_mb = round(progress_data["speed"] / (1024 * 1024), 2)
-                
-                bar_length = 20
-                filled_length = int(bar_length * progress_data["percent"] / 100)
-                bar = "█" * filled_length + "▒" * (bar_length - filled_length)
-                
-                downloaded_mb = round(progress_data["downloaded"] / (1024 * 1024), 2)
-                total_mb = round(progress_data["total_size"] / (1024 * 1024), 2) if progress_data["total_size"] > 0 else "Calculando..."
-                
-                await safe_call(status_msg.edit_text,
-                    f"📥 **Descargando:** `{progress_data['filename']}`\n"
-                    f"📊 **Progreso:** {progress_data['percent']}%\n"
-                    f"📉 [{bar}]\n"
-                    f"📦 **Tamaño:** {downloaded_mb} MB / {total_mb} MB\n"
-                    f"🚀 **Velocidad:** {speed_mb} MB/s\n"
-                    f"⏱️ **Tiempo:** {formatted_time}"
-                )
-            except Exception as e:
-                print(f"Error en update_progress: {e}")
-                break
-                
-            await asyncio.sleep(10)
-
-    progress_task = asyncio.create_task(update_progress())
+    files, final_save_path, use_compression = await handle_torrent_command(client, message, progress_data)
     
-    try:
-        download_id = str(uuid.uuid4())
-        files = await handle_torrent_command(client, message, progress_data)
-        progress_data["percent"] = 100
-        progress_data["active"] = False
-        
-        await asyncio.sleep(2)
-        progress_task.cancel()
-        try:
-            await progress_task
-        except asyncio.CancelledError:
-            pass
-
-        if not files:
-            await safe_call(status_msg.edit_text, "❌ No se descargaron archivos.")
-            await asyncio.sleep(5)
-            await safe_call(status_msg.delete)
-            return
-
-        total_files = len(files)
-        sent_count = 0
-        total_mb = sum(os.path.getsize(os.path.join(BASE_DIR, rel_path)) for rel_path in files) / (1024 * 1024)
-        sent_mb = 0
-        current_file_name = ""
-        current_mb_sent = 0
-
-        def upload_progress(current, total):
-            nonlocal current_mb_sent
-            current_mb_sent = current / (1024 * 1024)
-
-        await safe_call(status_msg.edit_text, "📤 Preparando envío de archivos...")
-
-        async def update_upload_progress():
-            while sent_count < total_files:
-                try:
-                    elapsed = int(time.time() - start_time)
-                    formatted_time = format_time(elapsed)
-                    estimated_ratio = (sent_mb + current_mb_sent) / total_mb if total_mb > 0 else 0
-                    
-                    bar_length = 20
-                    filled_length = int(bar_length * estimated_ratio)
-                    bar = "█" * filled_length + "▒" * (bar_length - filled_length)
-
-                    await safe_call(status_msg.edit_text,
-                        f"📤 **Enviando archivos...**\n"
-                        f"📁 **Archivos:** {sent_count}/{total_files}\n"
-                        f"📊 **Progreso:** {sent_mb + current_mb_sent:.2f} MB / {total_mb:.2f} MB\n"
-                        f"📉 [{bar}] {estimated_ratio*100:.1f}%\n"
-                        f"⏱️ **Tiempo:** {formatted_time}\n"
-                        f"📄 **Archivo actual:** {current_file_name}"
-                    )
-                except Exception as e:
-                    print(f"Error en update_upload_progress: {e}")
-                    break
-                await asyncio.sleep(10)
-
-        upload_task = asyncio.create_task(update_upload_progress())
-
-        try:
-            if use_compression:
-                try:
-                    await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                    await safe_call(status_msg.edit_text, "🗜️ Comprimiendo archivos en partes de 2000MB con 7z...")
-
-                    clean_name = clean_filename(progress_data['filename'])
-                    archive_path = os.path.join(BASE_DIR, clean_name)
-                    cmd_args = [
-                        SEVEN_ZIP_EXE,
-                        'a',
-                        '-mx=0',
-                        '-v2000m',
-                        archive_path,
-                        os.path.join(BASE_DIR, '*')
-                    ]
-                    subprocess.run(cmd_args, check=True)
-
-                    for rel_path in files:
-                        path = os.path.join(BASE_DIR, rel_path)
-                        if os.path.exists(path):
-                            os.remove(path)
-
-                    archive_parts = sorted([
-                        f for f in os.listdir(BASE_DIR)
-                        if f.startswith(clean_name.replace('.7z', ''))
-                    ])
-
-                    total_parts = len(archive_parts)
-                    for part in archive_parts:
-                        full_path = os.path.join(BASE_DIR, part)
-                        current_file_name = part
-                        current_mb_sent = 0
-                        part_size = os.path.getsize(full_path) / (1024 * 1024)
-                        
-                        await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                        await safe_call(client.send_document, chat_id, document=full_path, progress=upload_progress)
-                        await safe_call(client.send_chat_action, chat_id, enums.ChatAction.CANCEL)
-                        
-                        sent_mb += part_size
-                        sent_count += 1
-                        os.remove(full_path)
-
-                    await safe_call(status_msg.edit_text,
-                        f"📤 **Enviando archivos...**\n"
-                        f"📁 **Partes:** {sent_count}/{total_parts}\n"
-                        f"📊 **Progreso:** {sent_mb:.2f} MB / {total_mb:.2f} MB\n"
-                        f"⏱️ **Tiempo:** {format_time(int(time.time() - start_time))}"
-                    )
-
-                except Exception as e:
-                    await safe_call(message.reply, f"⚠️ Error al comprimir y enviar archivos: {e}")
-                return
-
-            for rel_path in files:
-                path = os.path.join(BASE_DIR, rel_path)
-                try:
-                    current_file_name = os.path.basename(path)
-                    file_size = os.path.getsize(path)
-                    file_size_mb = file_size / (1024 * 1024)
-                    current_mb_sent = 0
-
-                    if file_size > 2000 * 1024 * 1024:
-                        await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                        await safe_call(status_msg.edit_text, f"📦 El archivo `{current_file_name}` excede los 2000MB. Dividiéndolo en partes...")
-
-                        with open(path, 'rb') as original:
-                            part_num = 1
-                            while True:
-                                part_data = original.read(2000 * 1024 * 1024)
-                                if not part_data:
-                                    break
-                                part_file = f"{path}.{part_num:03d}"
-                                with open(part_file, 'wb') as part:
-                                    part.write(part_data)
-                                
-                                current_file_name = os.path.basename(part_file)
-                                current_mb_sent = 0
-                                part_size = os.path.getsize(part_file) / (1024 * 1024)
-                                
-                                await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                                await safe_call(client.send_document, chat_id, document=part_file, progress=upload_progress)
-                                await safe_call(client.send_chat_action, chat_id, enums.ChatAction.CANCEL)
-                                
-                                sent_mb += part_size
-                                os.remove(part_file)
-                                part_num += 1
-
-                        os.remove(path)
-                        sent_count += 1
-
-                    else:
-                        await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                        await safe_call(client.send_document, chat_id, document=path, progress=upload_progress)
-                        await safe_call(client.send_chat_action, chat_id, enums.ChatAction.CANCEL)
-                        
-                        sent_mb += file_size_mb
-                        sent_count += 1
-                        os.remove(path)
-
-                except Exception as e:
-                    await safe_call(message.reply, f"⚠️ Error al enviar {rel_path}: {e}")
-
-        finally:
-            upload_task.cancel()
-            try:
-                await upload_task
-            except asyncio.CancelledError:
-                pass
-
-        await safe_call(status_msg.edit_text, "✅ Todos los archivos han sido enviados.")
+    if not files:
+        await safe_call(status_msg.edit_text, "❌ No se descargaron archivos.")
         await asyncio.sleep(5)
         await safe_call(status_msg.delete)
+        return
 
-    except Exception as e:
-        progress_data["active"] = False
-        progress_task.cancel()
+    if use_compression:
         try:
-            await progress_task
-        except asyncio.CancelledError:
-            pass
-        
-        error_msg = await safe_call(message.reply, f"❌ Error durante la descarga: {e}")
-        if status_msg:
-            await safe_call(status_msg.delete)
+            await safe_call(status_msg.edit_text, "🗜️ Comprimiendo archivos en partes de 2000MB con 7z...")
+            
+            clean_name = clean_filename(progress_data['filename'])
+            archive_path = os.path.join(final_save_path, clean_name)
+            
+            cmd_args = [
+                SEVEN_ZIP_EXE,
+                'a',
+                '-mx=0',
+                '-v2000m',
+                archive_path,
+                os.path.join(final_save_path, '*')
+            ]
+            subprocess.run(cmd_args, check=True, cwd=final_save_path)
+
+            shutil.rmtree(final_save_path)
+            os.makedirs(final_save_path, exist_ok=True)
+
+            archive_parts = sorted([
+                f for f in os.listdir(final_save_path)
+                if f.startswith(clean_name.replace('.7z', ''))
+            ])
+
+            for part in archive_parts:
+                full_path = os.path.join(final_save_path, part)
+                await safe_call(client.send_document, chat_id, document=full_path)
+                os.remove(full_path)
+
+            shutil.rmtree(final_save_path)
+            await safe_call(status_msg.edit_text, "✅ Archivos comprimidos y enviados exitosamente.")
+
+        except Exception as e:
+            await safe_call(message.reply, f"⚠️ Error al comprimir y enviar archivos: {e}")
+        finally:
+            if os.path.exists(final_save_path):
+                shutil.rmtree(final_save_path)
+        return
+
+    for rel_path, full_path in files:
+        try:
+            file_size = os.path.getsize(full_path)
+            
+            if file_size > 2000 * 1024 * 1024:
+                await safe_call(status_msg.edit_text, f"📦 El archivo `{os.path.basename(full_path)}` excede los 2000MB. Dividiéndolo en partes...")
+                
+                with open(full_path, 'rb') as original:
+                    part_num = 1
+                    while True:
+                        part_data = original.read(2000 * 1024 * 1024)
+                        if not part_data:
+                            break
+                        part_file = f"{full_path}.{part_num:03d}"
+                        with open(part_file, 'wb') as part:
+                            part.write(part_data)
+                        
+                        await safe_call(client.send_document, chat_id, document=part_file)
+                        os.remove(part_file)
+                        part_num += 1
+                
+                os.remove(full_path)
+            else:
+                await safe_call(client.send_document, chat_id, document=full_path)
+                os.remove(full_path)
+                
+        except Exception as e:
+            await safe_call(message.reply, f"⚠️ Error al enviar {rel_path}: {e}")
+
+    shutil.rmtree(final_save_path)
+    await safe_call(status_msg.edit_text, "✅ Todos los archivos han sido enviados.")
+    await asyncio.sleep(5)
+    await safe_call(status_msg.delete)
