@@ -722,7 +722,7 @@ async def download_from_magnet_or_torrent(link, save_path=BASE_DIR, progress_dat
                     active_downloads[download_id]["state"] = "error"
                     active_downloads[download_id]["error"] = str(e)
         raise e
-        
+
 async def handle_torrent_command(client, message, progress_data=None):
     try:
         full_text = message.text.strip()
@@ -731,34 +731,33 @@ async def handle_torrent_command(client, message, progress_data=None):
             await message.reply("❗ Debes proporcionar un enlace después del comando.")
             return [], "", False
 
-        parts = full_text.split()
-        
-        if len(parts) < 2:
-            await message.reply("❗ Debes proporcionar un enlace después del comando.")
-            return [], "", False
-
         use_compression = False
         link = ""
 
-        if parts[1] == "-z":
+        if "-z" in full_text:
             use_compression = True
-            if len(parts) < 3:
+            parts = full_text.split("-z", 1)
+            if len(parts) < 2 or not parts[1].strip():
                 await message.reply("❗ Debes proporcionar un enlace después de -z.")
                 return [], "", False
-            link = full_text.split("-z", 1)[1].strip()
+            link = parts[1].strip()
         else:
-            link = full_text.split(maxsplit=1)[1].strip()
+            parts = full_text.split(maxsplit=1)
+            if len(parts) < 2:
+                await message.reply("❗ Debes proporcionar un enlace después del comando.")
+                return [], "", False
+            link = parts[1].strip()
 
         if not link:
             await message.reply("❗ No se pudo extraer el enlace.")
             return [], "", False
 
-        if not (link.startswith("magnet:") or link.endswith(".torrent")):
-            if " " in link and ".torrent" in link:
-                link = link.split(" ")[0]
-            else:
-                await message.reply("❗ El enlace debe ser un magnet o un archivo .torrent.")
-                return [], "", False
+        if not (link.startswith("magnet:") or ".torrent" in link):
+            await message.reply("❗ El enlace debe ser un magnet o un archivo .torrent.")
+            return [], "", False
+
+        if ".torrent" in link and " " in link:
+            link = link.split(" ")[0]
 
         log(f"📥 Comando recibido con link: {link}")
         download_id = str(uuid.uuid4())
