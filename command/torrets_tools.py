@@ -666,15 +666,24 @@ def add_torrent_from_file(ses, torrent_path, save_path):
 
 async def handle_torrent_command(client, message, progress_data=None):
     try:
-        parts = message.text.strip().split(maxsplit=2)
+        text = message.text.strip()
+        parts = text.split(maxsplit=2)
 
         if len(parts) < 2:
             await message.reply("❗ Debes proporcionar un enlace después del comando.")
             return [], "", False
 
         arg1 = parts[1]
-        link = parts[2] if arg1 == "-z" and len(parts) > 2 else arg1
-        use_compression = arg1 == "-z"
+        
+        if arg1 == "-z":
+            if len(parts) < 3:
+                await message.reply("❗ Debes proporcionar un enlace después de -z.")
+                return [], "", False
+            link = parts[2]
+            use_compression = True
+        else:
+            link = arg1
+            use_compression = False
 
         if not (link.startswith("magnet:") or link.endswith(".torrent")):
             await message.reply("❗ El enlace debe ser un magnet o un archivo .torrent.")
@@ -758,6 +767,7 @@ async def download_from_magnet_or_torrent(link, save_path=BASE_DIR, progress_dat
                     active_downloads[download_id]["error"] = str(e)
         raise e
 
+
 async def process_magnet_download_telegram(client, message, link, use_compression):
     from pyrogram.errors import FloodWait, MessageIdInvalid
 
@@ -795,8 +805,14 @@ async def process_magnet_download_telegram(client, message, link, use_compressio
     }
 
     async def update_progress():
+        last_percent = -1
         while progress_data["percent"] < 100 and progress_data["active"]:
             try:
+                if progress_data["percent"] == last_percent:
+                    await asyncio.sleep(10)
+                    continue
+                    
+                last_percent = progress_data["percent"]
                 elapsed = int(time.time() - start_time)
                 formatted_time = format_time(elapsed)
                 speed_mb = round(progress_data["speed"] / (1024 * 1024), 2)
@@ -808,7 +824,7 @@ async def process_magnet_download_telegram(client, message, link, use_compressio
                 downloaded_mb = round(progress_data["downloaded"] / (1024 * 1024), 2)
                 total_mb = round(progress_data["total_size"] / (1024 * 1024), 2) if progress_data["total_size"] > 0 else "Calculando..."
                 
-                await safe_call(status_msg.edit_text,
+                message_text = (
                     f"📥 **Descargando:** `{progress_data['filename']}`\n"
                     f"📊 **Progreso:** {progress_data['percent']}%\n"
                     f"📉 [{bar}]\n"
@@ -816,8 +832,11 @@ async def process_magnet_download_telegram(client, message, link, use_compressio
                     f"🚀 **Velocidad:** {speed_mb} MB/s\n"
                     f"⏱️ **Tiempo:** {formatted_time}"
                 )
+                
+                await safe_call(status_msg.edit_text, message_text)
             except Exception as e:
-                print(f"Error en update_progress: {e}")
+                if "MESSAGE_NOT_MODIFIED" not in str(e):
+                    print(f"Error en update_progress: {e}")
                 break
                 
             await asyncio.sleep(10)
@@ -825,7 +844,6 @@ async def process_magnet_download_telegram(client, message, link, use_compressio
     progress_task = asyncio.create_task(update_progress())
     
     try:
-        message.text = f"/magnet {link}"
         files, final_save_path, use_compression = await handle_torrent_command(client, message, progress_data)
         progress_data["percent"] = 100
         progress_data["active"] = False
@@ -857,8 +875,17 @@ async def process_magnet_download_telegram(client, message, link, use_compressio
         await safe_call(status_msg.edit_text, "📤 Preparando envío de archivos...")
 
         async def update_upload_progress():
+            last_sent_count = -1
+            last_sent_mb = -1
             while sent_count < total_files:
                 try:
+                    if sent_count == last_sent_count and abs(sent_mb + current_mb_sent - last_sent_mb) < 0.1:
+                        await asyncio.sleep(10)
+                        continue
+                        
+                    last_sent_count = sent_count
+                    last_sent_mb = sent_mb + current_mb_sent
+                    
                     elapsed = int(time.time() - start_time)
                     formatted_time = format_time(elapsed)
                     estimated_ratio = (sent_mb + current_mb_sent) / total_mb if total_mb > 0 else 0
@@ -867,7 +894,7 @@ async def process_magnet_download_telegram(client, message, link, use_compressio
                     filled_length = int(bar_length * estimated_ratio)
                     bar = "█" * filled_length + "▒" * (bar_length - filled_length)
 
-                    await safe_call(status_msg.edit_text,
+                    message_text = (
                         f"📤 **Enviando archivos...**\n"
                         f"📁 **Archivos:** {sent_count}/{total_files}\n"
                         f"📊 **Progreso:** {sent_mb + current_mb_sent:.2f} MB / {total_mb:.2f} MB\n"
@@ -875,8 +902,11 @@ async def process_magnet_download_telegram(client, message, link, use_compressio
                         f"⏱️ **Tiempo:** {formatted_time}\n"
                         f"📄 **Archivo actual:** {current_file_name}"
                     )
+                    
+                    await safe_call(status_msg.edit_text, message_text)
                 except Exception as e:
-                    print(f"Error en update_upload_progress: {e}")
+                    if "MESSAGE_NOT_MODIFIED" not in str(e):
+                        print(f"Error en update_upload_progress: {e}")
                     break
                 await asyncio.sleep(10)
 
@@ -916,23 +946,18 @@ async def process_magnet_download_telegram(client, message, link, use_compressio
                         current_mb_sent = 0
                         part_size = os.path.getsize(full_path) / (1024 * 1024)
                         
-                        await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
+                        await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_Document)
                         await safe_call(client.send_document, chat_id, document=full_path, progress=upload_progress)
-                        await safe_call(client.send_chat_action, chat_id, enums.ChatAction.CANCEL)
                         
                         sent_mb += part_size
                         sent_count += 1
                         os.remove(full_path)
 
-                    await safe_call(status_msg.edit_text,
-                        f"📤 **Enviando archivos...**\n"
-                        f"📁 **Partes:** {sent_count}/{total_parts}\n"
-                        f"📊 **Progreso:** {sent_mb:.2f} MB / {total_mb:.2f} MB\n"
-                        f"⏱️ **Tiempo:** {format_time(int(time.time() - start_time))}"
-                    )
-
                 except Exception as e:
                     await safe_call(message.reply, f"⚠️ Error al comprimir y enviar archivos: {e}")
+                finally:
+                    if os.path.exists(final_save_path):
+                        shutil.rmtree(final_save_path)
                 return
 
             for rel_path, full_path in files:
@@ -962,7 +987,6 @@ async def process_magnet_download_telegram(client, message, link, use_compressio
                                 
                                 await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
                                 await safe_call(client.send_document, chat_id, document=part_file, progress=upload_progress)
-                                await safe_call(client.send_chat_action, chat_id, enums.ChatAction.CANCEL)
                                 
                                 sent_mb += part_size
                                 os.remove(part_file)
@@ -974,7 +998,6 @@ async def process_magnet_download_telegram(client, message, link, use_compressio
                     else:
                         await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
                         await safe_call(client.send_document, chat_id, document=full_path, progress=upload_progress)
-                        await safe_call(client.send_chat_action, chat_id, enums.ChatAction.CANCEL)
                         
                         sent_mb += file_size_mb
                         sent_count += 1
@@ -989,6 +1012,9 @@ async def process_magnet_download_telegram(client, message, link, use_compressio
                 await upload_task
             except asyncio.CancelledError:
                 pass
+            
+            if os.path.exists(final_save_path):
+                shutil.rmtree(final_save_path)
 
         await safe_call(status_msg.edit_text, "✅ Todos los archivos han sido enviados.")
         await asyncio.sleep(5)
