@@ -713,6 +713,12 @@ async def download_from_magnet_or_torrent(link, save_path=BASE_DIR, progress_dat
 
         move_completed_files(temp_download_path, final_save_path)
 
+        if link.endswith('.torrent'):
+            try:
+                os.remove(torrent_path)
+            except:
+                pass
+
         return final_save_path
 
     except Exception as e: 
@@ -758,6 +764,10 @@ async def handle_torrent_command(client, message, progress_data=None):
         download_id = str(uuid.uuid4())
         final_save_path = await download_from_magnet_or_torrent(link, BASE_DIR, progress_data, download_id)
 
+        if not final_save_path or not os.path.exists(final_save_path):
+            await message.reply("❌ No se descargaron archivos.")
+            return [], "", False
+
         moved_files = []
         for root, _, files in os.walk(final_save_path):
             for file in files:
@@ -765,12 +775,17 @@ async def handle_torrent_command(client, message, progress_data=None):
                 rel_path = os.path.relpath(full_path, final_save_path)
                 moved_files.append((rel_path, full_path))
 
+        if not moved_files:
+            await message.reply("❌ No se encontraron archivos descargados.")
+            return [], "", False
+
         return moved_files, final_save_path, use_compression
 
     except Exception as e:
         log(f"❌ Error en handle_torrent_command: {e}")
         await message.reply(f"❌ Error al procesar el comando: {e}")
         return [], "", False
+
 async def process_magnet_download_telegram(client, message, link, use_compression):
     from pyrogram.errors import FloodWait, MessageIdInvalid
 
