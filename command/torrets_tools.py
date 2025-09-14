@@ -540,11 +540,6 @@ async def handle_sukebei_callback(client, callback_query):
         await show_sukebei_result(client, callback_query.message, cache_key, len(results) - 1)
         await callback_query.answer()
 
-def get_magnet_from_torrent(torrent_path):
-    from torf import Torrent
-    t = Torrent.read(torrent_path)
-    return str(t.magnet(name=True, size=False, trackers=False, tracker=False))
-
 def start_session():
     ses = lt.session()
     ses.listen_on(6881, 6891)
@@ -669,41 +664,6 @@ def add_torrent_from_file(ses, torrent_path, save_path):
         log(f"Error al agregar torrent desde archivo: {e}")
         raise
 
-async def download_torrent_file(link):
-    temp_path = os.path.join(TEMP_DIR, f"temp_{uuid.uuid4().hex}.torrent")
-    os.makedirs(TEMP_DIR, exist_ok=True)
-    
-    log("Descargando archivo .torrent...")
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(link) as response:
-                if response.status == 200:
-                    async with aiofiles.open(temp_path, 'wb') as f:
-                        await f.write(await response.read())
-                    log("Archivo .torrent descargado exitosamente")
-                    return temp_path
-                else:
-                    log(f"Error al descargar torrent: {response.status}")
-                    return None
-    except Exception as e:
-        log(f"Error en descarga torrent: {e}")
-        return None
-
-def add_torrent_from_file(ses, torrent_path, save_path):
-    try:
-        info = lt.torrent_info(torrent_path)
-        params = {
-            'save_path': save_path,
-            'storage_mode': lt.storage_mode_t.storage_mode_sparse,
-            'ti': info
-        }
-        handle = ses.add_torrent(params)
-        handle.set_sequential_download(False)
-        return handle
-    except Exception as e:
-        log(f"Error al agregar torrent desde archivo: {e}")
-        raise
-
 async def download_from_magnet_or_torrent(link, save_path=BASE_DIR, progress_data=None, download_id=None):
     try:
         unique_dir = str(uuid.uuid4())
@@ -729,7 +689,6 @@ async def download_from_magnet_or_torrent(link, save_path=BASE_DIR, progress_dat
 
         ses = start_session()
         
-        # Handle .torrent files
         if link.endswith('.torrent'):
             torrent_path = await download_torrent_file(link)
             if not torrent_path:
@@ -737,7 +696,6 @@ async def download_from_magnet_or_torrent(link, save_path=BASE_DIR, progress_dat
             
             handle = add_torrent_from_file(ses, torrent_path, temp_download_path)
         else:
-            # Handle magnet links
             handle = add_torrent(ses, link, temp_download_path)
 
         begin = time.time()
@@ -798,11 +756,8 @@ async def handle_torrent_command(client, message, progress_data=None):
         log(f"❌ Error en handle_torrent_command: {e}")
         await message.reply(f"❌ Error al procesar el comando: {e}")
         return [], "", False
-
-    
-    if not files:
-        await safe_call(status_msg.edit_text, "❌ No se descargaron archivos.")
-        awaitasync def process_magnet_download_telegram(client, message, link, use_compression):
+        
+async def process_magnet_download_telegram(client, message, link, use_compression):
     from pyrogram.errors import FloodWait, MessageIdInvalid
     
     async def safe_call(func, *args, **kwargs):
@@ -833,6 +788,12 @@ async def handle_torrent_command(client, message, progress_data=None):
     }
 
     files, final_save_path, use_compression = await handle_torrent_command(client, message, progress_data)
+    
+    if not files:
+        await safe_call(status_msg.edit_text, "❌ No se descargaron archivos.")
+        await asyncio.sleep(5)
+        await safe_call(status_msg.delete)
+        return
 
     if use_compression:
         try:
