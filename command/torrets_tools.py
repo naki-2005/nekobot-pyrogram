@@ -725,22 +725,27 @@ async def download_from_magnet_or_torrent(link, save_path=BASE_DIR, progress_dat
         
 async def handle_torrent_command(client, message, progress_data=None):
     try:
-        parts = message.text.strip().split()
+        full_text = message.text.strip()
+        parts = full_text.split()
         
         if len(parts) < 2:
             await message.reply("❗ Debes proporcionar un enlace después del comando.")
             return [], "", False
 
         use_compression = False
+        link = ""
+        
         if parts[1] == "-z":
             use_compression = True
             if len(parts) < 3:
                 await message.reply("❗ Debes proporcionar un enlace después de -z.")
                 return [], "", False
-            link = parts[2]
+            link = " ".join(parts[2:])
         else:
-            link = parts[1]
+            link = " ".join(parts[1:])
 
+        link = link.strip('"\' ')
+        
         if not (link.startswith("magnet:") or link.endswith(".torrent")):
             await message.reply("❗ El enlace debe ser un magnet o un archivo .torrent.")
             return [], "", False
@@ -899,50 +904,71 @@ async def process_magnet_download_telegram(client, message, link, use_compressio
 
                     clean_name = clean_filename(progress_data['filename'])
                     archive_path = os.path.join(final_save_path, clean_name)
-                    cmd_args = [
-                        SEVEN_ZIP_EXE,
-                        'a',
-                        '-mx=0',
-                        '-v2000m',
-                        archive_path,
-                        os.path.join(final_save_path, '*')
-                    ]
-                    subprocess.run(cmd_args, check=True, cwd=final_save_path)
+                    
+                    files_to_compress = []
+                    for root, _, files in os.walk(final_save_path):
+                        for file in files:
+                            files_to_compress.append(os.path.join(root, file))
+                    
+                    if not files_to_compress:
+                        await safe_call(message.reply, "⚠️ No hay archivos para comprimir. Enviando sin compresión.")
+                        use_compression = False
+                    else:
+                        cmd_args = [
+                            SEVEN_ZIP_EXE,
+                            'a',
+                            '-mx=0',
+                            '-v2000m',
+                            archive_path,
+                        ]
+                        
+                        cmd_args.extend(files_to_compress)
+                        
+                        result = subprocess.run(cmd_args, cwd=final_save_path, capture_output=True, text=True, timeout=3600)
+                        
+                        if result.returncode != 0:
+                            raise Exception(f"Error en 7z: {result.stderr}")
+                        
+                        for file_path in files_to_compress:
+                            try:
+                                os.remove(file_path)
+                            except:
+                                pass
 
-                    for rel_path, full_path in files:
-                        if os.path.exists(full_path):
+                        archive_parts = sorted([
+                            f for f in os.listdir(final_save_path)
+                            if f.startswith(clean_name.replace('.7z', ''))
+                        ])
+
+                        total_parts = len(archive_parts)
+                        for part in archive_parts:
+                            full_path = os.path.join(final_save_path, part)
+                            current_file_name = part
+                            current_mb_sent = 0
+                            part_size = os.path.getsize(full_path) / (1024 * 1024)
+                            
+                            await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
+                            await safe_call(client.send_document, chat_id, document=full_path, progress=upload_progress)
+                            await safe_call(client.send_chat_action, chat_id, enums.ChatAction.CANCEL)
+                            
+                            sent_mb += part_size
+                            sent_count += 1
                             os.remove(full_path)
 
-                    archive_parts = sorted([
-                        f for f in os.listdir(final_save_path)
-                        if f.startswith(clean_name.replace('.7z', ''))
-                    ])
+                        await safe_call(status_msg.edit_text,
+                            f"📤 **Enviando archivos...**\n"
+                            f"📁 **Partes:** {sent_count}/{total_parts}\n"
+                            f"📊 **Progreso:** {sent_mb:.2f} MB / {total_mb:.2f} MB\n"
+                            f"⏱️ **Tiempo:** {format_time(int(time.time() - start_time))}"
+                        )
+                        return
 
-                    total_parts = len(archive_parts)
-                    for part in archive_parts:
-                        full_path = os.path.join(final_save_path, part)
-                        current_file_name = part
-                        current_mb_sent = 0
-                        part_size = os.path.getsize(full_path) / (1024 * 1024)
-                        
-                        await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                        await safe_call(client.send_document, chat_id, document=full_path, progress=upload_progress)
-                        await safe_call(client.send_chat_action, chat_id, enums.ChatAction.CANCEL)
-                        
-                        sent_mb += part_size
-                        sent_count += 1
-                        os.remove(full_path)
-
-                    await safe_call(status_msg.edit_text,
-                        f"📤 **Enviando archivos...**\n"
-                        f"📁 **Partes:** {sent_count}/{total_parts}\n"
-                        f"📊 **Progreso:** {sent_mb:.2f} MB / {total_mb:.2f} MB\n"
-                        f"⏱️ **Tiempo:** {format_time(int(time.time() - start_time))}"
-                    )
-
+                except subprocess.TimeoutExpired:
+                    await safe_call(message.reply, "⚠️ Timeout al comprimir. Enviando archivos sin comprimir.")
+                    use_compression = False
                 except Exception as e:
-                    await safe_call(message.reply, f"⚠️ Error al comprimir y enviar archivos: {e}")
-                return
+                    await safe_call(message.reply, f"⚠️ Error al comprimir: {e}. Enviando archivos sin comprimir.")
+                    use_compression = False
 
             for rel_path, full_path in files:
                 try:
