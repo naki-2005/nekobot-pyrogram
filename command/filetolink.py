@@ -118,6 +118,82 @@ def format_time(seconds):
     else:
         return f"{s}s"
 
+async def send_video_with_thumbnail(client, chat_id, video_path, caption, progress_callback):
+    import os
+    import subprocess
+    import random
+
+    def get_video_duration(video_path):
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v", "error",
+                    "-select_streams", "v:0",
+                    "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    video_path
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            duration = result.stdout.strip()
+            if duration == 'N/A' or not duration:
+                raise ValueError("No se pudo obtener la duración del video.")
+            return int(float(duration))
+        except Exception as e:
+            print(f"Error al obtener la duración del video: {e}")
+            return 0
+
+    async def generate_thumbnail(video_path):
+        try:
+            video_duration = get_video_duration(video_path)
+            if video_duration <= 0:
+                raise ValueError("No se pudo determinar la duración del video.")
+
+            fps = 24
+            max_frames = min(video_duration * fps, 10000)
+            random_frame = random.randint(0, int(max_frames) - 1)
+            random_time = random_frame / fps
+
+            output_thumb = f"{os.path.splitext(video_path)[0]}_miniatura.jpg"
+
+            subprocess.run([
+                "ffmpeg",
+                "-i", video_path,
+                "-ss", str(random_time),
+                "-vframes", "1",
+                output_thumb
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+
+            if not os.path.exists(output_thumb):
+                raise IOError("No se pudo generar la miniatura.")
+
+            return output_thumb
+        except Exception as e:
+            print(f"Error al generar la miniatura: {e}")
+            return None
+
+    thumbnail = await generate_thumbnail(video_path)
+
+    await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_VIDEO)
+    await safe_call(client.send_video,
+        chat_id,
+        video=video_path,
+        caption=caption,
+        thumb=thumbnail if thumbnail else None,
+        progress=progress_callback
+    )
+    await safe_call(client.send_chat_action, chat_id, enums.ChatAction.CANCEL)
+
+    if thumbnail and os.path.exists(thumbnail):
+        try:
+            os.remove(thumbnail)
+        except Exception as e:
+            print(f"⚠️ Error al borrar miniatura: {e}")
+            
+
 async def send_vault_file_by_index(client, message):
     text = message.text.strip()
     args = text.split()
@@ -285,7 +361,7 @@ async def send_vault_file_by_index(client, message):
                     if mime_main == "image":
                         await safe_call(client.send_photo, message.chat.id, photo=path, caption=f"🖼️ {os.path.basename(path)}", progress=progress)
                     elif mime_main == "video":
-                        await safe_call(client.send_video, message.chat.id, video=path, caption=f"🎬 {os.path.basename(path)}", progress=progress)
+                        await send_video_with_thumbnail(client, message.chat.id, path, f"🎬 {os.path.basename(path)}", progress)
                     else:
                         await safe_call(client.send_document, message.chat.id, document=path, caption=f"📤 {os.path.basename(path)}", progress=progress)
 
