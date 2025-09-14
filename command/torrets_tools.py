@@ -734,32 +734,25 @@ async def handle_torrent_command(client, message, progress_data=None):
         use_compression = False
         link = ""
 
-        if "-z" in full_text:
-            use_compression = True
-            parts = full_text.split("-z", 1)
-            if len(parts) < 2 or not parts[1].strip():
-                await message.reply("❗ Debes proporcionar un enlace después de -z.")
-                return [], "", False
-            link = parts[1].strip()
-        else:
-            parts = full_text.split(maxsplit=1)
-            if len(parts) < 2:
-                await message.reply("❗ Debes proporcionar un enlace después del comando.")
-                return [], "", False
-            link = parts[1].strip()
-
+        torrent_match = re.search(r'https?://[^\s]+\.torrent', full_text)
+        if torrent_match:
+            link = torrent_match.group(0)
+        
         if not link:
-            await message.reply("❗ No se pudo extraer el enlace.")
-            return [], "", False
-
-        if not (link.startswith("magnet:") or ".torrent" in link):
+            magnet_match = re.search(r'magnet:\?[^\s]+', full_text)
+            if magnet_match:
+                link = magnet_match.group(0)
+        
+        if not link:
             await message.reply("❗ El enlace debe ser un magnet o un archivo .torrent.")
             return [], "", False
 
-        if ".torrent" in link and " " in link:
-            link = link.split(" ")[0]
+        compression_match = re.search(r' -[zZ]($|\s)', full_text)
+        if compression_match:
+            use_compression = True
 
         log(f"📥 Comando recibido con link: {link}")
+        log(f"🗜️ Compresión: {use_compression}")
         download_id = str(uuid.uuid4())
         final_save_path = await download_from_magnet_or_torrent(link, BASE_DIR, progress_data, download_id)
 
