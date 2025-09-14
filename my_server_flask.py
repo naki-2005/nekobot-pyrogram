@@ -4,7 +4,7 @@ import asyncio
 import subprocess
 from flask import Flask, request, send_from_directory, render_template_string, redirect, session, jsonify, url_for, abort
 from threading import Thread, Lock
-from command.torrets_tools import download_from_magnet, get_download_progress, cleanup_old_downloads
+from command.torrets_tools import download_from_magnet_or_torrent, get_download_progress, cleanup_old_downloads
 from command.htools import crear_cbz_desde_fuente
 from my_flask_templates import LOGIN_TEMPLATE, MAIN_TEMPLATE, UTILS_TEMPLATE, DOWNLOADS_TEMPLATE, GALLERY_TEMPLATE
 import uuid
@@ -337,7 +337,7 @@ def handle_magnet():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(download_from_magnet(link, BASE_DIR, None, download_id))
+                loop.run_until_complete(download_from_magnet_or_torrent(link, BASE_DIR, None, download_id))
             finally:
                 loop.close()
 

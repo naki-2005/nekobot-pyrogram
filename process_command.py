@@ -104,6 +104,8 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
                 parts = text.strip().split(maxsplit=2)
             
                 link = None
+                use_compression = False
+                
                 if reply and (reply.text or reply.caption):
                     text_reply = reply.text or reply.caption
                     magnet_match = re.search(r'magnet:\?[^\s]+', text_reply)
@@ -118,7 +120,6 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
                         await message.reply("❗ Debes proporcionar un enlace magnet or .torrent.")
                         return
 
-                    use_compression = False
                     if parts[1] == "-z":
                         use_compression = True
                         if len(parts) < 3:
