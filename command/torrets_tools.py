@@ -23,7 +23,7 @@ from selenium.webdriver.chrome.options import Options
 nyaa_cache = {}
 sukebei_cache = {}
 CACHE_DURATION = 600
-SEVEN_ZIP_EXE = os.path.join("7z", "7zz")
+SEVEN_ZIP_EXE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "7z", "7zz")
 BASE_DIR = "vault_files/torrent_dl"
 TEMP_DIR = os.path.join(BASE_DIR, "downloading")
 
