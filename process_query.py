@@ -5,6 +5,7 @@ from command.db.db import subir_bot_config
 from command.mangatools import handle_manga_callback
 from command.torrets_tools import handle_nyaa_callback
 from command.torrets_tools import handle_sukebei_callback 
+from command.videotools import handle_video_settings_callback
 
 async def process_query(client, callback_query):
     data = callback_query.data
@@ -21,6 +22,8 @@ async def process_query(client, callback_query):
     nyaa_related = data.startswith("nyaa_")
     
     sukebei_related = data.startswith("sukebei_")
+
+    video_settings_related = data.startswith("vs_")
 
     if data in mail_related:
         await mail_query(client, callback_query)
@@ -71,6 +74,8 @@ async def process_query(client, callback_query):
     elif sukebei_related:
         await handle_sukebei_callback(client, callback_query)
 
+    elif video_settings_related:
+        await handle_video_settings_callback(client, callback_query)
 
     else:
         await callback_query.answer("No se ha encontrado una respuesta Query correcta.", show_alert=True)
