@@ -19,20 +19,21 @@ PROTECT_CONTENT = os.getenv('PROTECT_CONTENT', '').strip().lower() == "true"
 allowed_users = admin_users + users + temp_users + temp_chats
 allowed_ids = set(admin_users).union(set(vip_users))
 
-# Inicializamos video_settings con un ID base como 'default'
 video_settings = {
     'default': {
-        'resolution': '640x400',
-        'crf': '28',
-        'audio_bitrate': '80k',
-        'fps': '18',
+        'resolution': '1920x1080',
+        'crf': '23',
+        'audio_bitrate': '192k',
+        'fps': '23.976',
         'preset': 'veryfast',
-        'codec': 'libx265'
+        'codec': 'libx265',
+        'pix_fmt': 'yuv420p10le',
+        'x265_params': 'profile=main10:level=4',
+        'video_bitrate': '1477k',
+        'audio_channels': '2'
     }
 }
 
-
-# Botones definidos globalmente
 correo_manual = InlineKeyboardMarkup([
     [InlineKeyboardButton("Enviar siguiente parte", callback_data="send_next_part")],
     [
