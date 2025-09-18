@@ -18,6 +18,7 @@ tareas_en_ejecucion = {}
 cola_de_tareas = []
 
 import copy
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 async def update_video_settings(client, message, protect_content):
     user_id = message.from_user.id
@@ -30,8 +31,7 @@ async def update_video_settings(client, message, protect_content):
         command_params = message.text.split()[1:]
 
         if not command_params:
-            configuracion_actual = "/calidad " + " ".join(f"{k}={v}" for k, v in video_settings[user_id].items())
-            await message.reply_text(f"⚙️ Configuración actual:\n`{configuracion_actual}`", protect_content=protect_content)
+            await mostrar_menu_configuracion(client, message, user_id, protect_content)
             return
 
         params = {}
@@ -49,7 +49,7 @@ async def update_video_settings(client, message, protect_content):
                     raise ValueError("El parámetro 'crf' debe ser un número.")
                 elif key == 'audio_bitrate' and not re.match(r'^\d+k$', value):
                     raise ValueError("Audio bitrate inválido. Usa un valor en kbps, como '80k'.")
-                elif key == 'fps' and not value.isdigit():
+                elif key == 'fps' and not value.replace('.', '').isdigit():
                     raise ValueError("El parámetro 'fps' debe ser un número.")
                 elif key == 'preset' and value not in ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow']:
                     raise ValueError("Preset inválido. Usa uno de los valores válidos.")
@@ -65,6 +65,109 @@ async def update_video_settings(client, message, protect_content):
         await message.reply_text(f"❌ Error de validación:\n{ve}", protect_content=protect_content)
     except Exception as e:
         await message.reply_text(f"❌ Error al procesar el comando:\n{e}", protect_content=protect_content)
+
+async def mostrar_menu_configuracion(client, message, user_id, protect_content):
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎞️ Resolución", callback_data="vs_resolution")],
+        [InlineKeyboardButton("📊 CRF", callback_data="vs_crf")],
+        [InlineKeyboardButton("🔊 Audio Bitrate", callback_data="vs_audio_bitrate")],
+        [InlineKeyboardButton("⚡ FPS", callback_data="vs_fps")],
+        [InlineKeyboardButton("🚀 Preset", callback_data="vs_preset")],
+        [InlineKeyboardButton("🔧 Codec", callback_data="vs_codec")],
+        [InlineKeyboardButton("✅ Aplicar configuración", callback_data="vs_apply")]
+    ])
+    
+    config_text = "⚙️ **Configuración Actual:**\n"
+    for key, value in video_settings[user_id].items():
+        config_text += f"• **{key}**: `{value}`\n"
+    
+    await message.reply_text(config_text, reply_markup=keyboard, protect_content=protect_content)
+
+async def handle_video_settings_callback(client, callback_query):
+    data = callback_query.data
+    user_id = callback_query.from_user.id
+    
+    if data == "vs_back":
+        await mostrar_menu_configuracion(client, callback_query.message, user_id, True)
+        await callback_query.answer()
+        return
+        
+    if data == "vs_apply":
+        config_text = "⚙️ **Configuración Aplicada:**\n"
+        for key, value in video_settings[user_id].items():
+            config_text += f"• **{key}**: `{value}`\n"
+        await callback_query.message.edit_text(config_text)
+        await callback_query.answer("✅ Configuración aplicada")
+        return
+
+    if data.startswith("vs_set_"):
+        param = data.split("_")[2]
+        value = data.split("_")[3]
+        video_settings[user_id][param] = value
+        await mostrar_submenu(client, callback_query.message, user_id, param, True)
+        await callback_query.answer(f"✅ {param} cambiado a {value}")
+        return
+
+    if data in ["vs_resolution", "vs_crf", "vs_audio_bitrate", "vs_fps", "vs_preset", "vs_codec"]:
+        param = data.split("_")[1]
+        await mostrar_submenu(client, callback_query.message, user_id, param, True)
+        await callback_query.answer()
+        return
+
+async def mostrar_submenu(client, message, user_id, param, protect_content):
+    back_button = InlineKeyboardButton("🔙 Atrás", callback_data="vs_back")
+    
+    if param == "resolution":
+        opciones = [
+            ["640x360", "vs_set_resolution_640x360"],
+            ["854x480", "vs_set_resolution_854x480"], 
+            ["1280x720", "vs_set_resolution_1280x720"],
+            ["1920x1080", "vs_set_resolution_1920x1080"]
+        ]
+    elif param == "crf":
+        opciones = [
+            ["23 (Calidad Alta)", "vs_set_crf_23"],
+            ["25 (Calidad Media)", "vs_set_crf_25"],
+            ["28 (Calidad Baja)", "vs_set_crf_28"],
+            ["30 (Muy Comprimido)", "vs_set_crf_30"]
+        ]
+    elif param == "audio_bitrate":
+        opciones = [
+            ["64k", "vs_set_audio_bitrate_64k"],
+            ["80k", "vs_set_audio_bitrate_80k"],
+            ["96k", "vs_set_audio_bitrate_96k"], 
+            ["128k", "vs_set_audio_bitrate_128k"]
+        ]
+    elif param == "fps":
+        opciones = [
+            ["18", "vs_set_fps_18"],
+            ["24", "vs_set_fps_24"],
+            ["30", "vs_set_fps_30"],
+            ["60", "vs_set_fps_60"]
+        ]
+    elif param == "preset":
+        opciones = [
+            ["ultrafast", "vs_set_preset_ultrafast"],
+            ["veryfast", "vs_set_preset_veryfast"],
+            ["medium", "vs_set_preset_medium"],
+            ["slow", "vs_set_preset_slow"]
+        ]
+    elif param == "codec":
+        opciones = [
+            ["libx264", "vs_set_codec_libx264"],
+            ["libx265", "vs_set_codec_libx265"],
+            ["libvpx", "vs_set_codec_libvpx"]
+        ]
+    
+    keyboard = []
+    for opcion in opciones:
+        keyboard.append([InlineKeyboardButton(opcion[0], callback_data=opcion[1])])
+    keyboard.append([back_button])
+    
+    current_value = video_settings[user_id].get(param, "N/A")
+    text = f"⚙️ **Seleccionar {param}**\n\n**Valor actual:** `{current_value}`"
+    
+    await message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def cancelar_tarea(int_lvl, client, task_id, chat_id, message, protect_content):
     user_id_requesting = message.from_user.id
