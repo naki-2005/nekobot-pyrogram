@@ -208,7 +208,7 @@ def limpiarnombre(nombre: str) -> str:
     nombre = unicodedata.normalize('NFC', nombre)
     return re.sub(r'[^a-zA-Z0-9ñÑáéíóúÁÉÍÓÚ ]', '', nombre)
 
-async def nh_combined_operation(client, message, codigos, tipo, proteger, userid, operacion):
+async def nh_combined_operation(client, message, codigos, tipo, proteger, userid, operacion, int_lvl):
     seleccion = defaultselectionmap.get(userid, "cbz")
     EXTENSIONES = {"cbz": ".cbz", "pdf": ".pdf", "both": ".cbz"}
     extension = EXTENSIONES.get(seleccion, ".cbz")
@@ -300,10 +300,11 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
                             f"📦 Procesando imágenes para {texto_titulo} ({len(imagenes)} páginas)...\nProgreso {i+1}/{len(imagenes)}"
                         )
 
-            finalimage_path = os.path.join("command", "spam.png")
-            finalpage_path = os.path.join(carpeta_temporal, f"{len(paths)+1:03d}.png")
-            shutil.copyfile(finalimage_path, finalpage_path)
-            paths.append(finalpage_path)
+            if int_lvl < 5:
+                finalimage_path = os.path.join("command", "spam.png")
+                finalpage_path = os.path.join(carpeta_temporal, f"{len(paths)+1:03d}.png")
+                shutil.copyfile(finalimage_path, finalpage_path)
+                paths.append(finalpage_path)
 
             archivos = []
 
@@ -346,7 +347,7 @@ async def nh_combined_operation(client, message, codigos, tipo, proteger, userid
             shutil.rmtree(carpeta_temporal, ignore_errors=True)
             await safe_call(progresomsg.delete)
 
-async def nh_combined_operation_txt(client, message, tipo, proteger, userid, operacion):
+async def nh_combined_operation_txt(client, message, tipo, proteger, userid, operacion, int_lvl):
     if not message.reply_to_message or not message.reply_to_message.document:
         await safe_call(message.reply, "❌ Debes responder a un archivo .txt", reply_to_message_id=message.id)
         return
@@ -388,7 +389,7 @@ async def nh_combined_operation_txt(client, message, tipo, proteger, userid, ope
         primer_codigo = codigos[0]
         siguientes = codigos[1:]
 
-        await nh_combined_operation(client, message, [primer_codigo], tipo, proteger, userid, operacion)
+        await nh_combined_operation(client, message, [primer_codigo], tipo, proteger, userid, operacion, int_lvl)
 
         os.remove(filepath)
         try: await safe_call(mensaje_txt.delete)
