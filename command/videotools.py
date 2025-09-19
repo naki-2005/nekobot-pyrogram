@@ -88,6 +88,7 @@ async def handle_video_settings_callback(client, callback_query):
     user_id = callback_query.from_user.id
     
     if data == "vs_back":
+        await callback_query.message.delete()
         await mostrar_menu_configuracion(client, callback_query.message, user_id, True)
         await callback_query.answer()
         return
@@ -101,11 +102,12 @@ async def handle_video_settings_callback(client, callback_query):
         return
 
     if data.startswith("vs_set_"):
-        param = data.split("_")[2]
-        value = data.split("_")[3]
-        video_settings[user_id][param] = value
-        await mostrar_submenu(client, callback_query.message, user_id, param, True)
-        await callback_query.answer(f"✅ {param} cambiado a {value}")
+        parts = data.split("_")
+        if len(parts) >= 4:
+            param = parts[2]
+            value = "_".join(parts[3:])
+            video_settings[user_id][param] = value
+            await callback_query.answer(f"✅ {param} cambiado a {value}")
         return
 
     if data in ["vs_resolution", "vs_crf", "vs_audio_bitrate", "vs_fps", "vs_preset", "vs_codec"]:
@@ -116,6 +118,7 @@ async def handle_video_settings_callback(client, callback_query):
 
 async def mostrar_submenu(client, message, user_id, param, protect_content):
     back_button = InlineKeyboardButton("🔙 Atrás", callback_data="vs_back")
+    opciones = []
     
     if param == "resolution":
         opciones = [
@@ -159,6 +162,10 @@ async def mostrar_submenu(client, message, user_id, param, protect_content):
             ["libvpx", "vs_set_codec_libvpx"]
         ]
     
+    if not opciones:
+        await callback_query.answer("❌ Parámetro no válido")
+        return
+    
     keyboard = []
     for opcion in opciones:
         keyboard.append([InlineKeyboardButton(opcion[0], callback_data=opcion[1])])
@@ -168,7 +175,6 @@ async def mostrar_submenu(client, message, user_id, param, protect_content):
     text = f"⚙️ **Seleccionar {param}**\n\n**Valor actual:** `{current_value}`"
     
     await message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
-
 async def cancelar_tarea(int_lvl, client, task_id, chat_id, message, protect_content):
     user_id_requesting = message.from_user.id
 
