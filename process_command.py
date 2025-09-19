@@ -203,7 +203,7 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
                     await message.reply("Opción inválida. Usa: '/setfile cbz', '/setfile pdf', '/setfile both' o '/setfile none'.")
                 return
 
-            if command == "/searchnh" :
+            if command == "/searchnh":
                 query = arg_text
                 from command.htools import send_nhentai_results
                 await send_nhentai_results(message, client, query)
@@ -214,23 +214,24 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
                 for code in codes
             ]
             
-
             if codes_limpiados != codes:
                 codes = codes_limpiados
-                await message.reply("Solo son necesarios los números pero ok")
+                warning_msg = await message.reply("Solo son necesarios los números pero ok")
+                await asyncio.sleep(5)
+                await warning_msg.delete()
 
             if command == "/nh":
-                await asyncio.create_task(nh_combined_operation(client, message, codes, "nh", protect_content, user_id, "download"))
+                await asyncio.create_task(nh_combined_operation(client, message, codes, "nh", protect_content, user_id, "download", int_lvl))
             elif command == "/3h":
-                await asyncio.create_task(nh_combined_operation(client, message, codes, "3h", protect_content, user_id, "download"))
+                await asyncio.create_task(nh_combined_operation(client, message, codes, "3h", protect_content, user_id, "download", int_lvl))
             elif command == "/cover3h":
-                await asyncio.create_task(nh_combined_operation(client, message, codes, "3h", protect_content, user_id, "cover"))
+                await asyncio.create_task(nh_combined_operation(client, message, codes, "3h", protect_content, user_id, "cover", int_lvl))
             elif command == "/covernh":
-                await asyncio.create_task(nh_combined_operation(client, message, codes, "nh", protect_content, user_id, "cover"))
+                await asyncio.create_task(nh_combined_operation(client, message, codes, "nh", protect_content, user_id, "cover", int_lvl))
             elif command == "/nhtxt":
-                await asyncio.create_task(nh_combined_operation_txt(client, message, "nh", protect_content, user_id, "download"))
+                await asyncio.create_task(nh_combined_operation_txt(client, message, "nh", protect_content, user_id, "download", int_lvl))
             elif command == "/3htxt":
-                await asyncio.create_task(nh_combined_operation_txt(client, message, "3h", protect_content, user_id, "download"))
+                await asyncio.create_task(nh_combined_operation_txt(client, message, "3h", protect_content, user_id, "download", int_lvl))
             elif command == "/dltxt" and reply and reply.document:
                 from command.get_files.txt_a_cbz import txt_a_cbz
                 path_txt = await client.download_media(reply.document)
@@ -241,7 +242,6 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
                     return
                 path_cbz = txt_a_cbz(path_txt)
                 await client.send_document(chat_id=message.chat.id, document=path_cbz)
-
 
     elif command == "/megadl":
         if not cmd("download", int_lvl):
