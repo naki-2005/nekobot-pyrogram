@@ -242,6 +242,7 @@ async def process_command(client, message, user_id, username, chat_id, int_lvl):
                     return
                 path_cbz = txt_a_cbz(path_txt)
                 await client.send_document(chat_id=message.chat.id, document=path_cbz)
+
     elif command == "/megadl":
         if not cmd("download", int_lvl):
             return
