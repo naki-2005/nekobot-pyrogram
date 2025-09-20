@@ -192,16 +192,23 @@ async def show_nyaa_result(client, message, cache_key, index):
     cache_data['current_index'] = index
     
     keyboard = []
-    row_buttons = []
-    if 'torrent' in result:
-        row_buttons.append(InlineKeyboardButton("📥 Torrent", callback_data=f"nyaa_torrent:{cache_key}:{index}"))
-    if 'magnet' in result:
-        row_buttons.append(InlineKeyboardButton("🧲 Magnet", callback_data=f"nyaa_magnet:{cache_key}:{index}"))
-        row_buttons.append(InlineKeyboardButton("🔽DL", callback_data=f"nyaa_dl:{cache_key}:{index}"))
-        row_buttons.append(InlineKeyboardButton("🔽ZIP DL", callback_data=f"nyaa_zip:{cache_key}:{index}"))
     
-    if row_buttons:
-        keyboard.append(row_buttons)
+    row1_buttons = []
+    if 'torrent' in result:
+        row1_buttons.append(InlineKeyboardButton("📥 Torrent", callback_data=f"nyaa_torrent:{cache_key}:{index}"))
+    if 'magnet' in result:
+        row1_buttons.append(InlineKeyboardButton("🧲 Magnet", callback_data=f"nyaa_magnet:{cache_key}:{index}"))
+    
+    if row1_buttons:
+        keyboard.append(row1_buttons)
+    
+    row2_buttons = []
+    if 'magnet' in result:
+        row2_buttons.append(InlineKeyboardButton("🔽DL", callback_data=f"nyaa_dl:{cache_key}:{index}"))
+        row2_buttons.append(InlineKeyboardButton("🔽ZIP DL", callback_data=f"nyaa_zip:{cache_key}:{index}"))
+    
+    if row2_buttons:
+        keyboard.append(row2_buttons)
     
     nav_buttons = []
     if index > 0:
@@ -210,6 +217,73 @@ async def show_nyaa_result(client, message, cache_key, index):
     if index < len(results) - 1:
         nav_buttons.append(InlineKeyboardButton("⏩", callback_data=f"nyaa_last:{cache_key}"))
         nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"nyaa_next:{cache_key}"))
+    
+    if nav_buttons:
+        keyboard.append(nav_buttons)
+    
+    reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+    
+    message_text = f"**Resultado {index + 1}/{len(results)}**\n"
+    message_text += f"**Nombre:** {result['name']}\n"
+    message_text += f"**Fecha:** {result.get('date', 'N/A')}\n"
+    message_text += f"**Tamaño:** {result.get('size', 'N/A')}"
+    
+    if cache_data.get('message_id'):
+        try:
+            await client.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=cache_data['message_id'],
+                text=message_text,
+                reply_markup=reply_markup
+            )
+            return
+        except:
+            pass
+    
+    sent_message = await message.reply(message_text, reply_markup=reply_markup)
+    cache_data['message_id'] = sent_message.id
+
+async def show_sukebei_result(client, message, cache_key, index):
+    if cache_key not in sukebei_cache:
+        await message.reply("❌ Los resultados de búsqueda han expirado.")
+        return
+    
+    cache_data = sukebei_cache[cache_key]
+    results = cache_data['results']
+    
+    if index < 0 or index >= len(results):
+        await message.reply("❌ Índice de resultado inválido.")
+        return
+    
+    result = results[index]
+    cache_data['current_index'] = index
+    
+    keyboard = []
+    
+    row1_buttons = []
+    if 'torrent' in result:
+        row1_buttons.append(InlineKeyboardButton("📥 Torrent", callback_data=f"sukebei_torrent:{cache_key}:{index}"))
+    if 'magnet' in result:
+        row1_buttons.append(InlineKeyboardButton("🧲 Magnet", callback_data=f"sukebei_magnet:{cache_key}:{index}"))
+    
+    if row1_buttons:
+        keyboard.append(row1_buttons)
+    
+    row2_buttons = []
+    if 'magnet' in result:
+        row2_buttons.append(InlineKeyboardButton("🔽DL", callback_data=f"sukebei_dl:{cache_key}:{index}"))
+        row2_buttons.append(InlineKeyboardButton("🔽ZIP DL", callback_data=f"sukebei_zip:{cache_key}:{index}"))
+    
+    if row2_buttons:
+        keyboard.append(row2_buttons)
+    
+    nav_buttons = []
+    if index > 0:
+        nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"sukebei_prev:{cache_key}"))
+        nav_buttons.append(InlineKeyboardButton("⏪", callback_data=f"sukebei_first:{cache_key}"))
+    if index < len(results) - 1:
+        nav_buttons.append(InlineKeyboardButton("⏩", callback_data=f"sukebei_last:{cache_key}"))
+        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"sukebei_next:{cache_key}"))
     
     if nav_buttons:
         keyboard.append(nav_buttons)
@@ -439,66 +513,6 @@ async def search_in_sukebei(client, message, search_query):
         }
         
     await show_sukebei_result(client, message, cache_key, 0)
-
-async def show_sukebei_result(client, message, cache_key, index):
-    if cache_key not in sukebei_cache:
-        await message.reply("❌ Los resultados de búsqueda han expirado.")
-        return
-    
-    cache_data = sukebei_cache[cache_key]
-    results = cache_data['results']
-    
-    if index < 0 or index >= len(results):
-        await message.reply("❌ Índice de resultado inválido.")
-        return
-    
-    result = results[index]
-    cache_data['current_index'] = index
-    
-    keyboard = []
-    row_buttons = []
-    if 'torrent' in result:
-        row_buttons.append(InlineKeyboardButton("📥 Torrent", callback_data=f"sukebei_torrent:{cache_key}:{index}"))
-    if 'magnet' in result:
-        row_buttons.append(InlineKeyboardButton("🧲 Magnet", callback_data=f"sukebei_magnet:{cache_key}:{index}"))
-        row_buttons.append(InlineKeyboardButton("🔽DL", callback_data=f"sukebei_dl:{cache_key}:{index}"))
-        row_buttons.append(InlineKeyboardButton("🔽ZIP DL", callback_data=f"sukebei_zip:{cache_key}:{index}"))
-    
-    if row_buttons:
-        keyboard.append(row_buttons)
-    
-    nav_buttons = []
-    if index > 0:
-        nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"sukebei_prev:{cache_key}"))
-        nav_buttons.append(InlineKeyboardButton("⏪", callback_data=f"sukebei_first:{cache_key}"))
-    if index < len(results) - 1:
-        nav_buttons.append(InlineKeyboardButton("⏩", callback_data=f"sukebei_last:{cache_key}"))
-        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"sukebei_next:{cache_key}"))
-    
-    if nav_buttons:
-        keyboard.append(nav_buttons)
-    
-    reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
-    
-    message_text = f"**Resultado {index + 1}/{len(results)}**\n"
-    message_text += f"**Nombre:** {result['name']}\n"
-    message_text += f"**Fecha:** {result.get('date', 'N/A')}\n"
-    message_text += f"**Tamaño:** {result.get('size', 'N/A')}"
-    
-    if cache_data.get('message_id'):
-        try:
-            await client.edit_message_text(
-                chat_id=message.chat.id,
-                message_id=cache_data['message_id'],
-                text=message_text,
-                reply_markup=reply_markup
-            )
-            return
-        except:
-            pass
-    
-    sent_message = await message.reply(message_text, reply_markup=reply_markup)
-    cache_data['message_id'] = sent_message.id
 
 async def handle_sukebei_callback(client, callback_query):
     data = callback_query.data
