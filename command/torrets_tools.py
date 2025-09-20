@@ -197,6 +197,8 @@ async def show_nyaa_result(client, message, cache_key, index):
         row_buttons.append(InlineKeyboardButton("📥 Torrent", callback_data=f"nyaa_torrent:{cache_key}:{index}"))
     if 'magnet' in result:
         row_buttons.append(InlineKeyboardButton("🧲 Magnet", callback_data=f"nyaa_magnet:{cache_key}:{index}"))
+        row_buttons.append(InlineKeyboardButton("🔽DL", callback_data=f"nyaa_dl:{cache_key}:{index}"))
+        row_buttons.append(InlineKeyboardButton("🔽ZIP DL", callback_data=f"nyaa_zip:{cache_key}:{index}"))
     
     if row_buttons:
         keyboard.append(row_buttons)
@@ -272,6 +274,18 @@ async def handle_nyaa_callback(client, callback_query):
             chat_id=callback_query.message.chat.id,
             text=result['magnet']
         )
+        
+    elif action == "nyaa_dl":
+        index = int(parts[2])
+        result = results[index]
+        await callback_query.answer("🔽 Iniciando descarga...")
+        await process_magnet_download_telegram(client, callback_query.message, result['magnet'], False)
+        
+    elif action == "nyaa_zip":
+        index = int(parts[2])
+        result = results[index]
+        await callback_query.answer("🔽 Iniciando descarga comprimida...")
+        await process_magnet_download_telegram(client, callback_query.message, result['magnet'], True)
         
     elif action == "nyaa_prev":
         new_index = max(0, current_index - 1)
@@ -447,6 +461,8 @@ async def show_sukebei_result(client, message, cache_key, index):
         row_buttons.append(InlineKeyboardButton("📥 Torrent", callback_data=f"sukebei_torrent:{cache_key}:{index}"))
     if 'magnet' in result:
         row_buttons.append(InlineKeyboardButton("🧲 Magnet", callback_data=f"sukebei_magnet:{cache_key}:{index}"))
+        row_buttons.append(InlineKeyboardButton("🔽DL", callback_data=f"sukebei_dl:{cache_key}:{index}"))
+        row_buttons.append(InlineKeyboardButton("🔽ZIP DL", callback_data=f"sukebei_zip:{cache_key}:{index}"))
     
     if row_buttons:
         keyboard.append(row_buttons)
@@ -522,6 +538,18 @@ async def handle_sukebei_callback(client, callback_query):
             chat_id=callback_query.message.chat.id,
             text=result['magnet']
         )
+        
+    elif action == "sukebei_dl":
+        index = int(parts[2])
+        result = results[index]
+        await callback_query.answer("🔽 Iniciando descarga...")
+        await process_magnet_download_telegram(client, callback_query.message, result['magnet'], False)
+        
+    elif action == "sukebei_zip":
+        index = int(parts[2])
+        result = results[index]
+        await callback_query.answer("🔽 Iniciando descarga comprimida...")
+        await process_magnet_download_telegram(client, callback_query.message, result['magnet'], True)
         
     elif action == "sukebei_prev":
         new_index = max(0, current_index - 1)
@@ -1017,4 +1045,3 @@ async def process_magnet_download_telegram(client, message, link, use_compressio
         error_msg = await safe_call(message.reply, f"❌ Error durante la descarga: {e}")
         if status_msg:
             await safe_call(status_msg.delete)
-    
