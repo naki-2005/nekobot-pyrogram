@@ -14,6 +14,9 @@ import zipfile
 import py7zr
 from flask import send_file
 import shutil
+import base64
+from cryptography.fernet import Fernet
+import hashlib
 
 def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() 
@@ -24,28 +27,90 @@ explorer.secret_key = os.getenv("FLASK_SECRET", "supersecretkey")
 BASE_DIR = "vault_files"
 WEBACCESS_FILE = "web_access.json"
 
+TOKEN_KEY = os.getenv("TOKEN_KEY", "TOKEN_KEY")
+fernet_key = base64.urlsafe_b64encode(hashlib.sha256(TOKEN_KEY.encode()).digest())
+cipher_suite = Fernet(fernet_key)
+
 doujin_downloads = {}
 doujin_lock = Lock()
 
+def encrypt_token(data):
+    json_data = json.dumps(data)
+    encrypted = cipher_suite.encrypt(json_data.encode())
+    return base64.urlsafe_b64encode(encrypted).decode()
+
+def decrypt_token(token):
+    try:
+        decoded = base64.urlsafe_b64decode(token.encode())
+        decrypted = cipher_suite.decrypt(decoded)
+        return json.loads(decrypted.decode())
+    except:
+        return None
+
+def validate_credentials(username, password):
+    try:
+        with open(WEBACCESS_FILE, "r", encoding="utf-8") as f:
+            users = json.load(f)
+    except:
+        users = {}
+    
+    for uid, creds in users.items():
+        if creds.get("user") == username and creds.get("pass") == password:
+            return True
+    return False
+
+def check_token_auth():
+    token = request.args.get('token')
+    if token:
+        token_data = decrypt_token(token)
+        if token_data and validate_credentials(token_data.get('user'), token_data.get('pass')):
+            session["logged_in"] = True
+            session["username"] = token_data.get('user')
+            return True
+    return False
+
 def login_required(f):
     def wrapper(*args, **kwargs):
-        if not session.get("logged_in"):
+        if not check_token_auth() and not session.get("logged_in"):
             return redirect("/login")
         return f(*args, **kwargs)
     wrapper.__name__ = f.__name__
     return wrapper
 
 def validate_path(input_path):
-    """Valida que una ruta esté dentro del directorio base permitido"""
     if not input_path:
         return False
     abs_base = os.path.abspath(BASE_DIR)
     abs_path = os.path.abspath(input_path)
     return abs_path.startswith(abs_base)
 
+@explorer.route("/auth")
+def generate_token():
+    username = request.args.get("u", "").strip()
+    password = request.args.get("p", "").strip()
+    
+    if not username or not password:
+        return jsonify({"error": "Usuario y contraseña requeridos"}), 400
+    
+    if validate_credentials(username, password):
+        token_data = {
+            "user": username,
+            "pass": password,
+            "timestamp": datetime.now().isoformat()
+        }
+        token = encrypt_token(token_data)
+        return jsonify({
+            "token": token,
+            "message": "Token generado exitosamente",
+            "url_example": f"{request.host_url}?token={token}"
+        })
+    else:
+        return jsonify({"error": "Credenciales inválidas"}), 401
+
 @explorer.route("/", defaults={"path": ""})
 @explorer.route("/<path:path>")
 def serve_root(path):
+    check_token_auth()
     abs_path = os.path.abspath(os.path.join(BASE_DIR, path))
     abs_base = os.path.abspath(BASE_DIR)
     
@@ -67,6 +132,14 @@ def serve_root(path):
 
 @explorer.route("/login", methods=["GET", "POST"])
 def login():
+    token = request.args.get('token')
+    if token:
+        token_data = decrypt_token(token)
+        if token_data and validate_credentials(token_data.get('user'), token_data.get('pass')):
+            session["logged_in"] = True
+            session["username"] = token_data.get('user')
+            return redirect("/")
+    
     if request.method == "POST":
         u = request.form.get("username", "").strip()
         p = request.form.get("password", "").strip()
@@ -176,7 +249,7 @@ def downloads_page():
         for download_id, download_info in doujin_downloads.items():
             if download_info.get("state") == "completed" and "end_time" in download_info:
                 end_time = datetime.fromisoformat(download_info["end_time"])
-                if (current_time - end_time).total_seconds() > 3600:  # 1 hora
+                if (current_time - end_time).total_seconds() > 3600:
                     to_delete.append(download_id)
         
         for download_id in to_delete:
@@ -194,6 +267,7 @@ def api_downloads():
     return jsonify({"torrents": downloads, "doujins": doujin_downloads})
 
 @explorer.route("/download")
+@login_required
 def download():
     rel_path = request.args.get("path")
     if not rel_path:
@@ -223,6 +297,7 @@ def download():
         )
 
 @explorer.route("/crear_cbz", methods=["POST"])
+@login_required
 def crear_cbz():
     codigo_input = request.form.get("codigo", "").strip()
     tipo = request.form.get("tipo", "").strip()
@@ -313,6 +388,7 @@ def crear_cbz():
     return response_msg
 
 @explorer.route("/upload", methods=["POST"])
+@login_required
 def upload_file():
     if not os.path.exists(BASE_DIR):
         os.makedirs(BASE_DIR)
@@ -325,6 +401,7 @@ def upload_file():
     return "Archivo inválido.", 400
 
 @explorer.route("/magnet", methods=["POST"])
+@login_required
 def handle_magnet():
     link = request.form.get("magnet", "").strip()
     if not link:
@@ -403,7 +480,6 @@ def compress_items():
         if result.returncode != 0:
             return f"<h3>❌ Error al comprimir: {result.stderr}</h3>", 500
 
-        # Eliminar archivos originales después de comprimir exitosamente
         for path in selected:
             if os.path.exists(path):
                 if os.path.isfile(path):
