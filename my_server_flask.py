@@ -14,6 +14,9 @@ import zipfile
 import py7zr
 from flask import send_file
 import shutil
+import base64
+from cryptography.fernet import Fernet
+import hashlib
 
 def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() 
@@ -24,28 +27,94 @@ explorer.secret_key = os.getenv("FLASK_SECRET", "supersecretkey")
 BASE_DIR = "vault_files"
 WEBACCESS_FILE = "web_access.json"
 
+TOKEN_KEY = os.getenv("TOKEN_KEY", "TOKEN_KEY")
+fernet_key = base64.urlsafe_b64encode(hashlib.sha256(TOKEN_KEY.encode()).digest())
+cipher_suite = Fernet(fernet_key)
+
 doujin_downloads = {}
 doujin_lock = Lock()
 
+def encrypt_token(data):
+    json_data = json.dumps(data)
+    encrypted = cipher_suite.encrypt(json_data.encode())
+    return base64.urlsafe_b64encode(encrypted).decode()
+
+def decrypt_token(token):
+    try:
+        decoded = base64.urlsafe_b64decode(token.encode())
+        decrypted = cipher_suite.decrypt(decoded)
+        return json.loads(decrypted.decode())
+    except:
+        return None
+
+def validate_credentials(username, password):
+    try:
+        with open(WEBACCESS_FILE, "r", encoding="utf-8") as f:
+            users = json.load(f)
+    except:
+        users = {}
+    
+    for uid, creds in users.items():
+        if creds.get("user") == username and creds.get("pass") == password:
+            return True
+    return False
+
+def check_token_auth():
+    token = request.args.get('token')
+    if token:
+        token_data = decrypt_token(token)
+        if token_data and validate_credentials(token_data.get('user'), token_data.get('pass')):
+            session["logged_in"] = True
+            session["username"] = token_data.get('user')
+            return True
+    return False
+
 def login_required(f):
     def wrapper(*args, **kwargs):
-        if not session.get("logged_in"):
+        if not check_token_auth() and not session.get("logged_in"):
             return redirect("/login")
         return f(*args, **kwargs)
     wrapper.__name__ = f.__name__
     return wrapper
 
 def validate_path(input_path):
-    """Valida que una ruta esté dentro del directorio base permitido"""
     if not input_path:
         return False
     abs_base = os.path.abspath(BASE_DIR)
     abs_path = os.path.abspath(input_path)
     return abs_path.startswith(abs_base)
 
+@explorer.route("/auth", methods=["GET", "POST"])
+def generate_token():
+    if request.method == "POST":
+        username = request.form.get("u", "").strip()
+        password = request.form.get("p", "").strip()
+    else:
+        username = request.args.get("u", "").strip()
+        password = request.args.get("p", "").strip()
+    
+    if not username or not password:
+        return jsonify({"error": "Usuario y contraseña requeridos"}), 400
+    
+    if validate_credentials(username, password):
+        token_data = {
+            "user": username,
+            "pass": password,
+            "timestamp": datetime.now().isoformat()
+        }
+        token = encrypt_token(token_data)
+        return jsonify({
+            "token": token,
+            "message": "Token generado exitosamente",
+            "url_example": f"{request.host_url}?token={token}"
+        })
+    else:
+        return jsonify({"error": "Credenciales inválidas"}), 401
+
 @explorer.route("/", defaults={"path": ""})
 @explorer.route("/<path:path>")
 def serve_root(path):
+    check_token_auth()
     abs_path = os.path.abspath(os.path.join(BASE_DIR, path))
     abs_base = os.path.abspath(BASE_DIR)
     
@@ -67,6 +136,14 @@ def serve_root(path):
 
 @explorer.route("/login", methods=["GET", "POST"])
 def login():
+    token = request.args.get('token')
+    if token:
+        token_data = decrypt_token(token)
+        if token_data and validate_credentials(token_data.get('user'), token_data.get('pass')):
+            session["logged_in"] = True
+            session["username"] = token_data.get('user')
+            return redirect("/")
+    
     if request.method == "POST":
         u = request.form.get("username", "").strip()
         p = request.form.get("password", "").strip()
@@ -83,10 +160,14 @@ def login():
 
     return render_template_string(LOGIN_TEMPLATE)
 
-@explorer.route("/browse")
+@explorer.route("/browse", methods=["GET", "POST"])
 @login_required
 def browse():
-    rel_path = request.args.get("path", "")
+    if request.method == "POST":
+        rel_path = request.form.get("path", "")
+    else:
+        rel_path = request.args.get("path", "")
+        
     abs_requested = os.path.abspath(os.path.join(BASE_DIR, rel_path))
     abs_base = os.path.abspath(BASE_DIR)
 
@@ -127,10 +208,45 @@ def browse():
     except Exception as e:
         return f"<h3>Error al acceder a los archivos: {e}</h3>", 500
 
-@explorer.route("/gallery")
+@explorer.route("/files", methods=["GET", "POST"])
+@login_required
+def list_files():
+    """Endpoint para listar todos los archivos recursivamente (uso con curl)"""
+    abs_base = os.path.abspath(BASE_DIR)
+    
+    def list_files_recursive(directory, base_path):
+        file_list = []
+        try:
+            for item in sorted(os.listdir(directory), key=natural_sort_key):
+                full_path = os.path.join(directory, item)
+                rel_path = os.path.relpath(full_path, base_path)
+                
+                if os.path.isdir(full_path):
+                    file_list.append(f"[DIR]  {rel_path}/")
+                    file_list.extend(list_files_recursive(full_path, base_path))
+                else:
+                    size_mb = round(os.path.getsize(full_path) / (1024 * 1024), 2)
+                    file_list.append(f"[FILE] {rel_path} ({size_mb} MB)")
+        except Exception as e:
+            file_list.append(f"[ERROR] No se pudo acceder a {directory}: {e}")
+        
+        return file_list
+    
+    try:
+        all_files = list_files_recursive(abs_base, abs_base)
+        response_text = "\n".join(all_files)
+        return response_text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+    except Exception as e:
+        return f"Error al listar archivos: {e}", 500
+
+@explorer.route("/gallery", methods=["GET", "POST"])
 @login_required
 def gallery():
-    rel_path = request.args.get("path", "")
+    if request.method == "POST":
+        rel_path = request.form.get("path", "")
+    else:
+        rel_path = request.args.get("path", "")
+        
     abs_requested = os.path.abspath(os.path.join(BASE_DIR, rel_path))
     abs_base = os.path.abspath(BASE_DIR)
 
@@ -159,12 +275,12 @@ def gallery():
     except Exception as e:
         return f"<h3>Error al acceder a la galería: {e}</h3>", 500
 
-@explorer.route("/utils")
+@explorer.route("/utils", methods=["GET", "POST"])
 @login_required
 def utils_page():
     return render_template_string(UTILS_TEMPLATE)
 
-@explorer.route("/downloads")
+@explorer.route("/downloads", methods=["GET", "POST"])
 @login_required
 def downloads_page():
     cleanup_old_downloads()
@@ -176,7 +292,7 @@ def downloads_page():
         for download_id, download_info in doujin_downloads.items():
             if download_info.get("state") == "completed" and "end_time" in download_info:
                 end_time = datetime.fromisoformat(download_info["end_time"])
-                if (current_time - end_time).total_seconds() > 3600:  # 1 hora
+                if (current_time - end_time).total_seconds() > 3600:
                     to_delete.append(download_id)
         
         for download_id in to_delete:
@@ -186,16 +302,21 @@ def downloads_page():
                                 downloads=downloads, 
                                 doujin_downloads=doujin_downloads)
 
-@explorer.route("/api/downloads")
+@explorer.route("/api/downloads", methods=["GET", "POST"])
 @login_required
 def api_downloads():
     cleanup_old_downloads()
     downloads = get_download_progress()
     return jsonify({"torrents": downloads, "doujins": doujin_downloads})
 
-@explorer.route("/download")
+@explorer.route("/download", methods=["GET", "POST"])
+@login_required
 def download():
-    rel_path = request.args.get("path")
+    if request.method == "POST":
+        rel_path = request.form.get("path")
+    else:
+        rel_path = request.args.get("path")
+        
     if not rel_path:
         return "<h3>Archivo no especificado.</h3>", 400
         
@@ -222,10 +343,15 @@ def download():
             as_attachment=True
         )
 
-@explorer.route("/crear_cbz", methods=["POST"])
+@explorer.route("/crear_cbz", methods=["GET", "POST"])
+@login_required
 def crear_cbz():
-    codigo_input = request.form.get("codigo", "").strip()
-    tipo = request.form.get("tipo", "").strip()
+    if request.method == "POST":
+        codigo_input = request.form.get("codigo", "").strip()
+        tipo = request.form.get("tipo", "").strip()
+    else:
+        codigo_input = request.args.get("codigo", "").strip()
+        tipo = request.args.get("tipo", "").strip()
 
     if not codigo_input or tipo not in ["nh", "h3", "hito"]:
         return "<h3>❌ Código o tipo inválido.</h3>", 400
@@ -312,8 +438,17 @@ def crear_cbz():
     Thread(target=run_async_download, daemon=True).start()
     return response_msg
 
-@explorer.route("/upload", methods=["POST"])
+@explorer.route("/upload", methods=["GET", "POST"])
+@login_required
 def upload_file():
+    if request.method == "GET":
+        return '''
+        <form method="POST" enctype="multipart/form-data">
+            <input type="file" name="file">
+            <input type="submit" value="Upload">
+        </form>
+        '''
+    
     if not os.path.exists(BASE_DIR):
         os.makedirs(BASE_DIR)
 
@@ -324,9 +459,14 @@ def upload_file():
         return redirect("/")
     return "Archivo inválido.", 400
 
-@explorer.route("/magnet", methods=["POST"])
+@explorer.route("/magnet", methods=["GET", "POST"])
+@login_required
 def handle_magnet():
-    link = request.form.get("magnet", "").strip()
+    if request.method == "POST":
+        link = request.form.get("magnet", "").strip()
+    else:
+        link = request.args.get("magnet", "").strip()
+        
     if not link:
         return "<h3>❌ Magnet link vacío.</h3>", 400
 
@@ -346,10 +486,13 @@ def handle_magnet():
     except Exception as e:
         return f"<h3>Error al iniciar descarga: {e}</h3>", 500
 
-@explorer.route("/delete", methods=["POST"])
+@explorer.route("/delete", methods=["GET", "POST"])
 @login_required
 def delete_file():
-    path = request.form.get("path")
+    if request.method == "POST":
+        path = request.form.get("path")
+    else:
+        path = request.args.get("path")
     
     if not path:
         return "<h3>❌ Archivo no especificado.</h3>", 400
@@ -372,11 +515,15 @@ def delete_file():
     except Exception as e:
         return f"<h3>Error al eliminar: {e}</h3>", 500
 
-@explorer.route("/compress", methods=["POST"])
+@explorer.route("/compress", methods=["GET", "POST"])
 @login_required
 def compress_items():
-    archive_name = request.form.get("archive_name", "").strip()
-    selected = request.form.getlist("selected")
+    if request.method == "POST":
+        archive_name = request.form.get("archive_name", "").strip()
+        selected = request.form.getlist("selected")
+    else:
+        archive_name = request.args.get("archive_name", "").strip()
+        selected = request.args.getlist("selected")
     
     if not archive_name or not selected:
         return "<h3>❌ Debes proporcionar un nombre y seleccionar archivos.</h3>", 400
@@ -403,7 +550,6 @@ def compress_items():
         if result.returncode != 0:
             return f"<h3>❌ Error al comprimir: {result.stderr}</h3>", 500
 
-        # Eliminar archivos originales después de comprimir exitosamente
         for path in selected:
             if os.path.exists(path):
                 if os.path.isfile(path):
@@ -415,10 +561,13 @@ def compress_items():
     except Exception as e:
         return f"<h3>❌ Error al comprimir: {e}</h3>", 500
 
-@explorer.route("/extract", methods=["POST"])
+@explorer.route("/extract", methods=["GET", "POST"])
 @login_required
 def extract_archive():
-    archive_path = request.form.get("path")
+    if request.method == "POST":
+        archive_path = request.form.get("path")
+    else:
+        archive_path = request.args.get("path")
     
     if not archive_path or not os.path.isfile(archive_path):
         return "<h3>❌ Archivo no válido para descomprimir.</h3>", 400
@@ -459,11 +608,15 @@ def extract_archive():
     except Exception as e:
         return f"<h3>Error al descomprimir archivo: {e}</h3>", 500
 
-@explorer.route("/rename", methods=["POST"])
+@explorer.route("/rename", methods=["GET", "POST"])
 @login_required
 def rename_item():
-    old_path = request.form.get("old_path")
-    new_name = request.form.get("new_name")
+    if request.method == "POST":
+        old_path = request.form.get("old_path")
+        new_name = request.form.get("new_name")
+    else:
+        old_path = request.args.get("old_path")
+        new_name = request.args.get("new_name")
     
     if not old_path or not new_name:
         return "<h3>❌ Datos inválidos para renombrar.</h3>", 400
@@ -479,6 +632,13 @@ def rename_item():
         return redirect(request.referrer or "/")
     except Exception as e:
         return f"<h3>Error al renombrar: {e}</h3>", 500
+        
+@explorer.route("/help", methods=["GET"])
+def help_page():
+    base_url = request.host_url.rstrip('/')
+    help_text = f"# Guía de uso con CURL\n\n## Autenticación\nPrimero genera un token de autenticación:\ncurl \"{base_url}/auth?u=TU_USUARIO&p=TU_CONTRASEÑA\"\n\nO usa autenticación básica en cada request:\ncurl -u \"usuario:contraseña\" {base_url}/files\n\n## Listar archivos recursivamente\ncurl \"{base_url}/files?token=TU_TOKEN\"\n# o\ncurl -u \"usuario:contraseña\" {base_url}/files\n\n## Descargar archivo\ncurl \"{base_url}/download?path=ruta/archivo.jpg&token=TU_TOKEN\" \\\n  -o \"archivo.jpg\"\n\n## Crear CBZ desde códigos\n\n### Un solo código (nhentai, hentai3, hitomi)\n# nhentai\ncurl \"{base_url}/crear_cbz?codigo=177013&tipo=nh&token=TU_TOKEN\"\n\n# hentai3\ncurl \"{base_url}/crear_cbz?codigo=12345&tipo=h3&token=TU_TOKEN\"\n\n# hitomi\ncurl \"{base_url}/crear_cbz?codigo=abc123&tipo=hito&token=TU_TOKEN\"\n\n### Múltiples códigos (solo nhentai y hentai3)\n# nhentai múltiple\ncurl \"{base_url}/crear_cbz?codigo=177013,228922,309437&tipo=nh&token=TU_TOKEN\"\n\n# hentai3 múltiple\ncurl \"{base_url}/crear_cbz?codigo=12345,67890,54321&tipo=h3&token=TU_TOKEN\"\n\n## Descargar desde magnet link\ncurl \"{base_url}/magnet?magnet=magnet:?xt=urn:btih:TU_HASH&token=TU_TOKEN\"\n\n## Renombrar archivo/directorio\ncurl \"{base_url}/rename?old_path=ruta/vieja/archivo.txt&new_name=archivo_nuevo.txt&token=TU_TOKEN\"\n\n## Eliminar archivo/directorio\ncurl \"{base_url}/delete?path=ruta/a/eliminar&token=TU_TOKEN\"\n\n## Subir archivo (requiere POST)\ncurl -X POST \"{base_url}/upload?token=TU_TOKEN\" \\\n  -F \"file=@archivo_local.jpg\"\n\n## Notas:\n- Reemplaza `TU_TOKEN` con el token obtenido del endpoint `/auth`\n- Reemplaza `TU_USUARIO` y `TU_CONTRASEÑA` con tus credenciales\n- Las rutas deben estar dentro del directorio base permitido\n- Para hitomi solo se permite un código a la vez"
+    return help_text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+    
 
 def run_flask():
     explorer.run(host="0.0.0.0", port=10000)
