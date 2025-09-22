@@ -608,6 +608,118 @@ def extract_archive():
     except Exception as e:
         return f"<h3>Error al descomprimir archivo: {e}</h3>", 500
 
+@explorer.route("/api/snh/<path:search_term>")
+def api_search_nh(search_term):
+    try:
+        from command.get_files.scrap_nh import scrape_nhentai_with_selenium
+        
+        page = request.args.get('p', 1, type=int)
+        if page < 1:
+            page = 1
+            
+        galleries = scrape_nhentai_with_selenium(search_term=search_term, page=page)
+        
+        if not galleries:
+            return jsonify({"error": "No se encontraron resultados"}), 404
+            
+        return jsonify({
+            "search_term": search_term,
+            "page": page,
+            "results": galleries
+        })
+        
+    except Exception as e:
+        return jsonify({"error": f"Error en la búsqueda: {str(e)}"}), 500
+
+@explorer.route("/api/dnh/<codigo>")
+def api_download_nh(codigo):
+    try:
+        download_id = str(uuid.uuid4())
+        
+        with doujin_lock:
+            doujin_downloads[download_id] = {
+                "state": "processing",
+                "codigos": [codigo],
+                "tipo": "nh",
+                "progress": 0,
+                "total": 1,
+                "completados": 0,
+                "errores": 0,
+                "start_time": datetime.now().isoformat(),
+                "current_item": f"Preparando {codigo}",
+                "resultados": []
+            }
+
+        def download_sync():
+            try:
+                from command.htools import crear_cbz_desde_fuente
+                import asyncio
+                
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                cbz_path = loop.run_until_complete(crear_cbz_desde_fuente(codigo, "nh"))
+                
+                with doujin_lock:
+                    doujin_downloads[download_id]["state"] = "completed"
+                    doujin_downloads[download_id]["completados"] = 1
+                    doujin_downloads[download_id]["progress"] = 1
+                    doujin_downloads[download_id]["resultados"] = [{
+                        "codigo": codigo,
+                        "estado": "completado",
+                        "ruta": cbz_path,
+                        "nombre": os.path.basename(cbz_path)
+                    }]
+                    doujin_downloads[download_id]["end_time"] = datetime.now().isoformat()
+                    doujin_downloads[download_id]["cbz_path"] = cbz_path
+                    
+                loop.close()
+                
+            except Exception as e:
+                with doujin_lock:
+                    doujin_downloads[download_id]["state"] = "error"
+                    doujin_downloads[download_id]["errores"] = 1
+                    doujin_downloads[download_id]["error"] = str(e)
+
+        Thread(target=download_sync, daemon=True).start()
+        
+        return jsonify({
+            "download_id": download_id,
+            "codigo": codigo,
+            "status": "processing",
+            "message": "Descarga iniciada"
+        })
+        
+    except Exception as e:
+        return jsonify({"error": f"Error al iniciar descarga: {str(e)}"}), 500
+
+@explorer.route("/api/dnh_status/<download_id>")
+def api_download_status(download_id):
+    with doujin_lock:
+        download_info = doujin_downloads.get(download_id)
+    
+    if not download_info:
+        return jsonify({"error": "ID de descarga no encontrado"}), 404
+        
+    return jsonify(download_info)
+
+@explorer.route("/api/download_cbz/<download_id>")
+def api_download_cbz(download_id):
+    with doujin_lock:
+        download_info = doujin_downloads.get(download_id)
+    
+    if not download_info:
+        return jsonify({"error": "ID de descarga no encontrado"}), 404
+        
+    if download_info.get("state") != "completed":
+        return jsonify({"error": "La descarga no está completada"}), 400
+        
+    cbz_path = download_info.get("cbz_path")
+    if not cbz_path or not os.path.exists(cbz_path):
+        return jsonify({"error": "Archivo CBZ no encontrado"}), 404
+        
+    return send_file(cbz_path, as_attachment=True)
+
 @explorer.route("/rename", methods=["GET", "POST"])
 @login_required
 def rename_item():
