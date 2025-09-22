@@ -17,6 +17,22 @@ from pyrogram.errors import FloodWait
 from pyrogram.types import InputMediaPhoto
 from command.get_files.scrap_nh import scrape_nhentai_with_selenium
 
+
+async def api_search_nhentai(search_term, page=1):
+    try:
+        galleries = scrape_nhentai_with_selenium(search_term=search_term, page=page)
+        return galleries
+    except Exception as e:
+        print(f"Error en búsqueda API: {e}")
+        return []
+
+async def api_download_nhentai(codigo):
+    try:
+        cbz_path = await crear_cbz_desde_fuente(codigo, "nh")
+        return cbz_path
+    except Exception as e:
+        print(f"Error en descarga API: {e}")
+        raise
 async def send_nhentai_results(message, client, arg_text):
     try:
         parts = arg_text.split()
