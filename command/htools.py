@@ -1,209 +1,433 @@
+import aiohttp
+import asyncio
+import json
 import os
 import requests
+import shutil
+import subprocess
+import tempfile
 import time
-from flask import Flask, jsonify, request
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from bs4 import BeautifulSoup
+import re
+import unicodedata
+import uuid
+from datetime import datetime
+from io import BytesIO
+from PIL import Image
+from pyrogram.errors import FloodWait
+from pyrogram.types import InputMediaPhoto
+from command.get_files.scrap_nh import scrape_nhentai_with_selenium
 
-app = Flask(__name__)
 
-CHROME_BINARY_PATH = "selenium/chrome"
-CHROMEDRIVER_PATH = "selenium/chromedriver"
+async def api_search_nhentai(search_term, page=1):
+    try:
+        galleries = scrape_nhentai_with_selenium(search_term=search_term, page=page)
+        return galleries
+    except Exception as e:
+        print(f"Error en búsqueda API: {e}")
+        return []
 
-def download_file(url, filename):
-    print(f"Descargando {filename}...")
+async def api_download_nhentai(codigo):
+    try:
+        cbz_path = await crear_cbz_desde_fuente(codigo, "nh")
+        return cbz_path
+    except Exception as e:
+        print(f"Error en descarga API: {e}")
+        raise
+async def send_nhentai_results(message, client, arg_text):
+    try:
+        parts = arg_text.split()
+        page = 1
+        if '-p' in parts:
+            try:
+                p_index = parts.index('-p')
+                page = int(parts[p_index + 1])
+                parts = parts[:p_index]
+            except (ValueError, IndexError):
+                pass
+
+        query = ' '.join(parts).strip()
+
+        galleries = scrape_nhentai_with_selenium(search_term=query, page=page)
+        if not galleries:
+            await message.reply("No se encontraron resultados.")
+            return
+
+        for result in galleries[:25]:
+            image_data = None
+
+            for link in result.get('image_links', []):
+                try:
+                    response = requests.get(link, timeout=10)
+                    if response.status_code == 200:
+                        image_data = response.content
+                        break
+                except Exception:
+                    continue
+
+            if not image_data:
+                await message.reply(f"No se pudo descargar imagen para: {result['name']}")
+                continue
+
+            try:
+                img = Image.open(BytesIO(image_data))
+                if img.format == 'WEBP':
+                    img = img.convert('RGB')
+                buffer = BytesIO()
+                img.save(buffer, format='PNG')
+                buffer.seek(0)
+            except Exception as e:
+                await message.reply(f"Error procesando imagen: {e}")
+                continue
+
+            caption = (
+                f"📚 *Título:* {result['name']}\n"
+                f"📥 Puedes descargar este doujin usando el comando:\n"
+                f"`/nh {result['code']}`"
+            )
+
+            try:
+                await client.send_photo(
+                    chat_id=message.chat.id,
+                    photo=buffer,
+                    caption=caption
+                )
+            except Exception as e:
+                await message.reply(f"Error enviando imagen: {e}")
+                continue
+
+            time.sleep(3)
+
+    except Exception as e:
+        await message.reply(f"Error general: {e}")
+
+BASE_DIR = "vault_files/doujins"
+os.makedirs(BASE_DIR, exist_ok=True)
+
+async def safe_call(func, *args, **kwargs):
     while True:
         try:
-            response = requests.get(url, stream=True)
-            response.raise_for_status()
-            with open(filename, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-            print(f"Descarga completada: {filename}")
-            os.chmod(filename, 0o755)
-            print(f"Permisos ejecutables asignados a {filename}")
-            break
+            return await func(*args, **kwargs)
+        except FloodWait as e:
+            print(f"⏳ Esperando {e.value} seg para continuar")
+            await asyncio.sleep(e.value)
         except Exception as e:
-            print(f"Error descargando {filename}: {e}, reintentando...")
-            time.sleep(5)
+            print(f"❌ Error inesperado en {func.__name__}: {type(e).__name__}: {e}")
+            raise
 
-if not os.path.exists("selenium"):
-    os.makedirs("selenium", exist_ok=True)
+async def crear_cbz_desde_fuente(codigo: str, tipo: str) -> str:
+    from command.get_files.hitomi import descargar_y_comprimir_hitomi
+    from command.get_files.nh_selenium import scrape_nhentai
+    from command.get_files.h3_links import obtener_titulo_y_imagenes as obtener_info_y_links_h3
 
-if not os.path.exists("selenium/chrome"):
-    print("Chrome no encontrado, descargando...")
-    download_file("https://github.com/nakigeplayer/flask-scrap/releases/download/Selenium/chrome", "selenium/chrome")
-    
-if not os.path.exists("selenium/chromedriver"):
-    print("Chromedriver no encontrado, descargando...")
-    download_file("https://github.com/nakigeplayer/flask-scrap/releases/download/Selenium/chromedriver", "selenium/chromedriver")
+    def limpiarnombre(nombre: str) -> str:
+        nombre = nombre.replace('\n', ' ').strip()
+        nombre = unicodedata.normalize('NFC', nombre)
+        return re.sub(r'[^a-zA-Z0-9ñÑáéíóúÁÉÍÓÚ ]', '', nombre)
 
-def setup_driver():
-    chrome_options = Options()
-    chrome_options.add_argument('--headless')
-    chrome_options.add_argument('--no-sandbox')
-    chrome_options.add_argument('--disable-dev-shm-usage')
-    chrome_options.add_argument('--disable-gpu')
-    chrome_options.add_argument('--window-size=1920,1080')
-    chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36')
-    chrome_options.add_argument('--accept-language=en-US,en;q=0.9')
-    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    chrome_options.add_experimental_option('useAutomationExtension', False)
-    chrome_options.add_argument('--disable-blink-features=AutomationControlled')
-    chrome_options.binary_location = CHROME_BINARY_PATH
+    async def descargarimagen_async(session, url, path, referer):
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Referer": referer
+        }
+        async with session.get(url, headers=headers) as resp:
+            if resp.status == 200:
+                with open(path, 'wb') as f:
+                    f.write(await resp.read())
+
+    if tipo == "hito":
+        cbz_path = descargar_y_comprimir_hitomi(codigo)
+        final_path = os.path.join(BASE_DIR, os.path.basename(cbz_path))
+        shutil.move(cbz_path, final_path)
+        return final_path
+
+    if tipo == "nh":
+        title, imagenes = scrape_nhentai(codigo)
+        datos = {"texto": title, "imagenes": imagenes}
+        referer = "https://nhentai.net/"
+    else:
+        datos = obtener_info_y_links_h3(codigo, cover=False)
+        referer = "https://3hentai.net/"
+
+    texto = datos.get("texto", "").strip()
+    imagenes = datos.get("imagenes", [])
+    if not imagenes:
+        raise ValueError(f"No se encontraron imágenes para {codigo}")
+
+    nombrelimpio = limpiarnombre(texto)
+    nombrebase = f"{codigo} {nombrelimpio}" if nombrelimpio else f"{tipo} {codigo}"
+    nombrebase = nombrebase.strip()
+    cbz_filename = f"{nombrebase}.cbz"
+    cbz_path = os.path.join(BASE_DIR, cbz_filename)
+    temp_uuid_dir = os.path.join(BASE_DIR, str(uuid.uuid4()))
+    os.makedirs(temp_uuid_dir, exist_ok=True)
 
     try:
-        service = Service(executable_path=CHROMEDRIVER_PATH)
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        print("Driver configurado exitosamente")
-        return driver
-    except Exception as e:
-        print(f"Error al configurar el driver: {e}")
-        return None
+        async with aiohttp.ClientSession() as session:
+            tasks = []
+            for idx, url in enumerate(imagenes):
+                ext = os.path.splitext(url)[1].lower()
+                if ext not in [".jpg", ".jpeg", ".png"]:
+                    ext = ".jpg"
+                path = os.path.join(temp_uuid_dir, f"{idx+1:03d}{ext}")
+                tasks.append(descargarimagen_async(session, url, path, referer))
+            await asyncio.gather(*tasks)
 
-def scrape_nhentai_with_selenium(search_term, page=1):
-    print(f"Iniciando scraping para: {search_term}, página: {page}")
-    driver = setup_driver()
-    if not driver:
-        print("Error: No se pudo inicializar el driver")
-        return []
-    
-    try:
-        url = f"https://nhentai.net/search/?q={search_term}&page={page}"
-        print(f"Accediendo a URL: {url}")
-        
-        driver.get(url)
-        print("Página cargada, esperando 5 segundos...")
-        time.sleep(5)
-        
-        page_source = driver.page_source
-        if "Just a moment" in page_source or "Verifying" in page_source or "Cloudflare" in page_source:
-            print("Cloudflare detectado, esperando 15 segundos...")
-            time.sleep(15)
-            page_source = driver.page_source
-
-        print("Buscando elementos gallery...")
-        soup = BeautifulSoup(page_source, 'html.parser')
-        gallery_divs = soup.find_all('div', class_='gallery')
-        
-        if not gallery_divs:
-            print("No se encontraron galleries con clase 'gallery', buscando alternativas...")
-            gallery_divs = soup.find_all('div', {'data-tags': True})
-            print(f"Encontrados {len(gallery_divs)} divs con data-tags")
-        
-        if not gallery_divs:
-            print("No se encontraron galleries después de búsqueda alternativa")
-            print("HTML de la página (primeros 2000 caracteres):")
-            print(page_source[:2000])
-            return []
-        
-        print(f"Procesando {len(gallery_divs)} galleries encontrados")
-        results = []
-        
-        for i, gallery in enumerate(gallery_divs):
-            try:
-                print(f"Procesando gallery {i+1}/{len(gallery_divs)}")
-                data_tags = gallery.get('data-tags', '').split()
-                
-                link_tag = gallery.find('a', class_='cover')
-                if not link_tag:
-                    link_tag = gallery.find('a')
-                    if not link_tag:
-                        print(f"Gallery {i+1}: No se encontró enlace")
-                        continue
-                
-                href = link_tag.get('href', '')
-                gallery_code = href.split('/')[-2] if href.startswith('/g/') else 'N/A'
-                
-                img_tags = gallery.find_all('img')
-                image_links = []
-                
-                for img in img_tags:
-                    src = img.get('src', '') or img.get('data-src', '')
-                    if src:
-                        if src.startswith('//'):
-                            src = 'https:' + src
-                        elif src.startswith('/'):
-                            src = 'https://nhentai.net' + src
-                        image_links.append(src)
-                
-                caption_div = gallery.find('div', class_='caption')
-                if not caption_div:
-                    caption_div = gallery.find('div', class_='title')
-                name = caption_div.text.strip() if caption_div else 'N/A'
-                
-                result = {
-                    'image_links': list(set(image_links)),
-                    'name': name,
-                    'code': gallery_code,
-                    'tags': data_tags
-                }
-                
-                results.append(result)
-                print(f"Gallery {i+1} procesado: {name}")
-                
-            except Exception as e:
-                print(f"Error procesando gallery {i+1}: {e}")
-                continue
-        
-        print(f"Scraping completado. {len(results)} resultados obtenidos")
-        return results
-        
-    except Exception as e:
-        print(f"Error durante el scraping: {e}")
-        return []
-    
+        shutil.make_archive(nombrebase, 'zip', temp_uuid_dir)
+        os.rename(f"{nombrebase}.zip", cbz_path)
+        return cbz_path
     finally:
+        shutil.rmtree(temp_uuid_dir, ignore_errors=True)
+        
+defaultselectionmap = {}
+
+def cambiar_default_selection(userid, nuevaseleccion):
+    opcionesvalidas = [None, "pdf", "cbz", "both"]
+    if nuevaseleccion is not None:
+        nuevaseleccion = nuevaseleccion.lower()
+    if nuevaseleccion not in opcionesvalidas:
+        raise ValueError("Seleccion invalida: debe ser None, pdf, cbz o both")
+    defaultselectionmap[userid] = nuevaseleccion
+
+async def descargarimagen_async(session, url, path):
+    try:
+        async with session.get(url) as resp:
+            resp.raise_for_status()
+            content = await resp.read()
+            with open(path, 'wb') as f:
+                f.write(content)
+    except Exception as e:
+        print(f"❌ Error descargando imagen {url}: {e}")
+        await asyncio.sleep(2)
+        await descargarimagen_async(session, url, path)
+
+from command.get_files.nh_selenium import scrape_nhentai
+from command.get_files.h3_links import obtener_titulo_y_imagenes as obtener_info_y_links_h3
+
+def obtenerporcli(codigo, tipo, cover):
+    try:
+        if tipo == "hito":
+            return {"texto": "Procesando Hitomi.la", "imagenes": []}
+        elif tipo == "nh":
+            title, imagenes = scrape_nhentai(codigo)
+            datos = {"texto": title, "imagenes": imagenes}
+        else:
+            datos = obtener_info_y_links_h3(codigo, cover=cover)
+        texto = datos.get("texto", "").strip()
+        imagenes = datos.get("imagenes", [])
+        return {"texto": texto, "imagenes": imagenes}
+    except Exception as e:
+        print(f"❌ Error ejecutando función de extracción para {codigo}:", e)
+        return {"texto": "", "imagenes": []}
+
+def limpiarnombre(nombre: str) -> str:
+    nombre = nombre.replace('\n', ' ').strip()
+    nombre = unicodedata.normalize('NFC', nombre)
+    return re.sub(r'[^a-zA-Z0-9ñÑáéíóúÁÉÍÓÚ ]', '', nombre)
+
+async def nh_combined_operation(client, message, codigos, tipo, proteger, userid, operacion, int_lvl):
+    seleccion = defaultselectionmap.get(userid, "cbz")
+    EXTENSIONES = {"cbz": ".cbz", "pdf": ".pdf", "both": ".cbz"}
+    extension = EXTENSIONES.get(seleccion, ".cbz")
+    MAX_FILENAME_LEN = 63
+
+    for codigo in codigos:
+        if tipo == "hito":
+            try:
+                cbz_path = await crear_cbz_desde_fuente(codigo, tipo)
+                texto_titulo = os.path.basename(cbz_path).replace('.cbz', '')
+                
+                await safe_call(client.send_document,
+                    chat_id=message.chat.id,
+                    document=cbz_path,
+                    caption=texto_titulo,
+                    protect_content=proteger,
+                    reply_to_message_id=message.id
+                )
+                os.remove(cbz_path)
+                continue
+            except Exception as e:
+                await safe_call(message.reply, f"❌ Error con Hitomi.la: {e}", reply_to_message_id=message.id)
+                continue
+
+        datos = obtenerporcli(codigo, tipo, cover=(operacion == "cover"))
+        texto_original = datos.get("texto", "").strip()
+        texto_titulo = f"{codigo} {texto_original}"
+        nombrelimpio = limpiarnombre(texto_original)
+        nombrebase = f"{codigo} {nombrelimpio}" if nombrelimpio else f"{tipo} {codigo}"
+        nombrebase = nombrebase.strip()
+        max_nombre_len = MAX_FILENAME_LEN - len(extension)
+        if len(nombrebase) > max_nombre_len:
+            nombrebase = nombrebase[:max_nombre_len].rstrip()
+
+        nombrelimpio_completo = limpiarnombre(texto_original)
+        carpeta_temporal = os.path.join(BASE_DIR, str(uuid.uuid4()))
+        os.makedirs(carpeta_temporal, exist_ok=True)
+
+        imagenes = datos["imagenes"]
+        if not imagenes:
+            await safe_call(message.reply, f"❌ No se encontraron imágenes para {codigo}", reply_to_message_id=message.id)
+            shutil.rmtree(carpeta_temporal, ignore_errors=True)
+            continue
+
         try:
-            driver.quit()
-            print("Driver cerrado")
+            previewpath = os.path.join(carpeta_temporal, f"{nombrebase}_preview.jpg")
+            async with aiohttp.ClientSession() as session:
+                await descargarimagen_async(session, imagenes[0], previewpath)
+
+            cover_message = await safe_call(client.send_photo,
+                chat_id=message.chat.id,
+                photo=previewpath,
+                caption=f"{texto_titulo} Número de páginas: {len(imagenes)}",
+                protect_content=proteger,
+                reply_to_message_id=message.id
+            )
+            os.remove(previewpath)
+
         except Exception as e:
-            print(f"Error cerrando driver: {e}")
+            await safe_call(message.reply, f"❌ No pude enviar la portada para {texto_titulo}: {e}", reply_to_message_id=message.id)
+            shutil.rmtree(carpeta_temporal, ignore_errors=True)
+            continue
 
-@app.route('/')
-def home():
-    return "Servidor Flask corriendo"
+        if operacion == "cover":
+            shutil.rmtree(carpeta_temporal, ignore_errors=True)
+            continue
 
-@app.route('/snh')
-def nhentai_mirror():
-    search_term = request.args.get('q', '')
-    page = request.args.get('p', 1, type=int)
-    
-    if not search_term:
-        return jsonify({"error": "Parámetro 'q' requerido"}), 400
-    
-    print(f"=== INICIANDO REQUEST ===")
-    print(f"Búsqueda: '{search_term}'")
-    print(f"Página: {page}")
-    print(f"Esperando resultados...")
-    
-    start_time = time.time()
-    results = scrape_nhentai_with_selenium(search_term, page)
-    end_time = time.time()
-    
-    print(f"=== REQUEST COMPLETADO ===")
-    print(f"Tiempo total: {end_time - start_time:.2f} segundos")
-    print(f"Resultados encontrados: {len(results)}")
-    
-    if results:
-        print("Primeros 3 resultados:")
-        for i, result in enumerate(results[:3]):
-            print(f"  {i+1}. {result['name']} - Código: {result['code']}")
-    
-    return jsonify({
-        "search_term": search_term,
-        "page": page,
-        "results": results,
-        "count": len(results),
-        "time_elapsed": f"{end_time - start_time:.2f}s"
-    })
+        progresomsg = await safe_call(message.reply,
+            f"📦 Procesando imágenes para {texto_titulo} ({len(imagenes)} páginas)...\nProgreso 0/{len(imagenes)}",
+            reply_to_message_id=message.id
+        )
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+        try:
+            paths = []
+            async with aiohttp.ClientSession() as session:
+                tasks = []
+                for idx, url in enumerate(imagenes):
+                    ext = os.path.splitext(url)[1].lower()
+                    if ext not in [".jpg", ".jpeg", ".png"]:
+                        ext = ".jpg"
+                    path = os.path.join(carpeta_temporal, f"{idx+1:03d}{ext}")
+                    tasks.append(descargarimagen_async(session, url, path))
+                    paths.append(path)
+                
+                for i, task in enumerate(asyncio.as_completed(tasks)):
+                    await task
+                    if (i + 1) % 5 == 0 or i + 1 == len(tasks):
+                        await progresomsg.edit_text(
+                            f"📦 Procesando imágenes para {texto_titulo} ({len(imagenes)} páginas)...\nProgreso {i+1}/{len(imagenes)}"
+                        )
+
+            if int_lvl < 5:
+                finalimage_path = os.path.join("command", "spam.png")
+                finalpage_path = os.path.join(carpeta_temporal, f"{len(paths)+1:03d}.png")
+                shutil.copyfile(finalimage_path, finalpage_path)
+                paths.append(finalpage_path)
+
+            archivos = []
+
+            if seleccion in ["cbz", "both"]:
+                cbzbase = f"{nombrebase}"
+                cbzpath = f"{cbzbase}.cbz"
+                shutil.make_archive(cbzbase, 'zip', carpeta_temporal)
+                os.rename(f"{cbzbase}.zip", cbzpath)
+                archivos.append(cbzpath)
+
+            if seleccion in ["pdf", "both"]:
+                pdfpath = f"{nombrebase}.pdf"
+                try:
+                    mainimages = []
+                    for path in paths:
+                        try:
+                            with Image.open(path) as im:
+                                mainimages.append(im.convert("RGB"))
+                        except Exception:
+                            continue
+                    if mainimages:
+                        mainimages[0].save(pdfpath, save_all=True, append_images=mainimages[1:])
+                        archivos.append(pdfpath)
+                except Exception as e:
+                    await safe_call(message.reply, f"❌ Error al generar PDF para {texto_titulo}: {e}", reply_to_message_id=cover_message.id)
+
+            for archivo in archivos:
+                await safe_call(client.send_document,
+                    chat_id=message.chat.id,
+                    document=archivo,
+                    caption=texto_titulo,
+                    protect_content=proteger,
+                    reply_to_message_id=cover_message.id
+                )
+                os.remove(archivo)
+
+        except Exception as e:
+            await safe_call(message.reply, f"❌ Error procesando {texto_titulo}: {e}", reply_to_message_id=cover_message.id)
+        finally:
+            shutil.rmtree(carpeta_temporal, ignore_errors=True)
+            await safe_call(progresomsg.delete)
+
+async def nh_combined_operation_txt(client, message, tipo, proteger, userid, operacion, int_lvl):
+    if not message.reply_to_message or not message.reply_to_message.document:
+        await safe_call(message.reply, "❌ Debes responder a un archivo .txt", reply_to_message_id=message.id)
+        return
+
+    doc = message.reply_to_message.document
+    if not doc.file_name.lower().endswith(".txt"):
+        await safe_call(client.download_media, doc.file_id, file_name="temp_invalid")
+        os.remove("temp_invalid")
+        await safe_call(message.reply, "❌ Usar en un archivo txt", reply_to_message_id=message.id)
+        return
+
+    filepath = await safe_call(client.download_media, doc.file_id, file_name="temp_input.txt")
+    mensaje_txt = message.reply_to_message
+
+    while True:
+        with open(filepath, "r", encoding="utf-8") as f:
+            if tipo == "hito":
+                contenido = f.read().strip()
+                urls = [line.strip() for line in contenido.split('\n') if line.strip()]
+                codigos = urls
+            else:
+                contenido = f.read().strip()
+                codigos = contenido.split(",")
+
+        if not codigos:
+            os.remove(filepath)
+            try: await safe_call(mensaje_txt.delete)
+            except: pass
+            await safe_call(message.reply, "✅ Descarga terminada", reply_to_message_id=message.id)
+            return
+
+        if tipo != "hito" and not all(c in "0123456789," for c in contenido):
+            os.remove(filepath)
+            try: await safe_call(mensaje_txt.delete)
+            except: pass
+            await safe_call(message.reply, "❌ Estructura incorrecta", reply_to_message_id=message.id)
+            return
+
+        primer_codigo = codigos[0]
+        siguientes = codigos[1:]
+
+        await nh_combined_operation(client, message, [primer_codigo], tipo, proteger, userid, operacion, int_lvl)
+
+        os.remove(filepath)
+        try: await safe_call(mensaje_txt.delete)
+        except: pass
+
+        if siguientes:
+            nuevo_path = "temp_next.txt"
+            with open(nuevo_path, "w", encoding="utf-8") as f:
+                if tipo == "hito":
+                    f.write('\n'.join(siguientes))
+                else:
+                    f.write(",".join(siguientes))
+
+            mensaje_txt = await safe_call(client.send_document,
+                chat_id=message.chat.id,
+                document=nuevo_path,
+                caption=f"💻 Pendientes: {len(siguientes)}",
+                protect_content=proteger,
+                reply_to_message_id=message.id
+            )
+
+            filepath = nuevo_path
+        else:            
+            await safe_call(message.reply, "✅ Descarga terminada", reply_to_message_id=message.id)
+            return
