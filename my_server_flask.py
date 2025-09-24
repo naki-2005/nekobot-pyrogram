@@ -439,7 +439,6 @@ def crear_cbz():
     return response_msg
 
 @explorer.route("/upload", methods=["GET", "POST"])
-@login_required
 def upload_file():
     if request.method == "GET":
         return '''
