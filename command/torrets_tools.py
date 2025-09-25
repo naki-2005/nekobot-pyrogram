@@ -176,209 +176,6 @@ async def search_in_nyaa(client, message, search_query):
         
     await show_nyaa_result(client, message, cache_key, 0)
 
-async def show_nyaa_result(client, message, cache_key, index):
-    if cache_key not in nyaa_cache:
-        await message.reply("❌ Los resultados de búsqueda han expirado.")
-        return
-    
-    cache_data = nyaa_cache[cache_key]
-    results = cache_data['results']
-    
-    if index < 0 or index >= len(results):
-        await message.reply("❌ Índice de resultado inválido.")
-        return
-    
-    result = results[index]
-    cache_data['current_index'] = index
-    
-    keyboard = []
-    
-    row1_buttons = []
-    if 'torrent' in result:
-        row1_buttons.append(InlineKeyboardButton("📥 Torrent", callback_data=f"nyaa_torrent:{cache_key}:{index}"))
-    if 'magnet' in result:
-        row1_buttons.append(InlineKeyboardButton("🧲 Magnet", callback_data=f"nyaa_magnet:{cache_key}:{index}"))
-    
-    if row1_buttons:
-        keyboard.append(row1_buttons)
-    
-    row2_buttons = []
-    if 'magnet' in result:
-        row2_buttons.append(InlineKeyboardButton("🔽DL", callback_data=f"nyaa_dl:{cache_key}:{index}"))
-        row2_buttons.append(InlineKeyboardButton("🔽ZIP DL", callback_data=f"nyaa_zip:{cache_key}:{index}"))
-    
-    if row2_buttons:
-        keyboard.append(row2_buttons)
-    
-    nav_buttons = []
-    if index > 0:
-        nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"nyaa_prev:{cache_key}"))
-        nav_buttons.append(InlineKeyboardButton("⏪", callback_data=f"nyaa_first:{cache_key}"))
-    if index < len(results) - 1:
-        nav_buttons.append(InlineKeyboardButton("⏩", callback_data=f"nyaa_last:{cache_key}"))
-        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"nyaa_next:{cache_key}"))
-    
-    if nav_buttons:
-        keyboard.append(nav_buttons)
-    
-    reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
-    
-    message_text = f"**Resultado {index + 1}/{len(results)}**\n"
-    message_text += f"**Nombre:** {result['name']}\n"
-    message_text += f"**Fecha:** {result.get('date', 'N/A')}\n"
-    message_text += f"**Tamaño:** {result.get('size', 'N/A')}"
-    
-    if cache_data.get('message_id'):
-        try:
-            await client.edit_message_text(
-                chat_id=message.chat.id,
-                message_id=cache_data['message_id'],
-                text=message_text,
-                reply_markup=reply_markup
-            )
-            return
-        except:
-            pass
-    
-    sent_message = await message.reply(message_text, reply_markup=reply_markup)
-    cache_data['message_id'] = sent_message.id
-
-async def show_sukebei_result(client, message, cache_key, index):
-    if cache_key not in sukebei_cache:
-        await message.reply("❌ Los resultados de búsqueda han expirado.")
-        return
-    
-    cache_data = sukebei_cache[cache_key]
-    results = cache_data['results']
-    
-    if index < 0 or index >= len(results):
-        await message.reply("❌ Índice de resultado inválido.")
-        return
-    
-    result = results[index]
-    cache_data['current_index'] = index
-    
-    keyboard = []
-    
-    row1_buttons = []
-    if 'torrent' in result:
-        row1_buttons.append(InlineKeyboardButton("📥 Torrent", callback_data=f"sukebei_torrent:{cache_key}:{index}"))
-    if 'magnet' in result:
-        row1_buttons.append(InlineKeyboardButton("🧲 Magnet", callback_data=f"sukebei_magnet:{cache_key}:{index}"))
-    
-    if row1_buttons:
-        keyboard.append(row1_buttons)
-    
-    row2_buttons = []
-    if 'magnet' in result:
-        row2_buttons.append(InlineKeyboardButton("🔽DL", callback_data=f"sukebei_dl:{cache_key}:{index}"))
-        row2_buttons.append(InlineKeyboardButton("🔽ZIP DL", callback_data=f"sukebei_zip:{cache_key}:{index}"))
-    
-    if row2_buttons:
-        keyboard.append(row2_buttons)
-    
-    nav_buttons = []
-    if index > 0:
-        nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"sukebei_prev:{cache_key}"))
-        nav_buttons.append(InlineKeyboardButton("⏪", callback_data=f"sukebei_first:{cache_key}"))
-    if index < len(results) - 1:
-        nav_buttons.append(InlineKeyboardButton("⏩", callback_data=f"sukebei_last:{cache_key}"))
-        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"sukebei_next:{cache_key}"))
-    
-    if nav_buttons:
-        keyboard.append(nav_buttons)
-    
-    reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
-    
-    message_text = f"**Resultado {index + 1}/{len(results)}**\n"
-    message_text += f"**Nombre:** {result['name']}\n"
-    message_text += f"**Fecha:** {result.get('date', 'N/A')}\n"
-    message_text += f"**Tamaño:** {result.get('size', 'N/A')}"
-    
-    if cache_data.get('message_id'):
-        try:
-            await client.edit_message_text(
-                chat_id=message.chat.id,
-                message_id=cache_data['message_id'],
-                text=message_text,
-                reply_markup=reply_markup
-            )
-            return
-        except:
-            pass
-    
-    sent_message = await message.reply(message_text, reply_markup=reply_markup)
-    cache_data['message_id'] = sent_message.id
-
-async def handle_nyaa_callback(client, callback_query):
-    data = callback_query.data
-    parts = data.split(':')
-    
-    if len(parts) < 2:
-        await callback_query.answer("❌ Error en los datos")
-        return
-    
-    action = parts[0]
-    cache_key = parts[1]
-    
-    if cache_key not in nyaa_cache:
-        await callback_query.answer("❌ Los resultados han expirado")
-        await callback_query.message.delete()
-        return
-    
-    cache_data = nyaa_cache[cache_key]
-    results = cache_data['results']
-    current_index = cache_data['current_index']
-    
-    if action == "nyaa_torrent":
-        index = int(parts[2])
-        result = results[index]
-        
-        await callback_query.answer("📥 Enviando link de torrent...")
-        await client.send_message(
-            chat_id=callback_query.message.chat.id,
-            text=result['torrent']
-        )
-        
-    elif action == "nyaa_magnet":
-        index = int(parts[2])
-        result = results[index]
-        await callback_query.answer("🧲 Enviando magnet...")
-        await client.send_message(
-            chat_id=callback_query.message.chat.id,
-            text=result['magnet']
-        )
-        
-    elif action == "nyaa_dl":
-        index = int(parts[2])
-        result = results[index]
-        await callback_query.answer("🔽 Iniciando descarga...")
-        await process_magnet_download_telegram(client, callback_query.message, result['magnet'], False)
-        
-    elif action == "nyaa_zip":
-        index = int(parts[2])
-        result = results[index]
-        await callback_query.answer("🔽 Iniciando descarga comprimida...")
-        await process_magnet_download_telegram(client, callback_query.message, result['magnet'], True)
-        
-    elif action == "nyaa_prev":
-        new_index = max(0, current_index - 1)
-        await show_nyaa_result(client, callback_query.message, cache_key, new_index)
-        await callback_query.answer()
-        
-    elif action == "nyaa_next":
-        new_index = min(len(results) - 1, current_index + 1)
-        await show_nyaa_result(client, callback_query.message, cache_key, new_index)
-        await callback_query.answer()
-        
-    elif action == "nyaa_first":
-        await show_nyaa_result(client, callback_query.message, cache_key, 0)
-        await callback_query.answer()
-        
-    elif action == "nyaa_last":
-        await show_nyaa_result(client, callback_query.message, cache_key, len(results) - 1)
-        await callback_query.answer()
-        
 def search_sukebei(query):
     base_url = "https://sukebei.nyaa.si/"
     search_query = urllib.parse.quote_plus(query)
@@ -514,6 +311,229 @@ async def search_in_sukebei(client, message, search_query):
         
     await show_sukebei_result(client, message, cache_key, 0)
 
+async def show_nyaa_result(client, message, cache_key, index):
+    if cache_key not in nyaa_cache:
+        await message.reply("❌ Los resultados de búsqueda han expirado.")
+        return
+    
+    cache_data = nyaa_cache[cache_key]
+    results = cache_data['results']
+    
+    if index < 0 or index >= len(results):
+        await message.reply("❌ Índice de resultado inválido.")
+        return
+    
+    result = results[index]
+    cache_data['current_index'] = index
+    
+    keyboard = []
+    
+    row1_buttons = []
+    if 'torrent' in result:
+        row1_buttons.append(InlineKeyboardButton("📥 Torrent", callback_data=f"nyaa_torrent:{cache_key}:{index}"))
+    if 'magnet' in result:
+        row1_buttons.append(InlineKeyboardButton("🧲 Magnet", callback_data=f"nyaa_magnet:{cache_key}:{index}"))
+    
+    if row1_buttons:
+        keyboard.append(row1_buttons)
+    
+    row2_buttons = []
+    if 'magnet' in result:
+        row2_buttons.append(InlineKeyboardButton("🔽DL", callback_data=f"nyaa_dl:{cache_key}:{index}"))
+        row2_buttons.append(InlineKeyboardButton("🔽ZIP DL", callback_data=f"nyaa_zip:{cache_key}:{index}"))
+    
+    if row2_buttons:
+        keyboard.append(row2_buttons)
+    
+    row3_buttons = []
+    if any('magnet' in r for r in results):
+        row3_buttons.append(InlineKeyboardButton("🔽DL All", callback_data=f"nyaa_dl_all:{cache_key}"))
+    
+    if row3_buttons:
+        keyboard.append(row3_buttons)
+    
+    nav_buttons = []
+    if index > 0:
+        nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"nyaa_prev:{cache_key}"))
+        nav_buttons.append(InlineKeyboardButton("⏪", callback_data=f"nyaa_first:{cache_key}"))
+    if index < len(results) - 1:
+        nav_buttons.append(InlineKeyboardButton("⏩", callback_data=f"nyaa_last:{cache_key}"))
+        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"nyaa_next:{cache_key}"))
+    
+    if nav_buttons:
+        keyboard.append(nav_buttons)
+    
+    reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+    
+    message_text = f"**Resultado {index + 1}/{len(results)}**\n"
+    message_text += f"**Nombre:** {result['name']}\n"
+    message_text += f"**Fecha:** {result.get('date', 'N/A')}\n"
+    message_text += f"**Tamaño:** {result.get('size', 'N/A')}"
+    
+    if cache_data.get('message_id'):
+        try:
+            await client.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=cache_data['message_id'],
+                text=message_text,
+                reply_markup=reply_markup
+            )
+            return
+        except:
+            pass
+    
+    sent_message = await message.reply(message_text, reply_markup=reply_markup)
+    cache_data['message_id'] = sent_message.id
+
+async def show_sukebei_result(client, message, cache_key, index):
+    if cache_key not in sukebei_cache:
+        await message.reply("❌ Los resultados de búsqueda han expirado.")
+        return
+    
+    cache_data = sukebei_cache[cache_key]
+    results = cache_data['results']
+    
+    if index < 0 or index >= len(results):
+        await message.reply("❌ Índice de resultado inválido.")
+        return
+    
+    result = results[index]
+    cache_data['current_index'] = index
+    
+    keyboard = []
+    
+    row1_buttons = []
+    if 'torrent' in result:
+        row1_buttons.append(InlineKeyboardButton("📥 Torrent", callback_data=f"sukebei_torrent:{cache_key}:{index}"))
+    if 'magnet' in result:
+        row1_buttons.append(InlineKeyboardButton("🧲 Magnet", callback_data=f"sukebei_magnet:{cache_key}:{index}"))
+    
+    if row1_buttons:
+        keyboard.append(row1_buttons)
+    
+    row2_buttons = []
+    if 'magnet' in result:
+        row2_buttons.append(InlineKeyboardButton("🔽DL", callback_data=f"sukebei_dl:{cache_key}:{index}"))
+        row2_buttons.append(InlineKeyboardButton("🔽ZIP DL", callback_data=f"sukebei_zip:{cache_key}:{index}"))
+    
+    if row2_buttons:
+        keyboard.append(row2_buttons)
+    
+    row3_buttons = []
+    if any('magnet' in r for r in results):
+        row3_buttons.append(InlineKeyboardButton("🔽DL All", callback_data=f"sukebei_dl_all:{cache_key}"))
+    
+    if row3_buttons:
+        keyboard.append(row3_buttons)
+    
+    nav_buttons = []
+    if index > 0:
+        nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"sukebei_prev:{cache_key}"))
+        nav_buttons.append(InlineKeyboardButton("⏪", callback_data=f"sukebei_first:{cache_key}"))
+    if index < len(results) - 1:
+        nav_buttons.append(InlineKeyboardButton("⏩", callback_data=f"sukebei_last:{cache_key}"))
+        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"sukebei_next:{cache_key}"))
+    
+    if nav_buttons:
+        keyboard.append(nav_buttons)
+    
+    reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+    
+    message_text = f"**Resultado {index + 1}/{len(results)}**\n"
+    message_text += f"**Nombre:** {result['name']}\n"
+    message_text += f"**Fecha:** {result.get('date', 'N/A')}\n"
+    message_text += f"**Tamaño:** {result.get('size', 'N/A')}"
+    
+    if cache_data.get('message_id'):
+        try:
+            await client.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=cache_data['message_id'],
+                text=message_text,
+                reply_markup=reply_markup
+            )
+            return
+        except:
+            pass
+    
+    sent_message = await message.reply(message_text, reply_markup=reply_markup)
+    cache_data['message_id'] = sent_message.id
+
+async def handle_nyaa_callback(client, callback_query):
+    data = callback_query.data
+    parts = data.split(':')
+    
+    if len(parts) < 2:
+        await callback_query.answer("❌ Error en los datos")
+        return
+    
+    action = parts[0]
+    cache_key = parts[1]
+    
+    if cache_key not in nyaa_cache:
+        await callback_query.answer("❌ Los resultados han expirado")
+        await callback_query.message.delete()
+        return
+    
+    cache_data = nyaa_cache[cache_key]
+    results = cache_data['results']
+    current_index = cache_data['current_index']
+    
+    if action == "nyaa_torrent":
+        index = int(parts[2])
+        result = results[index]
+        
+        await callback_query.answer("📥 Enviando link de torrent...")
+        await client.send_message(
+            chat_id=callback_query.message.chat.id,
+            text=result['torrent']
+        )
+        
+    elif action == "nyaa_magnet":
+        index = int(parts[2])
+        result = results[index]
+        await callback_query.answer("🧲 Enviando magnet...")
+        await client.send_message(
+            chat_id=callback_query.message.chat.id,
+            text=result['magnet']
+        )
+        
+    elif action == "nyaa_dl":
+        index = int(parts[2])
+        result = results[index]
+        await callback_query.answer("🔽 Iniciando descarga...")
+        await process_magnet_download_telegram(client, callback_query.message, result['magnet'], False)
+        
+    elif action == "nyaa_zip":
+        index = int(parts[2])
+        result = results[index]
+        await callback_query.answer("🔽 Iniciando descarga comprimida...")
+        await process_magnet_download_telegram(client, callback_query.message, result['magnet'], True)
+        
+    elif action == "nyaa_dl_all":
+        await callback_query.answer("🔽 Iniciando descarga de todos los resultados...")
+        for result in results:
+            if 'magnet' in result:
+                await process_magnet_download_telegram(client, callback_query.message, result['magnet'], False)
+        
+    elif action == "nyaa_prev":
+        new_index = max(0, current_index - 1)
+        await show_nyaa_result(client, callback_query.message, cache_key, new_index)
+        await callback_query.answer()
+        
+    elif action == "nyaa_next":
+        new_index = min(len(results) - 1, current_index + 1)
+        await show_nyaa_result(client, callback_query.message, cache_key, new_index)
+        await callback_query.answer()
+        
+    elif action == "nyaa_first":
+        await show_nyaa_result(client, callback_query.message, cache_key, 0)
+        await callback_query.answer()
+        
+    elif action == "nyaa_last":
+        await show_nyaa_result(client, callback_query.message, cache_key, len(results) - 1)
+        await callback_query.answer()
+
 async def handle_sukebei_callback(client, callback_query):
     data = callback_query.data
     parts = data.split(':')
@@ -564,6 +584,12 @@ async def handle_sukebei_callback(client, callback_query):
         result = results[index]
         await callback_query.answer("🔽 Iniciando descarga comprimida...")
         await process_magnet_download_telegram(client, callback_query.message, result['magnet'], True)
+        
+    elif action == "sukebei_dl_all":
+        await callback_query.answer("🔽 Iniciando descarga de todos los resultados...")
+        for result in results:
+            if 'magnet' in result:
+                await process_magnet_download_telegram(client, callback_query.message, result['magnet'], False)
         
     elif action == "sukebei_prev":
         new_index = max(0, current_index - 1)
