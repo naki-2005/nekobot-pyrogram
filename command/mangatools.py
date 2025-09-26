@@ -28,6 +28,164 @@ def cleanup_cache():
     for user_id in expired_users:
         del chapters_cache[user_id]
 
+class MangaClient:
+    def __init__(self, language='es'):
+        self.language = language
+        if language == 'es':
+            self.base_url = urlparse("https://es.ninemanga.com/")
+        else:
+            self.base_url = urlparse("https://ninemanga.com/")
+        self.search_param = 'wd'
+        self.query_param = 'waring=1'
+        self.pre_headers = {
+            'User-Agent': ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                           'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'),
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        }
+        
+        self.search_url = urljoin(self.base_url.geturl(), 'search/')
+        self.updates_url = self.base_url.geturl()
+        self.scraper = cloudscraper.create_scraper(
+            browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False}
+        )
+        self.scraper.headers.update(self.pre_headers)
+
+    def get_url(self, url, retries=3):
+        for attempt in range(retries):
+            try:
+                response = self.scraper.get(url)
+                if response.status_code == 404:
+                    return None
+                if response.status_code == 403:
+                    return None
+                response.raise_for_status()
+                return response.content
+            except Exception as e:
+                if attempt == retries - 1:
+                    return None
+                continue
+
+    def mangas_from_page(self, page: bytes):
+        if not page:
+            return [], [], []
+        bs = BeautifulSoup(page, "html.parser")
+        container = bs.find("ul", {"class": "direlist"})
+        if not container:
+            return [], [], []
+        cards = container.find_all("li")
+        mangas = [card.find_next('a', {'class': 'bookname'}) for card in cards]
+        names = [manga.string.strip().title() for manga in mangas if manga and manga.string]
+        urls = [manga.get("href") for manga in mangas if manga]
+        images = [card.find_next("img").get("src") for card in cards if card.find_next("img")]
+        return names, urls, images
+
+    def search(self, query: str = ""):
+        query = quote_plus(query)
+        all_names = []
+        all_urls = []
+        all_images = []
+        page = 1
+        
+        while True:
+            if page == 1:
+                request_url = f'{self.search_url}?{self.search_param}={query}'
+            else:
+                request_url = f'{self.search_url}?name_sel=&wd={query}&author_sel=&author=&artist_sel=&artist=&category_id=&out_category_id=&completed_series=&page={page}.html'
+            
+            content = self.get_url(request_url)
+            if content is None:
+                break
+            
+            names, urls, images = self.mangas_from_page(content)
+            
+            if not names:
+                break
+            
+            all_names.extend(names)
+            all_urls.extend(urls)
+            all_images.extend(images)
+            
+            bs = BeautifulSoup(content, "html.parser")
+            next_page = bs.find("a", {"class": "next"})
+            if not next_page:
+                break
+                
+            page += 1
+            
+            if page > 50:
+                break
+        
+        return all_names, all_urls, all_images
+
+    def get_manga_name_from_url(self, manga_url: str):
+        content = self.get_url(manga_url)
+        if not content:
+            return None
+        
+        bs = BeautifulSoup(content, "html.parser")
+        title_element = bs.find("h1")
+        if title_element:
+            return title_element.get_text().strip()
+        
+        title_element = bs.find("div", {"class": "bookinfo"})
+        if title_element:
+            h1 = title_element.find("h1")
+            if h1:
+                return h1.get_text().strip()
+        
+        return None
+
+    def chapters_from_page(self, page: bytes):
+        if not page:
+            return [], []
+        bs = BeautifulSoup(page, "html.parser")
+        container = bs.find("div", {"class": "chapterbox"})
+        if not container:
+            return [], []
+        lis = container.find_all("li")
+        items = [li.find_next('a') for li in lis]
+        links = [item.get("href") for item in items if item]
+        texts = [item.get("title").strip() for item in items if item and item.get("title")]
+        texts.reverse()
+        links.reverse()
+        return texts, links
+
+    def get_chapters(self, manga_url: str):
+        content = self.get_url(manga_url)
+        chapters, links = self.chapters_from_page(content)
+        if not chapters:
+            content = self.get_url(f'{manga_url}?{self.query_param}')
+            chapters, links = self.chapters_from_page(content)
+        return chapters, links
+
+    def pictures_from_chapter(self, chapter_url: str):
+        images_url = []
+        base_chapter = chapter_url.rsplit(".html", 1)[0]
+        page = 1
+        while True:
+            url = f"{base_chapter}-10-{page}.html"
+            content = self.get_url(url)
+            if content is None:
+                break
+            bs = BeautifulSoup(content, "html.parser")
+            imgs = bs.find_all("img", {"class": "manga_pic"})
+            if not imgs:
+                break
+            new_images = [img.get("src") for img in imgs if img.get("src")]
+            if not new_images:
+                break
+            images_url.extend(new_images)
+            page += 1
+        return images_url
+
+    def close(self):
+        pass
+        
 def save_to_vault(manga_name, chapter_name, cbz_file):
     vault_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'vault_files', 'mangas')
     manga_folder = os.path.join(vault_path, manga_name)
