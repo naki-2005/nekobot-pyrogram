@@ -533,6 +533,158 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
             os.remove(cbz_file)
         except:
             pass
+
+async def handle_manga_search(client: Client, message: Message, textori: str):
+    user_id = message.from_user.id
+    parts = textori.split(maxsplit=1)
+    
+    if len(parts) < 2:
+        await message.reply("Por favor, proporciona un nombre de manga o URL. Ejemplo: /manga One Piece o /manga https://es.ninemanga.com/manga/Kuro.html")
+        return
+    
+    query = parts[1].strip()
+    
+    if re.match(r'https?://(es\.)?ninemanga\.com/manga/', query):
+        if 'es.ninemanga.com' in query:
+            language = 'es'
+        else:
+            language = 'en'
+        
+        manga_client = MangaClient(language)
+        manga_name = manga_client.get_manga_name_from_url(query)
+        manga_client.close()
+        
+        if not manga_name:
+            await message.reply("No se pudo obtener información del manga desde la URL proporcionada.")
+            return
+        
+        await message.reply(f"🔄 Obteniendo capítulos de {manga_name}...")
+        
+        manga_client = MangaClient(language)
+        chapters, chapter_urls = manga_client.get_chapters(query)
+        manga_client.close()
+        
+        if not chapters:
+            await message.reply("No se encontraron capítulos para este manga.")
+            return
+        
+        chapters_cache[user_id] = {
+            "chapters": chapters,
+            "chapter_urls": chapter_urls,
+            "current_page": 0,
+            "manga_name": manga_name,
+            "language": language,
+            "timestamp": time.time()
+        }
+        
+        total_chapters = len(chapters)
+        current_page = 0
+        start_idx = current_page * 10
+        end_idx = min(start_idx + 10, total_chapters)
+        
+        keyboard = []
+        for i in range(start_idx, end_idx):
+            keyboard.append([InlineKeyboardButton(chapters[i], callback_data=f"chapter_{i}")])
+        
+        if total_chapters > 10:
+            nav_buttons = []
+            if current_page > 0:
+                nav_buttons.append(InlineKeyboardButton("⏪", callback_data="first_page"))
+                nav_buttons.append(InlineKeyboardButton("◀️", callback_data="prev_page"))
+            
+            if end_idx < total_chapters:
+                nav_buttons.append(InlineKeyboardButton("▶️", callback_data="next_page"))
+                nav_buttons.append(InlineKeyboardButton("⏩", callback_data="last_page"))
+            
+            if nav_buttons:
+                keyboard.append(nav_buttons)
+        
+        action_buttons = [
+            InlineKeyboardButton("📥 Descargar Todos", callback_data="chapter_all"),
+            InlineKeyboardButton("📁 Guardar Todos", callback_data="save_all")
+        ]
+        keyboard.append(action_buttons)
+        
+        manga_buttons = [
+            InlineKeyboardButton("📥 Descargar Manga", callback_data="download_manga"),
+            InlineKeyboardButton("📁 Guardar Manga", callback_data="save_manga")
+        ]
+        keyboard.append(manga_buttons)
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await message.reply(
+            f"📚 Capítulos de {manga_name}:\nMostrando {start_idx + 1}-{end_idx} de {total_chapters}",
+            reply_markup=reply_markup
+        )
+    else:
+        keyboard = [
+            [InlineKeyboardButton("🇪🇸 Español", callback_data="manga_lang_es")],
+            [InlineKeyboardButton("🇺🇸 Inglés", callback_data="manga_lang_en")]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await message.reply(
+            "Elija el idioma a buscar",
+            reply_markup=reply_markup
+        )
+        
+        user_data[user_id] = {"query": query}
+
+def download_image(url, folder, idx, semaphore):
+    headers = {
+        'User-Agent': ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                       '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'),
+        'Referer': 'https://es.ninemanga.com/'
+    }
+    
+    with semaphore:
+        scraper = cloudscraper.create_scraper()
+        try:
+            response = scraper.get(url, headers=headers, stream=True)
+            response.raise_for_status()
+            
+            file_path = os.path.join(folder, f'{idx + 1}.jpg')
+            with open(file_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+            return True
+        except Exception as e:
+            return False
+
+async def download_chapter(chapter_url, chapter_name, client):
+    chapter_name = "".join(c for c in chapter_name if c.isalnum() or c in (' ', '.', '_')).rstrip()
+    images = client.pictures_from_chapter(chapter_url)
+    if not images:
+        return None
+
+    folder = tempfile.mkdtemp()
+    
+    semaphore = asyncio.Semaphore(1)
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        futures = []
+        for idx, img in enumerate(images):
+            futures.append(executor.submit(download_image, img, folder, idx, semaphore))
+        
+        for future in concurrent.futures.as_completed(futures):
+            future.result()
+
+    cbz_filename = f'{chapter_name}.cbz'
+    try:
+        with zipfile.ZipFile(cbz_filename, 'w') as archive:
+            for root, _, files in os.walk(folder):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    archive.write(file_path, arcname=os.path.join(chapter_name, file))
+    except Exception as e:
+        return None
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+    return cbz_filename
     
     elif data == "noop":
         await callback_query.answer()
