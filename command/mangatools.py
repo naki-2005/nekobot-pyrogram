@@ -801,20 +801,19 @@ def download_image(url, folder, idx, semaphore):
         'Referer': 'https://es.ninemanga.com/'
     }
     
-    with semaphore:
-        scraper = cloudscraper.create_scraper()
-        try:
-            response = scraper.get(url, headers=headers, stream=True)
-            response.raise_for_status()
-            
-            file_path = os.path.join(folder, f'{idx + 1}.jpg')
-            with open(file_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-            return True
-        except Exception as e:
-            return False
+    scraper = cloudscraper.create_scraper()
+    try:
+        response = scraper.get(url, headers=headers, stream=True)
+        response.raise_for_status()
+        
+        file_path = os.path.join(folder, f'{idx + 1}.jpg')
+        with open(file_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+        return True
+    except Exception as e:
+        return False
 
 async def download_chapter(chapter_url, chapter_name, client):
     chapter_name = "".join(c for c in chapter_name if c.isalnum() or c in (' ', '.', '_')).rstrip()
@@ -823,13 +822,11 @@ async def download_chapter(chapter_url, chapter_name, client):
         return None
 
     folder = tempfile.mkdtemp()
-    
-    semaphore = asyncio.Semaphore(1)
-    
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         futures = []
         for idx, img in enumerate(images):
-            futures.append(executor.submit(download_image, img, folder, idx, semaphore))
+            futures.append(executor.submit(download_image, img, folder, idx, None))
         
         for future in concurrent.futures.as_completed(futures):
             future.result()
