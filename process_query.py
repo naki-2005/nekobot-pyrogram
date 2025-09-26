@@ -17,8 +17,8 @@ async def process_query(client, callback_query):
 
     help_related = [f"help_{x}" for x in [1, 2, 3, 4, 5]] + ["help_back"]
 
-    manga_related = data.startswith("manga_") or data.startswith("chapter_") or data in ["first_page", "prev_page", "next_page", "last_page", "noop"]
-
+    manga_related = data.startswith("manga_") or data.startswith("chapter_") or data.startswith("save_") or data in ["first_page", "prev_page", "next_page", "last_page", "noop", "download_manga", "save_manga", "chapter_all", "save_all"]
+    
     nyaa_related = data.startswith("nyaa_")
     
     sukebei_related = data.startswith("sukebei_")
