@@ -533,6 +533,10 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
             os.remove(cbz_file)
         except:
             pass
+    
+    elif data == "noop":
+        await callback_query.answer()
+
 
 async def handle_manga_search(client: Client, message: Message, textori: str):
     user_id = message.from_user.id
@@ -685,6 +689,3 @@ async def download_chapter(chapter_url, chapter_name, client):
         shutil.rmtree(folder, ignore_errors=True)
 
     return cbz_filename
-    
-    elif data == "noop":
-        await callback_query.answer()
