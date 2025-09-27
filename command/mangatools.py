@@ -16,17 +16,7 @@ from pyrogram.errors import BadRequest
 user_data = {}
 manga_cache = {}
 chapters_cache = {}
-CACHE_DURATION = 86400 * 7  # 7 días
-
-def cleanup_cache():
-    current_time = time.time()
-    expired_users = []
-    for user_id, cache_data in chapters_cache.items():
-        if current_time - cache_data.get('timestamp', 0) > CACHE_DURATION:
-            expired_users.append(user_id)
-    
-    for user_id in expired_users:
-        del chapters_cache[user_id]
+CACHE_DURATION = 86400 * 7
 
 class MangaClient:
     def __init__(self, language='es'):
@@ -38,8 +28,7 @@ class MangaClient:
         self.search_param = 'wd'
         self.query_param = 'waring=1'
         self.pre_headers = {
-            'User-Agent': ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                           'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'),
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.5',
             'Accept-Encoding': 'gzip, deflate, br',
@@ -185,7 +174,17 @@ class MangaClient:
 
     def close(self):
         pass
-        
+
+def cleanup_cache():
+    current_time = time.time()
+    expired_users = []
+    for user_id, cache_data in chapters_cache.items():
+        if current_time - cache_data.get('timestamp', 0) > CACHE_DURATION:
+            expired_users.append(user_id)
+    
+    for user_id in expired_users:
+        del chapters_cache[user_id]
+
 def save_to_vault(manga_name, chapter_name, cbz_file):
     vault_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'vault_files', 'mangas')
     manga_folder = os.path.join(vault_path, manga_name)
@@ -195,7 +194,57 @@ def save_to_vault(manga_name, chapter_name, cbz_file):
     shutil.copy2(cbz_file, chapter_file)
     return chapter_file
 
-async def download_full_manga(user_id, chapters, chapter_urls, language, manga_name, save_to_vault=False):
+def download_image(url, folder, idx):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Referer': 'https://es.ninemanga.com/'
+    }
+    
+    scraper = cloudscraper.create_scraper()
+    try:
+        response = scraper.get(url, headers=headers, stream=True)
+        response.raise_for_status()
+        
+        file_path = os.path.join(folder, f'{idx + 1}.jpg')
+        with open(file_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+        return True
+    except Exception as e:
+        return False
+
+async def download_chapter(chapter_url, chapter_name, client):
+    chapter_name = "".join(c for c in chapter_name if c.isalnum() or c in (' ', '.', '_')).rstrip()
+    images = client.pictures_from_chapter(chapter_url)
+    if not images:
+        return None
+
+    folder = tempfile.mkdtemp()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        futures = []
+        for idx, img in enumerate(images):
+            futures.append(executor.submit(download_image, img, folder, idx))
+        
+        for future in concurrent.futures.as_completed(futures):
+            future.result()
+
+    cbz_filename = f'{chapter_name}.cbz'
+    try:
+        with zipfile.ZipFile(cbz_filename, 'w') as archive:
+            for root, _, files in os.walk(folder):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    archive.write(file_path, arcname=os.path.join(chapter_name, file))
+    except Exception as e:
+        return None
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+    return cbz_filename
+
+async def download_full_manga(user_id, chapters, chapter_urls, language, manga_name, save_to_vault=False, client=None):
     manga_client = MangaClient(language)
     downloaded_files = []
     
@@ -203,11 +252,8 @@ async def download_full_manga(user_id, chapters, chapter_urls, language, manga_n
     progress_msg = None
     
     for i, (chapter_name, chapter_url) in enumerate(zip(chapters, chapter_urls)):
-        if progress_msg is None:
-            progress_msg = await manga_client.app.send_message(
-                user_id, 
-                f"📥 Descargando {manga_name}...\nProgreso: 0/{total_chapters} (0%)"
-            )
+        if progress_msg is None and client:
+            progress_msg = await client.send_message(user_id, f"📥 Descargando {manga_name}...\nProgreso: 0/{total_chapters} (0%)")
         
         cbz_file = await download_chapter(chapter_url, chapter_name, manga_client)
         if cbz_file:
@@ -219,19 +265,131 @@ async def download_full_manga(user_id, chapters, chapter_urls, language, manga_n
             
             progress = i + 1
             percentage = (progress / total_chapters) * 100
-            try:
-                await progress_msg.edit_text(
-                    f"📥 Descargando {manga_name}...\nProgreso: {progress}/{total_chapters} ({percentage:.1f}%)"
-                )
-            except:
-                pass
+            if progress_msg and client:
+                try:
+                    await progress_msg.edit_text(f"📥 Descargando {manga_name}...\nProgreso: {progress}/{total_chapters} ({percentage:.1f}%)")
+                except:
+                    pass
     
     manga_client.close()
     
-    if progress_msg:
+    if progress_msg and client:
         await progress_msg.delete()
     
     return downloaded_files
+
+async def download_multiple_chapters(user_id, start_idx, end_idx, chapters, chapter_urls, language):
+    manga_client = MangaClient(language)
+    downloaded_files = []
+    
+    for i in range(start_idx, end_idx):
+        chapter_name = chapters[i]
+        chapter_url = chapter_urls[i]
+        
+        cbz_file = await download_chapter(chapter_url, chapter_name, manga_client)
+        if cbz_file:
+            downloaded_files.append(cbz_file)
+    
+    manga_client.close()
+    return downloaded_files
+
+async def handle_manga_search(client: Client, message: Message, textori: str):
+    user_id = message.from_user.id
+    parts = textori.split(maxsplit=1)
+    
+    if len(parts) < 2:
+        await message.reply("Por favor, proporciona un nombre de manga o URL. Ejemplo: /manga One Piece o /manga https://es.ninemanga.com/manga/Kuro.html")
+        return
+    
+    query = parts[1].strip()
+    
+    if re.match(r'https?://(es\.)?ninemanga\.com/manga/', query):
+        if 'es.ninemanga.com' in query:
+            language = 'es'
+        else:
+            language = 'en'
+        
+        manga_client = MangaClient(language)
+        manga_name = manga_client.get_manga_name_from_url(query)
+        manga_client.close()
+        
+        if not manga_name:
+            await message.reply("No se pudo obtener información del manga desde la URL proporcionada.")
+            return
+        
+        await message.reply(f"🔄 Obteniendo capítulos de {manga_name}...")
+        
+        manga_client = MangaClient(language)
+        chapters, chapter_urls = manga_client.get_chapters(query)
+        manga_client.close()
+        
+        if not chapters:
+            await message.reply("No se encontraron capítulos para este manga.")
+            return
+        
+        chapters_cache[user_id] = {
+            "chapters": chapters,
+            "chapter_urls": chapter_urls,
+            "current_page": 0,
+            "manga_name": manga_name,
+            "language": language,
+            "timestamp": time.time()
+        }
+        
+        total_chapters = len(chapters)
+        current_page = 0
+        start_idx = current_page * 10
+        end_idx = min(start_idx + 10, total_chapters)
+        
+        keyboard = []
+        for i in range(start_idx, end_idx):
+            keyboard.append([InlineKeyboardButton(chapters[i], callback_data=f"chapter_{i}")])
+        
+        nav_buttons = []
+        if total_chapters > 10:
+            if current_page > 0:
+                nav_buttons.append(InlineKeyboardButton("⏪", callback_data="first_page"))
+                nav_buttons.append(InlineKeyboardButton("◀️", callback_data="prev_page"))
+            
+            if end_idx < total_chapters:
+                nav_buttons.append(InlineKeyboardButton("▶️", callback_data="next_page"))
+                nav_buttons.append(InlineKeyboardButton("⏩", callback_data="last_page"))
+            
+            if nav_buttons:
+                keyboard.append(nav_buttons)
+        
+        action_buttons = [
+            InlineKeyboardButton("📥 Descargar Todos", callback_data="chapter_all"),
+            InlineKeyboardButton("📁 Guardar Todos", callback_data="save_all")
+        ]
+        keyboard.append(action_buttons)
+        
+        manga_buttons = [
+            InlineKeyboardButton("📥 Descargar Manga", callback_data="download_manga"),
+            InlineKeyboardButton("📁 Guardar Manga", callback_data="save_manga")
+        ]
+        keyboard.append(manga_buttons)
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await message.reply(
+            f"📚 Capítulos de {manga_name}:\nMostrando {start_idx + 1}-{end_idx} de {total_chapters}",
+            reply_markup=reply_markup
+        )
+    else:
+        keyboard = [
+            [InlineKeyboardButton("🇪🇸 Español", callback_data="manga_lang_es")],
+            [InlineKeyboardButton("🇺🇸 Inglés", callback_data="manga_lang_en")]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await message.reply(
+            "Elija el idioma a buscar",
+            reply_markup=reply_markup
+        )
+        
+        user_data[user_id] = {"query": query}
 
 async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
@@ -548,7 +706,7 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
         total_chapters = len(chapters)
         await callback_query.answer(f"Descargando {total_chapters} capítulos...")
         
-        downloaded_files = await download_full_manga(user_id, chapters, chapter_urls, language, manga_name, False)
+        downloaded_files = await download_full_manga(user_id, chapters, chapter_urls, language, manga_name, False, client)
         
         if not downloaded_files:
             await callback_query.message.reply("Error al descargar el manga completo.")
@@ -584,7 +742,7 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
         total_chapters = len(chapters)
         await callback_query.answer(f"Guardando {total_chapters} capítulos en vault...")
         
-        saved_files = await download_full_manga(user_id, chapters, chapter_urls, language, manga_name, True)
+        saved_files = await download_full_manga(user_id, chapters, chapter_urls, language, manga_name, True, client)
         
         if saved_files:
             await callback_query.message.reply(f"✅ Manga guardado completo. {len(saved_files)} capítulos guardados en vault.")
@@ -694,153 +852,3 @@ async def handle_manga_callback(client: Client, callback_query: CallbackQuery):
     
     elif data == "noop":
         await callback_query.answer()
-
-
-async def handle_manga_search(client: Client, message: Message, textori: str):
-    user_id = message.from_user.id
-    parts = textori.split(maxsplit=1)
-    
-    if len(parts) < 2:
-        await message.reply("Por favor, proporciona un nombre de manga o URL. Ejemplo: /manga One Piece o /manga https://es.ninemanga.com/manga/Kuro.html")
-        return
-    
-    query = parts[1].strip()
-    
-    if re.match(r'https?://(es\.)?ninemanga\.com/manga/', query):
-        if 'es.ninemanga.com' in query:
-            language = 'es'
-        else:
-            language = 'en'
-        
-        manga_client = MangaClient(language)
-        manga_name = manga_client.get_manga_name_from_url(query)
-        manga_client.close()
-        
-        if not manga_name:
-            await message.reply("No se pudo obtener información del manga desde la URL proporcionada.")
-            return
-        
-        await message.reply(f"🔄 Obteniendo capítulos de {manga_name}...")
-        
-        manga_client = MangaClient(language)
-        chapters, chapter_urls = manga_client.get_chapters(query)
-        manga_client.close()
-        
-        if not chapters:
-            await message.reply("No se encontraron capítulos para este manga.")
-            return
-        
-        chapters_cache[user_id] = {
-            "chapters": chapters,
-            "chapter_urls": chapter_urls,
-            "current_page": 0,
-            "manga_name": manga_name,
-            "language": language,
-            "timestamp": time.time()
-        }
-        
-        total_chapters = len(chapters)
-        current_page = 0
-        start_idx = current_page * 10
-        end_idx = min(start_idx + 10, total_chapters)
-        
-        keyboard = []
-        for i in range(start_idx, end_idx):
-            keyboard.append([InlineKeyboardButton(chapters[i], callback_data=f"chapter_{i}")])
-        
-        if total_chapters > 10:
-            nav_buttons = []
-            if current_page > 0:
-                nav_buttons.append(InlineKeyboardButton("⏪", callback_data="first_page"))
-                nav_buttons.append(InlineKeyboardButton("◀️", callback_data="prev_page"))
-            
-            if end_idx < total_chapters:
-                nav_buttons.append(InlineKeyboardButton("▶️", callback_data="next_page"))
-                nav_buttons.append(InlineKeyboardButton("⏩", callback_data="last_page"))
-            
-            if nav_buttons:
-                keyboard.append(nav_buttons)
-        
-        action_buttons = [
-            InlineKeyboardButton("📥 Descargar Todos", callback_data="chapter_all"),
-            InlineKeyboardButton("📁 Guardar Todos", callback_data="save_all")
-        ]
-        keyboard.append(action_buttons)
-        
-        manga_buttons = [
-            InlineKeyboardButton("📥 Descargar Manga", callback_data="download_manga"),
-            InlineKeyboardButton("📁 Guardar Manga", callback_data="save_manga")
-        ]
-        keyboard.append(manga_buttons)
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await message.reply(
-            f"📚 Capítulos de {manga_name}:\nMostrando {start_idx + 1}-{end_idx} de {total_chapters}",
-            reply_markup=reply_markup
-        )
-    else:
-        keyboard = [
-            [InlineKeyboardButton("🇪🇸 Español", callback_data="manga_lang_es")],
-            [InlineKeyboardButton("🇺🇸 Inglés", callback_data="manga_lang_en")]
-        ]
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await message.reply(
-            "Elija el idioma a buscar",
-            reply_markup=reply_markup
-        )
-        
-        user_data[user_id] = {"query": query}
-
-def download_image(url, folder, idx, semaphore):
-    headers = {
-        'User-Agent': ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                       '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'),
-        'Referer': 'https://es.ninemanga.com/'
-    }
-    
-    scraper = cloudscraper.create_scraper()
-    try:
-        response = scraper.get(url, headers=headers, stream=True)
-        response.raise_for_status()
-        
-        file_path = os.path.join(folder, f'{idx + 1}.jpg')
-        with open(file_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-        return True
-    except Exception as e:
-        return False
-
-async def download_chapter(chapter_url, chapter_name, client):
-    chapter_name = "".join(c for c in chapter_name if c.isalnum() or c in (' ', '.', '_')).rstrip()
-    images = client.pictures_from_chapter(chapter_url)
-    if not images:
-        return None
-
-    folder = tempfile.mkdtemp()
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        futures = []
-        for idx, img in enumerate(images):
-            futures.append(executor.submit(download_image, img, folder, idx, None))
-        
-        for future in concurrent.futures.as_completed(futures):
-            future.result()
-
-    cbz_filename = f'{chapter_name}.cbz'
-    try:
-        with zipfile.ZipFile(cbz_filename, 'w') as archive:
-            for root, _, files in os.walk(folder):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    archive.write(file_path, arcname=os.path.join(chapter_name, file))
-    except Exception as e:
-        return None
-    finally:
-        shutil.rmtree(folder, ignore_errors=True)
-
-    return cbz_filename
