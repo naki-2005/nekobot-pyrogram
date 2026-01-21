@@ -33,7 +33,7 @@ def format_time(seconds):
     else:
         return f"{s}s"
 
-async def handle_megadl_command(client: Client, message: Message, textori: str, chat_id: int):
+async def handle_megadl_command(client: Client, message: Message, textori: str, chat_id: int, forze_zip: bool = False):
     mega_links = re.findall(r'https://mega\.nz/[^\s]+', textori)
     
     if not mega_links:
@@ -49,7 +49,11 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
             seen_links.add(link)
 
     desmega_path = os.path.join(BASE_DIR, "command", "desmega")
-    output_dir = os.path.join(BASE_DIR, "vault_files", "mega_dl")
+
+    # 📂 Carpeta nombrada con timestamp
+    habana_tz = pytz.timezone('America/Havana')
+    timestamp_folder = datetime.now(habana_tz).strftime("%Y%m%d%H%M%S")
+    output_dir = os.path.join(BASE_DIR, "vault_files", timestamp_folder)
     os.makedirs(output_dir, exist_ok=True)
 
     progress_msg = await safe_call(client.send_message, chat_id, f"📥 Iniciando {len(unique_links)} descargas desde MEGA...")
@@ -124,9 +128,7 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
 
         total_size_mb = total_size / (1024 * 1024)
 
-        habana_tz = pytz.timezone('America/Havana')
-        timestamp = datetime.now(habana_tz).strftime("%Y_%m_%d_%H_%M")
-        archive_name = f"Mega_dl_{timestamp}.7z"
+        archive_name = f"{timestamp_folder}.7z"
         archive_path = os.path.join(output_dir, archive_name)
         seven_zip_exe = os.path.join(BASE_DIR, "7z", "7zz")
 
@@ -134,20 +136,32 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
             await safe_call(progress_msg.edit_text, "❌ Error: No se encontró el ejecutable de 7zip")
             return
 
-        await safe_call(progress_msg.edit_text, 
-            f"📦 Creando archivo comprimido...\n"
-            f"📊 Tamaño total: {total_size_mb:.2f} MB"
-        )
+        # ⚖️ Nueva condición de compresión
+        if total_size_mb > 2000 or forze_zip:
+            await safe_call(progress_msg.edit_text, 
+                f"📦 Creando archivo comprimido...\n"
+                f"📊 Tamaño total: {total_size_mb:.2f} MB"
+            )
 
-        if total_size_mb > 2000:
-            cmd_args = [
-                seven_zip_exe,
-                'a',
-                '-mx=0',
-                f'-v2000m',
-                archive_path,
-                os.path.join(output_dir, '*')
-            ]
+            if total_size_mb > 2000:
+                # Dividir en partes de 2000 MB
+                cmd_args = [
+                    seven_zip_exe,
+                    'a',
+                    '-mx=0',
+                    f'-v2000m',
+                    archive_path,
+                    os.path.join(output_dir, '*')
+                ]
+            else:
+                # Archivo único
+                cmd_args = [
+                    seven_zip_exe,
+                    'a',
+                    '-mx=0',
+                    archive_path,
+                    os.path.join(output_dir, '*')
+                ]
 
             zip_result = subprocess.run(
                 cmd_args,
@@ -161,97 +175,25 @@ async def handle_megadl_command(client: Client, message: Message, textori: str, 
                 await safe_call(message.reply, f"❌ Error al comprimir archivos:\n{zip_result.stderr}")
                 return
 
-            archive_parts = sorted([
-                f for f in os.listdir(output_dir)
-                if f.startswith(archive_name.replace('.7z', ''))
-            ])
-
-            sent_count = 0
-            total_parts = len(archive_parts)
-
-            for part in archive_parts:
-                part_path = os.path.join(output_dir, part)
-                part_size_mb = os.path.getsize(part_path) / (1024 * 1024)
-                
-                progress_ratio = sent_count / total_parts if total_parts else 0
-                bar_length = 20
-                filled_length = int(bar_length * progress_ratio)
-                bar = "█" * filled_length + "▒" * (bar_length - filled_length)
-                
-                await safe_call(progress_msg.edit_text,
-                    f"📤 Enviando parte {sent_count+1}/{total_parts}\n"
-                    f"📦 {part_size_mb:.2f} MB\n"
-                    f"📊 [{bar}] {progress_ratio*100:.1f}%\n"
-                    f"🔄 Enviando..."
-                )
-                
-                await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                await safe_call(client.send_document, chat_id, document=part_path)
-                await safe_call(client.send_chat_action, chat_id, enums.ChatAction.CANCEL)
-                
-                sent_count += 1
-                os.remove(part_path)
+            # Enviar archivos comprimidos (partes o único)
+            for file in sorted(os.listdir(output_dir)):
+                if file.startswith(timestamp_folder) and file.endswith(".7z") or ".7z." in file:
+                    part_path = os.path.join(output_dir, file)
+                    await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
+                    await safe_call(client.send_document, chat_id, document=part_path)
+                    await safe_call(client.send_chat_action, chat_id, enums.ChatAction.CANCEL)
+                    os.remove(part_path)
 
         else:
-            cmd_args = [
-                seven_zip_exe,
-                'a',
-                '-mx=0',
-                archive_path,
-                os.path.join(output_dir, '*')
-            ]
-
-            zip_result = subprocess.run(
-                cmd_args,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                cwd=output_dir
-            )
-
-            if zip_result.returncode != 0:
-                await safe_call(message.reply, f"❌ Error al comprimir archivos:\n{zip_result.stderr}")
-                return
-
-            archive_size_mb = os.path.getsize(archive_path) / (1024 * 1024)
-            
-            await safe_call(progress_msg.edit_text,
-                f"📤 Enviando archivo completo\n"
-                f"📦 {archive_size_mb:.2f} MB\n"
-                f"🔄 Preparando envío..."
-            )
-            
-            await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-            
-            def upload_progress(current, total):
-                current_mb = current / (1024 * 1024)
-                total_mb = total / (1024 * 1024)
-                progress_ratio = current / total if total else 0
-                bar_length = 20
-                filled_length = int(bar_length * progress_ratio)
-                bar = "█" * filled_length + "▒" * (bar_length - filled_length)
-                
-                try:
-                    asyncio.create_task(safe_call(progress_msg.edit_text,
-                        f"📤 Enviando archivo completo\n"
-                        f"📦 {current_mb:.2f} MB / {total_mb:.2f} MB\n"
-                        f"📊 [{bar}] {progress_ratio*100:.1f}%\n"
-                        f"⚡ Enviando..."
-                    ))
-                except:
-                    pass
-            
-            await safe_call(client.send_document, chat_id, document=archive_path, progress=upload_progress)
-            await safe_call(client.send_chat_action, chat_id, enums.ChatAction.CANCEL)
-            
-            os.remove(archive_path)
-
-        for root, dirs, files_in_dir in os.walk(output_dir, topdown=False):
-            for file in files_in_dir:
-                if not file.startswith('.megatmp'):
-                    os.remove(os.path.join(root, file))
-            for dir in dirs:
-                os.rmdir(os.path.join(root, dir))
+            # 🚫 No se comprime, se envían los archivos directamente
+            for root, dirs, files_in_dir in os.walk(output_dir):
+                for file in files_in_dir:
+                    if not file.startswith('.megatmp'):
+                        file_path = os.path.join(root, file)
+                        await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
+                        await safe_call(client.send_document, chat_id, document=file_path)
+                        await safe_call(client.send_chat_action, chat_id, enums.ChatAction.CANCEL)
+                        os.remove(file_path)
 
         await safe_call(progress_msg.edit_text, "✅ Todos los archivos han sido enviados.")
         await asyncio.sleep(3)

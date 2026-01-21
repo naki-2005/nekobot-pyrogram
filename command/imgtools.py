@@ -101,7 +101,7 @@ async def create_imgchest_post(client, message):
                     image_link = match.group(0).replace("\\/", "/")
                     await client.send_message(
                         chat_id=message.from_user.id,
-                        text=f"📸 Link: {image_link}"
+                        text=f"{image_link}"
                     )
                 else:
                     await client.send_message(

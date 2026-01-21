@@ -20,3 +20,4 @@ pytz
 cloudscraper
 yt_dlp
 cryptography
+mangadex-downloader

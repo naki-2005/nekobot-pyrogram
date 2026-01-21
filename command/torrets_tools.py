@@ -1,46 +1,44 @@
-import os
 import time
 import datetime
-import shutil
-import libtorrent as lt
-import asyncio
-import subprocess
-import aiohttp
-import aiofiles
-import threading
-import re
-import uuid
 import requests
 from bs4 import BeautifulSoup
 import urllib.parse
-from pyrogram import enums
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
+from command.torrets_dl import process_magnet_download_telegram, cleanup_old_downloads, download_from_magnet_or_torrent, get_download_progress
 
 nyaa_cache = {}
 sukebei_cache = {}
-CACHE_DURATION = 600
-SEVEN_ZIP_EXE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "7z", "7zz")
-BASE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "vault_files", "torrent_dl")
-TEMP_DIR = os.path.join(BASE_DIR, "downloading")
+CACHE_DURATION = 86400
 
-active_downloads = {}
-downloads_lock = threading.Lock()
+callback_registry = {}
+
+def register_callback(callback_type, data):
+    callback_id = f"{int(time.time())}_{hash(str(data)) % 10000:04d}"
+    callback_registry[callback_id] = {
+        'type': callback_type,
+        'data': data,
+        'timestamp': time.time()
+    }
+    return callback_id
+
+def get_callback_data(callback_id):
+    if callback_id in callback_registry:
+        data = callback_registry[callback_id]
+        if time.time() - data['timestamp'] < CACHE_DURATION:
+            return data
+    return None
+
+def cleanup_old_callbacks():
+    current_time = time.time()
+    expired = [cid for cid, data in callback_registry.items() 
+               if current_time - data['timestamp'] > CACHE_DURATION]
+    for cid in expired:
+        del callback_registry[cid]
 
 def log(msg):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}")
 
-def clean_filename(name):
-    allowed_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZáéíóúÁÉÍÓÚ0123456789 ()[]"
-    cleaned = ''.join(c for c in name if c in allowed_chars)
-    return cleaned[:50] + '.7z' if len(cleaned) > 50 else cleaned + '.7z'
-
-def search_nyaa(query):
-    base_url = "https://nyaa.si/"
+def search_site(query, base_url):
     search_query = urllib.parse.quote_plus(query)
     page = 1
     results = []
@@ -67,11 +65,15 @@ def search_nyaa(query):
             
             for row in rows:
                 try:
-                    name_link = row.find('a', href=lambda x: x and '/view/' in x)
-                    if not name_link:
+                    name_cell = row.find('td', colspan="2")
+                    if not name_cell:
                         continue
                     
-                    name = name_link.get_text(strip=True)
+                    name_links = name_cell.find_all('a', href=lambda x: x and '/view/' in x)
+                    if not name_links:
+                        continue
+                    
+                    name = name_links[-1].get_text(strip=True)
                     
                     torrent_link = None
                     magnet_link = None
@@ -80,11 +82,11 @@ def search_nyaa(query):
                     for link in download_links:
                         href = link.get('href', '')
                         if href.startswith('/download/'):
-                            torrent_link = f"https://nyaa.si{href}"
+                            torrent_link = f"{base_url.rstrip('/')}{href}"
                         elif href.startswith('magnet:'):
                             magnet_link = href
                     
-                    size_td = row.find('td', class_='text-center', string=lambda x: x and 'MiB' in x)
+                    size_td = row.find('td', class_='text-center', string=lambda x: x and 'MiB' in x or 'GiB' in x)
                     size = size_td.get_text(strip=True) if size_td else "N/A"
                     
                     date_td = row.find('td', class_='text-center', attrs={'data-timestamp': True})
@@ -130,17 +132,29 @@ def search_nyaa(query):
     
     return output
 
-async def search_in_nyaa(client, message, search_query):
+def search_nyaa(query):
+    return search_site(query, "https://nyaa.si/")
+
+def search_sukebei(query):
+    return search_site(query, "https://sukebei.nyaa.si/")
+
+async def search_in_site(client, message, search_query, site_type):
+    cleanup_old_callbacks()
     current_time = time.time()
-    expired_keys = [key for key, data in nyaa_cache.items() if current_time - data['timestamp'] > CACHE_DURATION]
+    cache_dict = nyaa_cache if site_type == "nyaa" else sukebei_cache
+    expired_keys = [key for key, data in cache_dict.items() if current_time - data['timestamp'] > CACHE_DURATION]
     for key in expired_keys:
-        del nyaa_cache[key]
-    cache_key = f"{message.chat.id}_{search_query.lower()}"
+        del cache_dict[key]
     
-    if cache_key in nyaa_cache:
-        results = nyaa_cache[cache_key]['results']
+    cache_key = register_callback(f'{site_type}_search', {
+        'chat_id': message.chat.id,
+        'query': search_query.lower()
+    })
+    
+    if cache_key in cache_dict:
+        results = cache_dict[cache_key]['results']
     else:
-        results_data = search_nyaa(search_query)
+        results_data = search_nyaa(search_query) if site_type == "nyaa" else search_sukebei(search_query)
         if not results_data.strip():
             await message.reply("❌ No se encontraron resultados para tu búsqueda.")
             return
@@ -168,7 +182,7 @@ async def search_in_nyaa(client, message, search_query):
         if current_result:
             results.append(current_result)
     
-        nyaa_cache[cache_key] = {
+        cache_dict[cache_key] = {
             'results': results,
             'timestamp': current_time,
             'current_index': 0
@@ -176,79 +190,18 @@ async def search_in_nyaa(client, message, search_query):
         
     await show_nyaa_result(client, message, cache_key, 0)
 
-async def show_nyaa_result(client, message, cache_key, index):
-    if cache_key not in nyaa_cache:
-        await message.reply("❌ Los resultados de búsqueda han expirado.")
-        return
-    
-    cache_data = nyaa_cache[cache_key]
-    results = cache_data['results']
-    
-    if index < 0 or index >= len(results):
-        await message.reply("❌ Índice de resultado inválido.")
-        return
-    
-    result = results[index]
-    cache_data['current_index'] = index
-    
-    keyboard = []
-    
-    row1_buttons = []
-    if 'torrent' in result:
-        row1_buttons.append(InlineKeyboardButton("📥 Torrent", callback_data=f"nyaa_torrent:{cache_key}:{index}"))
-    if 'magnet' in result:
-        row1_buttons.append(InlineKeyboardButton("🧲 Magnet", callback_data=f"nyaa_magnet:{cache_key}:{index}"))
-    
-    if row1_buttons:
-        keyboard.append(row1_buttons)
-    
-    row2_buttons = []
-    if 'magnet' in result:
-        row2_buttons.append(InlineKeyboardButton("🔽DL", callback_data=f"nyaa_dl:{cache_key}:{index}"))
-        row2_buttons.append(InlineKeyboardButton("🔽ZIP DL", callback_data=f"nyaa_zip:{cache_key}:{index}"))
-    
-    if row2_buttons:
-        keyboard.append(row2_buttons)
-    
-    nav_buttons = []
-    if index > 0:
-        nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"nyaa_prev:{cache_key}"))
-        nav_buttons.append(InlineKeyboardButton("⏪", callback_data=f"nyaa_first:{cache_key}"))
-    if index < len(results) - 1:
-        nav_buttons.append(InlineKeyboardButton("⏩", callback_data=f"nyaa_last:{cache_key}"))
-        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"nyaa_next:{cache_key}"))
-    
-    if nav_buttons:
-        keyboard.append(nav_buttons)
-    
-    reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
-    
-    message_text = f"**Resultado {index + 1}/{len(results)}**\n"
-    message_text += f"**Nombre:** {result['name']}\n"
-    message_text += f"**Fecha:** {result.get('date', 'N/A')}\n"
-    message_text += f"**Tamaño:** {result.get('size', 'N/A')}"
-    
-    if cache_data.get('message_id'):
-        try:
-            await client.edit_message_text(
-                chat_id=message.chat.id,
-                message_id=cache_data['message_id'],
-                text=message_text,
-                reply_markup=reply_markup
-            )
-            return
-        except:
-            pass
-    
-    sent_message = await message.reply(message_text, reply_markup=reply_markup)
-    cache_data['message_id'] = sent_message.id
+async def search_in_nyaa(client, message, search_query):
+    await search_in_site(client, message, search_query, "nyaa")
 
-async def show_sukebei_result(client, message, cache_key, index):
-    if cache_key not in sukebei_cache:
+async def search_in_sukebei(client, message, search_query):
+    await search_in_site(client, message, search_query, "sukebei")
+
+async def show_nyaa_result(client, message, cache_key, index):
+    if cache_key not in nyaa_cache and cache_key not in sukebei_cache:
         await message.reply("❌ Los resultados de búsqueda han expirado.")
         return
     
-    cache_data = sukebei_cache[cache_key]
+    cache_data = nyaa_cache.get(cache_key) or sukebei_cache.get(cache_key)
     results = cache_data['results']
     
     if index < 0 or index >= len(results):
@@ -262,28 +215,48 @@ async def show_sukebei_result(client, message, cache_key, index):
     
     row1_buttons = []
     if 'torrent' in result:
-        row1_buttons.append(InlineKeyboardButton("📥 Torrent", callback_data=f"sukebei_torrent:{cache_key}:{index}"))
+        torrent_callback = register_callback('nyaa_torrent', {'cache_key': cache_key, 'index': index})
+        row1_buttons.append(InlineKeyboardButton("📥 Torrent", callback_data=f"nyaa_torrent:{torrent_callback}"))
     if 'magnet' in result:
-        row1_buttons.append(InlineKeyboardButton("🧲 Magnet", callback_data=f"sukebei_magnet:{cache_key}:{index}"))
+        magnet_callback = register_callback('nyaa_magnet', {'cache_key': cache_key, 'index': index})
+        row1_buttons.append(InlineKeyboardButton("🧲 Magnet", callback_data=f"nyaa_magnet:{magnet_callback}"))
     
     if row1_buttons:
         keyboard.append(row1_buttons)
     
     row2_buttons = []
     if 'magnet' in result:
-        row2_buttons.append(InlineKeyboardButton("🔽DL", callback_data=f"sukebei_dl:{cache_key}:{index}"))
-        row2_buttons.append(InlineKeyboardButton("🔽ZIP DL", callback_data=f"sukebei_zip:{cache_key}:{index}"))
+        dl_callback = register_callback('nyaa_dl', {'cache_key': cache_key, 'index': index})
+        zip_callback = register_callback('nyaa_zip', {'cache_key': cache_key, 'index': index})
+        row2_buttons.append(InlineKeyboardButton("🔽DL", callback_data=f"nyaa_dl:{dl_callback}"))
+        row2_buttons.append(InlineKeyboardButton("🔽ZIP DL", callback_data=f"nyaa_zip:{zip_callback}"))
     
     if row2_buttons:
         keyboard.append(row2_buttons)
     
+    row3_buttons = []
+    if any('magnet' in r for r in results):
+        if index == 0:
+            dl_all_callback = register_callback('nyaa_dl_all', {'cache_key': cache_key})
+            row3_buttons.append(InlineKeyboardButton("🔽DL All", callback_data=f"nyaa_dl_all:{dl_all_callback}"))
+        elif index == len(results) - 1:
+            dl_all_rev_callback = register_callback('nyaa_dl_all_reverse', {'cache_key': cache_key})
+            row3_buttons.append(InlineKeyboardButton("🔽DL All Reverse", callback_data=f"nyaa_dl_all_reverse:{dl_all_rev_callback}"))
+    
+    if row3_buttons:
+        keyboard.append(row3_buttons)
+    
     nav_buttons = []
     if index > 0:
-        nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"sukebei_prev:{cache_key}"))
-        nav_buttons.append(InlineKeyboardButton("⏪", callback_data=f"sukebei_first:{cache_key}"))
+        prev_callback = register_callback('nyaa_prev', {'cache_key': cache_key})
+        first_callback = register_callback('nyaa_first', {'cache_key': cache_key})
+        nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f"nyaa_prev:{prev_callback}"))
+        nav_buttons.append(InlineKeyboardButton("⏪", callback_data=f"nyaa_first:{first_callback}"))
     if index < len(results) - 1:
-        nav_buttons.append(InlineKeyboardButton("⏩", callback_data=f"sukebei_last:{cache_key}"))
-        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"sukebei_next:{cache_key}"))
+        next_callback = register_callback('nyaa_next', {'cache_key': cache_key})
+        last_callback = register_callback('nyaa_last', {'cache_key': cache_key})
+        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f"nyaa_next:{next_callback}"))
+        nav_buttons.append(InlineKeyboardButton("⏩", callback_data=f"nyaa_last:{last_callback}"))
     
     if nav_buttons:
         keyboard.append(nav_buttons)
@@ -319,21 +292,28 @@ async def handle_nyaa_callback(client, callback_query):
         return
     
     action = parts[0]
-    cache_key = parts[1]
+    callback_id = parts[1]
     
-    if cache_key not in nyaa_cache:
+    callback_data = get_callback_data(callback_id)
+    if not callback_data:
         await callback_query.answer("❌ Los resultados han expirado")
         await callback_query.message.delete()
         return
     
-    cache_data = nyaa_cache[cache_key]
+    cache_key = callback_data['data']['cache_key']
+    
+    if cache_key not in nyaa_cache and cache_key not in sukebei_cache:
+        await callback_query.answer("❌ Los resultados han expirado")
+        await callback_query.message.delete()
+        return
+    
+    cache_data = nyaa_cache.get(cache_key) or sukebei_cache.get(cache_key)
     results = cache_data['results']
     current_index = cache_data['current_index']
     
     if action == "nyaa_torrent":
-        index = int(parts[2])
+        index = callback_data['data']['index']
         result = results[index]
-        
         await callback_query.answer("📥 Enviando link de torrent...")
         await client.send_message(
             chat_id=callback_query.message.chat.id,
@@ -341,7 +321,7 @@ async def handle_nyaa_callback(client, callback_query):
         )
         
     elif action == "nyaa_magnet":
-        index = int(parts[2])
+        index = callback_data['data']['index']
         result = results[index]
         await callback_query.answer("🧲 Enviando magnet...")
         await client.send_message(
@@ -350,16 +330,28 @@ async def handle_nyaa_callback(client, callback_query):
         )
         
     elif action == "nyaa_dl":
-        index = int(parts[2])
+        index = callback_data['data']['index']
         result = results[index]
         await callback_query.answer("🔽 Iniciando descarga...")
         await process_magnet_download_telegram(client, callback_query.message, result['magnet'], False)
         
     elif action == "nyaa_zip":
-        index = int(parts[2])
+        index = callback_data['data']['index']
         result = results[index]
         await callback_query.answer("🔽 Iniciando descarga comprimida...")
         await process_magnet_download_telegram(client, callback_query.message, result['magnet'], True)
+        
+    elif action == "nyaa_dl_all":
+        await callback_query.answer("🔽 Iniciando descarga de todos los resultados...")
+        for result in results:
+            if 'magnet' in result:
+                await process_magnet_download_telegram(client, callback_query.message, result['magnet'], False)
+        
+    elif action == "nyaa_dl_all_reverse":
+        await callback_query.answer("🔽 Iniciando descarga de todos los resultados en orden inverso...")
+        for result in reversed(results):
+            if 'magnet' in result:
+                await process_magnet_download_telegram(client, callback_query.message, result['magnet'], False)
         
     elif action == "nyaa_prev":
         new_index = max(0, current_index - 1)
@@ -378,684 +370,6 @@ async def handle_nyaa_callback(client, callback_query):
     elif action == "nyaa_last":
         await show_nyaa_result(client, callback_query.message, cache_key, len(results) - 1)
         await callback_query.answer()
-        
-def search_sukebei(query):
-    base_url = "https://sukebei.nyaa.si/"
-    search_query = urllib.parse.quote_plus(query)
-    page = 1
-    results = []
-    
-    while True:
-        url = f"{base_url}?q={search_query}&f=0&c=0_0&p={page}"
-        
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-            response = requests.get(url, headers=headers, timeout=10)
-            response.raise_for_status()
-            
-            soup = BeautifulSoup(response.text, 'html.parser')
-            table = soup.find('table', class_='torrent-list')
-            
-            if not table:
-                break
-                
-            current_page_results = []
-            rows = table.find_all('tr')[1:]
-            
-            if not rows:
-                break
-                
-            for row in rows:
-                try:
-                    name_link = row.find('a', href=lambda x: x and '/view/' in x)
-                    if not name_link:
-                        continue
-                    
-                    name = name_link.get_text(strip=True)
-                    
-                    torrent_link = None
-                    magnet_link = None
-                    
-                    download_links = row.find_all('a')
-                    for link in download_links:
-                        href = link.get('href', '')
-                        if href.startswith('/download/'):
-                            torrent_link = f"https://sukebei.nyaa.si{href}"
-                        elif href.startswith('magnet:'):
-                            magnet_link = href
-                    
-                    size_td = row.find('td', class_='text-center', string=lambda x: x and 'MiB' in x or 'GiB' in x)
-                    size = size_td.get_text(strip=True) if size_td else "N/A"
-                    
-                    date_td = row.find('td', class_='text-center', attrs={'data-timestamp': True})
-                    date = date_td.get_text(strip=True) if date_td else "N/A"
-                    
-                    current_page_results.append({
-                        'name': name,
-                        'torrent': torrent_link,
-                        'magnet': magnet_link,
-                        'size': size,
-                        'date': date
-                    })
-                    
-                except Exception as e:
-                    continue
-            
-            if not current_page_results:
-                break
-                
-            results.extend(current_page_results)
-            page += 1
-            
-        except requests.RequestException:
-            break
-        except Exception as e:
-            break
-    
-    output = ""
-    for i, result in enumerate(results, 1):
-        output += f"Resultado {i}\n"
-        output += f"{result['name']}\n"
-        output += f"Tamaño: {result['size']}\n"
-        output += f"Fecha: {result['date']}\n"
-        if result['torrent']:
-            output += f"Link de Torrent: {result['torrent']}\n"
-        if result['magnet']:
-            output += f"Link de Magnet: {result['magnet']}\n"
-        output += "\n"
-    
-    return output
-
-async def search_in_sukebei(client, message, search_query):
-    current_time = time.time()
-    expired_keys = [key for key, data in sukebei_cache.items() if current_time - data['timestamp'] > CACHE_DURATION]
-    for key in expired_keys:
-        del sukebei_cache[key]
-    cache_key = f"sukebei_{message.chat.id}_{search_query.lower()}"
-    
-    if cache_key in sukebei_cache:
-        results = sukebei_cache[cache_key]['results']
-    else:
-        results_data = search_sukebei(search_query)
-        if not results_data.strip():
-            await message.reply("❌ No se encontraron resultados para tu búsqueda.")
-            return
-        
-        results = []
-        current_result = {}
-        for line in results_data.split('\n'):
-            line = line.strip()
-            if line.startswith('Resultado'):
-                if current_result:
-                    results.append(current_result)
-                current_result = {'index': int(line.split()[1])}
-            elif line and not line.startswith(('Link de Torrent:', 'Link de Magnet:')):
-                if 'name' not in current_result:
-                    current_result['name'] = line
-                elif line.startswith('Tamaño:'):
-                    current_result['size'] = line.replace('Tamaño: ', '')
-                elif line.startswith('Fecha:'):
-                    current_result['date'] = line.replace('Fecha: ', '')
-            elif line.startswith('Link de Torrent:'):
-                current_result['torrent'] = line.replace('Link de Torrent: ', '')
-            elif line.startswith('Link de Magnet:'):
-                current_result['magnet'] = line.replace('Link de Magnet: ', '')
-        
-        if current_result:
-            results.append(current_result)
-    
-        sukebei_cache[cache_key] = {
-            'results': results,
-            'timestamp': current_time,
-            'current_index': 0
-        }
-        
-    await show_sukebei_result(client, message, cache_key, 0)
 
 async def handle_sukebei_callback(client, callback_query):
-    data = callback_query.data
-    parts = data.split(':')
-    
-    if len(parts) < 2:
-        await callback_query.answer("❌ Error en los datos")
-        return
-    
-    action = parts[0]
-    cache_key = parts[1]
-    
-    if cache_key not in sukebei_cache:
-        await callback_query.answer("❌ Los resultados han expirado")
-        await callback_query.message.delete()
-        return
-    
-    cache_data = sukebei_cache[cache_key]
-    results = cache_data['results']
-    current_index = cache_data['current_index']
-    
-    if action == "sukebei_torrent":
-        index = int(parts[2])
-        result = results[index]
-        
-        await callback_query.answer("📥 Enviando link de torrent...")
-        await client.send_message(
-            chat_id=callback_query.message.chat.id,
-            text=result['torrent']
-        )
-        
-    elif action == "sukebei_magnet":
-        index = int(parts[2])
-        result = results[index]
-        await callback_query.answer("🧲 Enviando magnet...")
-        await client.send_message(
-            chat_id=callback_query.message.chat.id,
-            text=result['magnet']
-        )
-        
-    elif action == "sukebei_dl":
-        index = int(parts[2])
-        result = results[index]
-        await callback_query.answer("🔽 Iniciando descarga...")
-        await process_magnet_download_telegram(client, callback_query.message, result['magnet'], False)
-        
-    elif action == "sukebei_zip":
-        index = int(parts[2])
-        result = results[index]
-        await callback_query.answer("🔽 Iniciando descarga comprimida...")
-        await process_magnet_download_telegram(client, callback_query.message, result['magnet'], True)
-        
-    elif action == "sukebei_prev":
-        new_index = max(0, current_index - 1)
-        await show_sukebei_result(client, callback_query.message, cache_key, new_index)
-        await callback_query.answer()
-        
-    elif action == "sukebei_next":
-        new_index = min(len(results) - 1, current_index + 1)
-        await show_sukebei_result(client, callback_query.message, cache_key, new_index)
-        await callback_query.answer()
-        
-    elif action == "sukebei_first":
-        await show_sukebei_result(client, callback_query.message, cache_key, 0)
-        await callback_query.answer()
-        
-    elif action == "sukebei_last":
-        await show_sukebei_result(client, callback_query.message, cache_key, len(results) - 1)
-        await callback_query.answer()
-
-def start_session():
-    ses = lt.session()
-    ses.listen_on(6881, 6891)
-    ses.start_dht()
-    return ses
-
-def add_torrent(ses, magnet_uri, save_path):
-    params = {
-        'save_path': save_path,
-        'storage_mode': lt.storage_mode_t.storage_mode_sparse,
-    }
-    handle = lt.add_magnet_uri(ses, magnet_uri, params)
-    handle.set_sequential_download(False)
-    return handle
-
-async def wait_for_metadata(handle):
-    log("Descargando metadata...")
-    while not handle.has_metadata():
-        await asyncio.sleep(1)
-    log("Metadata obtenida")
-
-async def monitor_download(handle, progress_data=None, download_id=None):
-    state_str = ['queued', 'checking', 'downloading metadata',
-                 'downloading', 'finished', 'seeding', 'allocating']
-    
-    if download_id:
-        with downloads_lock:
-            if download_id in active_downloads:
-                active_downloads[download_id]["filename"] = handle.name() if handle.has_metadata() else "Obteniendo metadata..."
-                active_downloads[download_id]["state"] = "downloading metadata"
-    
-    while handle.status().state != lt.torrent_status.seeding:
-        s = handle.status()
-        
-        if progress_data is not None:
-            progress_data["percent"] = round(s.progress * 100, 2)
-            progress_data["speed"] = s.download_rate
-            progress_data["state"] = state_str[s.state]
-            progress_data["downloaded"] = s.total_done
-            progress_data["total_size"] = s.total_wanted
-        
-        if download_id:
-            with downloads_lock:
-                if download_id in active_downloads:
-                    active_downloads[download_id].update({
-                        "percent": round(s.progress * 100, 2),
-                        "speed": s.download_rate,
-                        "state": state_str[s.state],
-                        "downloaded": s.total_done,
-                        "total_size": s.total_wanted,
-                        "filename": handle.name() if handle.has_metadata() else "Obteniendo metadata...",
-                        "last_update": datetime.datetime.now().isoformat()
-                    })
-        
-        log(f"{s.progress * 100:.2f}% | ↓ {s.download_rate / 1000:.1f} kB/s | ↑ {s.upload_rate / 1000:.1f} kB/s | peers: {s.num_peers} | estado: {state_str[s.state]}")
-        await asyncio.sleep(5)
-
-def move_completed_files(temp_path, final_path):
-    for root, _, files in os.walk(temp_path):
-        for file in files:
-            src = os.path.join(root, file)
-            rel_path = os.path.relpath(src, temp_path)
-            dst = os.path.join(final_path, rel_path)
-
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
-            shutil.move(src, dst)
-            log(f"📦 Archivo movido: {rel_path}")
-
-def get_download_progress():
-    with downloads_lock:
-        return active_downloads.copy()
-
-def cleanup_old_downloads(max_age_hours=24):
-    with downloads_lock:
-        now = datetime.datetime.now()
-        to_remove = []
-        for download_id, info in active_downloads.items():
-            if "end_time" in info or "start_time" in info:
-                end_time_str = info.get("end_time", info.get("start_time"))
-                try:
-                    end_time = datetime.datetime.fromisoformat(end_time_str)
-                    if (now - end_time).total_seconds() > max_age_hours * 3600:
-                        to_remove.append(download_id)
-                except:
-                    pass
-        
-        for download_id in to_remove:
-            del active_downloads[download_id]
-
-async def download_torrent_file(link):
-    temp_path = os.path.join(TEMP_DIR, f"temp_{uuid.uuid4().hex}.torrent")
-    os.makedirs(TEMP_DIR, exist_ok=True)
-    
-    log("Descargando archivo .torrent...")
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(link) as response:
-                if response.status == 200:
-                    async with aiofiles.open(temp_path, 'wb') as f:
-                        await f.write(await response.read())
-                    log("Archivo .torrent descargado exitosamente")
-                    return temp_path
-                else:
-                    log(f"Error al descargar torrent: {response.status}")
-                    return None
-    except Exception as e:
-        log(f"Error en descarga torrent: {e}")
-        return None
-
-def add_torrent_from_file(ses, torrent_path, save_path):
-    try:
-        info = lt.torrent_info(torrent_path)
-        params = {
-            'save_path': save_path,
-            'storage_mode': lt.storage_mode_t.storage_mode_sparse,
-            'ti': info
-        }
-        handle = ses.add_torrent(params)
-        handle.set_sequential_download(False)
-        return handle
-    except Exception as e:
-        log(f"Error al agregar torrent desde archivo: {e}")
-        raise
-
-async def download_from_magnet_or_torrent(link, save_path=BASE_DIR, progress_data=None, download_id=None):
-    try:
-        unique_dir = str(uuid.uuid4())
-        temp_download_path = os.path.join(TEMP_DIR, unique_dir)
-        final_save_path = os.path.join(save_path, unique_dir)
-        
-        os.makedirs(temp_download_path, exist_ok=True)
-
-        if download_id:
-            with downloads_lock:
-                active_downloads[download_id] = {
-                    "link": link,
-                    "percent": 0,
-                    "state": "starting",
-                    "filename": "Iniciando...",
-                    "speed": 0,
-                    "downloaded": 0,
-                    "total_size": 0,
-                    "start_time": datetime.datetime.now().isoformat(),
-                    "last_update": datetime.datetime.now().isoformat(),
-                    "unique_dir": unique_dir
-                }
-
-        ses = start_session()
-        
-        if link.endswith('.torrent'):
-            torrent_path = await download_torrent_file(link)
-            if not torrent_path:
-                raise Exception("No se pudo descargar el archivo .torrent")
-            
-            handle = add_torrent_from_file(ses, torrent_path, temp_download_path)
-        else:
-            handle = add_torrent(ses, link, temp_download_path)
-
-        begin = time.time()
-        await wait_for_metadata(handle)
-
-        if progress_data is not None:
-            progress_data["filename"] = handle.name()
-
-        await monitor_download(handle, progress_data, download_id)
-        end = time.time()
-
-        log(f"✅ {handle.name()} COMPLETADO")
-        log(f"⏱️ Tiempo total: {int((end - begin) // 60)} min {int((end - begin) % 60)} seg")
-
-        move_completed_files(temp_download_path, final_save_path)
-
-        if link.endswith('.torrent'):
-            try:
-                os.remove(torrent_path)
-            except:
-                pass
-
-        return final_save_path
-
-    except Exception as e: 
-        log(f"❌ Error en download_from_magnet_or_torrent: {e}")
-        if download_id:
-            with downloads_lock:
-                if download_id in active_downloads:
-                    active_downloads[download_id]["state"] = "error"
-                    active_downloads[download_id]["error"] = str(e)
-        raise e
-
-async def handle_torrent_command(client, message, progress_data=None):
-    try:
-        full_text = message.text.strip()
-
-        if not full_text:
-            await message.reply("❗ Debes proporcionar un enlace después del comando.")
-            return [], "", False
-
-        use_compression = " -z" in full_text.lower()
-
-        torrent_match = re.search(r'https?://[^\s]+\.torrent', full_text)
-        magnet_match = re.search(r'magnet:\?[^\s]+', full_text)
-
-        link = torrent_match.group(0) if torrent_match else (
-            magnet_match.group(0) if magnet_match else ""
-        )
-
-        if not link:
-            await message.reply("❗ El enlace debe ser un magnet o un archivo .torrent.")
-            return [], "", False
-
-        log(f"📥 Comando recibido con link: {link}")
-        log(f"🗜️ Compresión: {use_compression}")
-
-        download_id = str(uuid.uuid4())
-        final_save_path = await download_from_magnet_or_torrent(
-            link, BASE_DIR, progress_data, download_id
-        )
-
-        if not final_save_path or not os.path.exists(final_save_path):
-            await message.reply("❌ No se descargaron archivos.")
-            return [], "", False
-
-        moved_files = []
-        for root, _, files in os.walk(final_save_path):
-            for file in files:
-                full_path = os.path.join(root, file)
-                rel_path = os.path.relpath(full_path, final_save_path)
-                moved_files.append((rel_path, full_path))
-
-        if not moved_files:
-            await message.reply("❌ No se encontraron archivos descargados.")
-            return [], "", False
-
-        return moved_files, final_save_path, use_compression
-
-    except Exception as e:
-        log(f"❌ Error en handle_torrent_command: {e}")
-        await message.reply(f"❌ Error al procesar el comando: {e}")
-        return [], "", False
-
-async def process_magnet_download_telegram(client, message, link, use_compression):
-    from pyrogram.errors import FloodWait, MessageIdInvalid
-
-    async def safe_call(func, *args, **kwargs):
-        while True:
-            try:
-                return await func(*args, **kwargs)
-            except FloodWait as e:
-                await asyncio.sleep(e.value)
-            except MessageIdInvalid:
-                return None
-            except Exception as e:
-                raise
-
-    def format_time(seconds):
-        h = seconds // 3600
-        m = (seconds % 3600) // 60
-        s = seconds % 60
-        return f"{h:02d}:{m:02d}:{s:02d}"
-
-    chat_id = message.chat.id
-    status_msg = await safe_call(message.reply, "⏳ Iniciando descarga...")
-    
-    if not status_msg:
-        return
-
-    start_time = time.time()
-    progress_data = {
-        "filename": "", 
-        "percent": 0, 
-        "speed": 0.0, 
-        "downloaded": 0, 
-        "total_size": 0,
-        "active": True
-    }
-
-    async def update_progress():
-        while progress_data["percent"] < 100 and progress_data["active"]:
-            try:
-                elapsed = int(time.time() - start_time)
-                formatted_time = format_time(elapsed)
-                speed_mb = round(progress_data["speed"] / (1024 * 1024), 2)
-                bar_length = 20
-                filled_length = int(bar_length * progress_data["percent"] / 100)
-                bar = "█" * filled_length + "▒" * (bar_length - filled_length)
-                downloaded_mb = round(progress_data["downloaded"] / (1024 * 1024), 2)
-                total_mb = round(progress_data["total_size"] / (1024 * 1024), 2) if progress_data["total_size"] > 0 else "Calculando..."
-                await safe_call(status_msg.edit_text,
-                    f"📥 **Descargando:** `{progress_data['filename']}`\n"
-                    f"📊 **Progreso:** {progress_data['percent']}%\n"
-                    f"📉 [{bar}]\n"
-                    f"📦 **Tamaño:** {downloaded_mb} MB / {total_mb} MB\n"
-                    f"🚀 **Velocidad:** {speed_mb} MB/s\n"
-                    f"⏱️ **Tiempo:** {formatted_time}"
-                )
-            except Exception as e:
-                break
-            await asyncio.sleep(10)
-
-    progress_task = asyncio.create_task(update_progress())
-
-    try:
-        if use_compression:
-            message.text = f"/magnet -z {link}"
-        else:
-            message.text = f"/magnet {link}"
-
-        result = await handle_torrent_command(client, message, progress_data)
-        if not result or len(result) != 3:
-            raise Exception("Error en la descarga")
-
-        files, final_save_path, use_compression = result
-        progress_data["percent"] = 100
-        progress_data["active"] = False
-
-        await asyncio.sleep(2)
-        progress_task.cancel()
-        try:
-            await progress_task
-        except asyncio.CancelledError:
-            pass
-
-        if not files:
-            await safe_call(status_msg.edit_text, "❌ No se descargaron archivos.")
-            await asyncio.sleep(5)
-            await safe_call(status_msg.delete)
-            return
-
-        total_files = len(files)
-        sent_count = 0
-        total_size = sum(os.path.getsize(full_path) for _, full_path in files)
-        total_mb = total_size / (1024 * 1024)
-        sent_mb = 0
-        current_file_name = ""
-        current_mb_sent = 0
-
-        def upload_progress(current, total):
-            nonlocal current_mb_sent
-            current_mb_sent = current / (1024 * 1024)
-
-        await safe_call(status_msg.edit_text, "📤 Preparando envío de archivos...")
-
-        async def update_upload_progress():
-            while sent_count < total_files:
-                try:
-                    elapsed = int(time.time() - start_time)
-                    formatted_time = format_time(elapsed)
-                    estimated_ratio = (sent_mb + current_mb_sent) / total_mb if total_mb > 0 else 0
-                    bar_length = 20
-                    filled_length = int(bar_length * estimated_ratio)
-                    bar = "█" * filled_length + "▒" * (bar_length - filled_length)
-                    await safe_call(status_msg.edit_text,
-                        f"📤 **Enviando archivos...**\n"
-                        f"📁 **Archivos:** {sent_count}/{total_files}\n"
-                        f"📊 **Progreso:** {sent_mb + current_mb_sent:.2f} MB / {total_mb:.2f} MB\n"
-                        f"📉 [{bar}] {estimated_ratio*100:.1f}%\n"
-                        f"⏱️ **Tiempo:** {formatted_time}\n"
-                        f"📄 **Archivo actual:** {current_file_name}"
-                    )
-                except Exception as e:
-                    break
-                await asyncio.sleep(5)
-
-        upload_task = asyncio.create_task(update_upload_progress())
-
-        try:
-            if use_compression:
-                try:
-                    await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                    await safe_call(status_msg.edit_text, "🗜️ Comprimiendo archivos...")
-                    clean_name = clean_filename(progress_data.get('filename', 'archivos'))
-                    archive_path = os.path.join(final_save_path, clean_name)
-                    cmd_args = [
-                        SEVEN_ZIP_EXE,
-                        'a',
-                        '-mx=0',
-                        '-v2000m',
-                        archive_path,
-                        "."
-                    ]
-                    result = subprocess.run(cmd_args, cwd=final_save_path, capture_output=True, text=True, timeout=3600)
-                    if result.returncode != 0:
-                        raise Exception(f"Error en 7z: {result.stderr}")
-                    archive_parts = sorted([
-                        f for f in os.listdir(final_save_path)
-                        if f.startswith(clean_name.replace('.7z', '')) and (f.endswith('.7z') or '.7z.' in f)
-                    ])
-                    if not archive_parts:
-                        raise Exception("No se crearon archivos comprimidos")
-                    total_parts = len(archive_parts)
-                    for part in archive_parts:
-                        full_path = os.path.join(final_save_path, part)
-                        current_file_name = part
-                        current_mb_sent = 0
-                        part_size = os.path.getsize(full_path) / (1024 * 1024)
-                        await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                        await safe_call(client.send_document, chat_id, document=full_path, progress=upload_progress)
-                        sent_mb += part_size
-                        sent_count += 1
-                        try:
-                            os.remove(full_path)
-                        except:
-                            pass
-                    return
-                except Exception as e:
-                    await safe_call(message.reply, f"⚠️ Error al comprimir: {e}. Enviando archivos sin comprimir.")
-                    use_compression = False
-
-            for rel_path, full_path in files:
-                try:
-                    if not os.path.exists(full_path):
-                        continue
-                    current_file_name = os.path.basename(full_path)
-                    file_size = os.path.getsize(full_path)
-                    file_size_mb = file_size / (1024 * 1024)
-                    current_mb_sent = 0
-                    if file_size > 2000 * 1024 * 1024:
-                        await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                        await safe_call(status_msg.edit_text, f"📦 Dividiendo archivo grande: {current_file_name}")
-                        with open(full_path, 'rb') as original:
-                            part_num = 1
-                            while True:
-                                part_data = original.read(2000 * 1024 * 1024)
-                                if not part_data:
-                                    break
-                                part_file = f"{full_path}.part{part_num:03d}"
-                                with open(part_file, 'wb') as part:
-                                    part.write(part_data)
-                                current_file_name = os.path.basename(part_file)
-                                current_mb_sent = 0
-                                part_size = os.path.getsize(part_file) / (1024 * 1024)
-                                await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                                await safe_call(client.send_document, chat_id, document=part_file, progress=upload_progress)
-                                sent_mb += part_size
-                                try:
-                                    os.remove(part_file)
-                                except:
-                                    pass
-                                part_num += 1
-                        try:
-                            os.remove(full_path)
-                        except:
-                            pass
-                        sent_count += 1
-                    else:
-                        await safe_call(client.send_chat_action, chat_id, enums.ChatAction.UPLOAD_DOCUMENT)
-                        await safe_call(client.send_document, chat_id, document=full_path, progress=upload_progress)
-                        sent_mb += file_size_mb
-                        sent_count += 1
-                        try:
-                            os.remove(full_path)
-                        except:
-                            pass
-                except Exception as e:
-                    await safe_call(message.reply, f"⚠️ Error al enviar {rel_path}: {e}")
-        finally:
-            upload_task.cancel()
-            try:
-                await upload_task
-            except asyncio.CancelledError:
-                pass
-
-        await safe_call(status_msg.edit_text, "✅ Todos los archivos han sido enviados.")
-        await asyncio.sleep(5)
-        await safe_call(status_msg.delete)
-
-    except Exception as e:
-        progress_data["active"] = False
-        progress_task.cancel()
-        try:
-            await progress_task
-        except asyncio.CancelledError:
-            pass
-        error_msg = await safe_call(message.reply, f"❌ Error durante la descarga: {e}")
-        if status_msg:
-            await safe_call(status_msg.delete)
+    await handle_nyaa_callback(client, callback_query)

@@ -10,9 +10,17 @@ from pyrogram import Client, enums
 from pyrogram.types import Message
 from pyrogram.errors import FloodWait
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+thumb = os.path.join(parent_dir, "thumb.jpg")
+
 VAULT_FOLDER = "vault_files"
 SEVEN_ZIP_EXE = os.path.join("7z", "7zz")
 MAX_SIZE_MB = 2000
+
+user_cd_paths = {}
+user_upwith_filters = {}
+user_upwith_counters = {}
 
 def parse_nested_indices(text):
     result = []
@@ -67,35 +75,300 @@ async def handle_up_command(client: Client, message: Message):
 
     fname, fid, size_mb = get_info(message.reply_to_message)
     parts = message.text.strip().split(maxsplit=1)
-    raw_path = parts[1].strip() if len(parts) == 2 else fname or "archivo"
-    safe_parts = [secure_filename(p) for p in raw_path.split("/")]
-    relative_path = os.path.join(*safe_parts)
+    
+    user_id = message.from_user.id
+    
+    if user_id in user_upwith_filters:
+        pattern_info = user_upwith_filters[user_id]
+        current_counter = user_upwith_counters.get(user_id, pattern_info["start"])
+        
+        if current_counter <= pattern_info["end"]:
+            num_str = str(current_counter).zfill(pattern_info["zeros"])
+            filename = pattern_info["pattern"].replace("{num}", num_str) + pattern_info["extension"]
+            user_upwith_counters[user_id] = current_counter + 1
+            
+            if user_upwith_counters[user_id] > pattern_info["end"]:
+                await message.reply("Todos los nombres en el filtro han sido utilizados, restaurando comportamiento natural de /upfile")
+                del user_upwith_filters[user_id]
+                del user_upwith_counters[user_id]
+        else:
+            filename = fname or "archivo"
+    else:
+        raw_path = parts[1].strip() if len(parts) == 2 else fname or "archivo"
+        filename = raw_path
+    
+    if user_id in user_cd_paths:
+        cd_path = user_cd_paths[user_id]
+        if cd_path:
+            safe_parts = [secure_filename(p) for p in cd_path.split("/")]
+            relative_path = os.path.join(*safe_parts, filename)
+        else:
+            safe_parts = [secure_filename(p) for p in filename.split("/")]
+            relative_path = os.path.join(*safe_parts)
+    else:
+        safe_parts = [secure_filename(p) for p in filename.split("/")]
+        relative_path = os.path.join(*safe_parts)
+    
     full_path = os.path.join(VAULT_FOLDER, relative_path)
     os.makedirs(os.path.dirname(full_path), exist_ok=True)
 
-    await client.download_media(message.reply_to_message, full_path)
+    progress_msg = await message.reply("📥 Iniciando descarga...")
+    start_time = time.time()
+    download_completed = False
+    current_bytes = 0
+    total_bytes = 0
+
+    async def update_download_progress():
+        last_update = time.time()
+        while not download_completed:
+            if total_bytes > 0:
+                elapsed = int(time.time() - start_time)
+                formatted_time = format_time(elapsed)
+                progress_ratio = current_bytes / total_bytes
+                bar_length = 20
+                filled_length = int(bar_length * progress_ratio)
+                bar = "█" * filled_length + "▒" * (bar_length - filled_length)
+                current_mb = current_bytes / (1024 * 1024)
+                total_mb = total_bytes / (1024 * 1024)
+
+                if time.time() - last_update >= 10:
+                    await safe_call(progress_msg.edit_text,
+                        f"📥 Descargando archivo...\n"
+                        f"🕒 Tiempo: {formatted_time}\n"
+                        f"📊 Progreso: {current_mb:.2f} MB / {total_mb:.2f} MB\n"
+                        f"📉 [{bar}] {progress_ratio*100:.1f}%\n"
+                        f"📄 Archivo: {os.path.basename(full_path)}"
+                    )
+                    last_update = time.time()
+            await asyncio.sleep(0.5)
+
+    def download_progress(current, total):
+        nonlocal current_bytes, total_bytes
+        current_bytes = current
+        total_bytes = total
+
+    download_task = asyncio.create_task(update_download_progress())
+
+    try:
+        await client.download_media(message.reply_to_message, full_path, progress=download_progress)
+        download_completed = True
+        await download_task
+        elapsed = int(time.time() - start_time)
+        await progress_msg.delete()
+    except Exception as e:
+        download_completed = True
+        await download_task
+        await progress_msg.edit_text(f"❌ Error en descarga: {e}")
+        return
 
     if args.web:
         download_link = f"{args.web.rstrip('/')}/{relative_path.replace(os.sep, '/')}"
-        await message.reply(f"🔗 Link de descarga: {download_link}")
+        await message.reply(f"✅ Descarga completada en {elapsed}s\n🔗 Link: `{download_link}`")
     else:
-        await message.reply(f"✅ Archivo guardado como `{relative_path}` en `{VAULT_FOLDER}`.")
+        await message.reply(f"✅ Descarga completada en {elapsed}s\nArchivo guardado como `{relative_path}`")
+
+async def handle_cd_command(client: Client, message: Message):
+    user_id = message.from_user.id
+    text = message.text.strip()
+    parts = text.split(maxsplit=1)
+    
+    if len(parts) == 1:
+        user_cd_paths[user_id] = ""
+        await message.reply("📁 Ruta restablecida a la raíz de vault_files")
+        return
+    
+    new_path = parts[1].strip()
+    safe_parts = [secure_filename(p) for p in new_path.split("/")]
+    final_path = "/".join(safe_parts)
+    
+    user_cd_paths[user_id] = final_path
+    await message.reply(f"📁 Ruta cambiada a: `{final_path}`")
+
+async def handle_upwith_command(client: Client, message: Message):
+    user_id = message.from_user.id
+    text = message.text.strip()
+    parts = text.split(maxsplit=1)
+    
+    if len(parts) < 2:
+        await message.reply("❌ Uso: /upwith <patrón>")
+        await message.reply("Ejemplo: /upwith Anime/{01-12}.mp4")
+        await message.reply("Ejemplo: /upwith {1-24}.mkv")
+        return
+    
+    pattern_text = parts[1].strip()
+    
+    match = re.search(r'\{(\d+)-(\d+)\}', pattern_text)
+    if not match:
+        await message.reply("❌ Patrón no válido. Debe contener {inicio-fin}")
+        return
+    
+    start_num = int(match.group(1))
+    end_num = int(match.group(2))
+    
+    if start_num > end_num:
+        await message.reply("❌ El número inicial no puede ser mayor que el final")
+        return
+    
+    zeros = len(match.group(1))
+    pattern_before = pattern_text[:match.start()]
+    pattern_after = pattern_text[match.end():]
+    
+    extension_match = re.search(r'\.\w+$', pattern_after)
+    if extension_match:
+        extension = extension_match.group(0)
+        pattern_after = pattern_after[:extension_match.start()]
+    else:
+        extension = ""
+    
+    user_upwith_filters[user_id] = {
+        "pattern": pattern_before + "{num}" + pattern_after,
+        "start": start_num,
+        "end": end_num,
+        "zeros": zeros,
+        "extension": extension
+    }
+    
+    user_upwith_counters[user_id] = start_num
+    
+    await message.reply(f"✅ Filtro establecido: {start_num} a {end_num} archivos")
+    await message.reply(f"📄 Patrón: `{pattern_before}{'0'*zeros}{pattern_after}{extension}`")
+
+async def handle_auto_up_command(client: Client, message: Message):
+    from arg_parser import get_args
+    args = get_args()
+
+    fname, fid, size_mb = get_info(message)
+    user_id = message.from_user.id
+    
+    if user_id in user_cd_paths:
+        cd_path = user_cd_paths[user_id]
+        if cd_path:
+            safe_parts = [secure_filename(p) for p in cd_path.split("/")]
+            safe_parts.append(secure_filename(fname or "archivo"))
+            relative_path = os.path.join(*safe_parts)
+        else:
+            safe_parts = [secure_filename(p) for p in (fname or "archivo").split("/")]
+            relative_path = os.path.join(*safe_parts)
+    else:
+        safe_parts = [secure_filename(p) for p in (fname or "archivo").split("/")]
+        relative_path = os.path.join(*safe_parts)
+    
+    full_path = os.path.join(VAULT_FOLDER, relative_path)
+    os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+    progress_msg = await message.reply("📥 Iniciando descarga automática...")
+    start_time = time.time()
+    download_completed = False
+    current_bytes = 0
+    total_bytes = 0
+
+    async def update_download_progress():
+        last_update = time.time()
+        while not download_completed:
+            if total_bytes > 0:
+                elapsed = int(time.time() - start_time)
+                formatted_time = format_time(elapsed)
+                progress_ratio = current_bytes / total_bytes
+                bar_length = 20
+                filled_length = int(bar_length * progress_ratio)
+                bar = "█" * filled_length + "▒" * (bar_length - filled_length)
+                current_mb = current_bytes / (1024 * 1024)
+                total_mb = total_bytes / (1024 * 1024)
+
+                if time.time() - last_update >= 10:
+                    await safe_call(progress_msg.edit_text,
+                        f"📥 Descargando archivo...\n"
+                        f"🕒 Tiempo: {formatted_time}\n"
+                        f"📊 Progreso: {current_mb:.2f} MB / {total_mb:.2f} MB\n"
+                        f"📉 [{bar}] {progress_ratio*100:.1f}%\n"
+                        f"📄 Archivo: {os.path.basename(full_path)}"
+                    )
+                    last_update = time.time()
+            await asyncio.sleep(0.5)
+
+    def download_progress(current, total):
+        nonlocal current_bytes, total_bytes
+        current_bytes = current
+        total_bytes = total
+
+    download_task = asyncio.create_task(update_download_progress())
+
+    try:
+        await client.download_media(message, full_path, progress=download_progress)
+        download_completed = True
+        await download_task
+        elapsed = int(time.time() - start_time)
+        await progress_msg.delete()
+    except Exception as e:
+        download_completed = True
+        await download_task
+        await progress_msg.edit_text(f"❌ Error en descarga: {e}")
+        return
+
+    if args.web:
+        download_link = f"{args.web.rstrip('/')}/{relative_path.replace(os.sep, '/')}"
+        await message.reply(f"✅ Descarga automática completada en {elapsed}s\n🔗 Link: `{download_link}`")
+    else:
+        await message.reply(f"✅ Descarga automática completada en {elapsed}s\nArchivo guardado como `{relative_path}`")
 
 async def list_vault_files(client: Client, message: Message):
     if not os.path.isdir(VAULT_FOLDER):
         await client.send_message(message.from_user.id, "📁 La carpeta está vacía o no existe.")
         return
-
+    
+    def natural_sort_key(s):
+        if not isinstance(s, str):
+            s = str(s)
+        return [int(text) if text.isdigit() else text.lower() 
+                for text in re.split(r'(\d+)', s)]
+    
+    def list_files_recursive(directory, base_path, prefix="", file_index_start=0):
+        items = []
+        file_count = file_index_start
+        
+        try:
+            for name in sorted(os.listdir(directory), key=natural_sort_key):
+                full_path = os.path.join(directory, name)
+                rel_path = os.path.relpath(full_path, base_path)
+                
+                if os.path.isdir(full_path):
+                    items.append(f"📁 {prefix}{name}/")
+                    sub_items, file_count = list_files_recursive(full_path, base_path, prefix + "  ", file_count)
+                    items.extend(sub_items)
+                else:
+                    file_count += 1
+                    size_mb = os.path.getsize(full_path) / (1024 * 1024)
+                    items.append(f"{file_count:4d}. 📄 {prefix}{name} — {size_mb:.2f} MB")
+        
+        except Exception:
+            pass
+        
+        return items, file_count
+    
     texto = "📄 Archivos disponibles:\n\n"
-    all_files = get_all_vault_files()
-
-    for idx, (folder, fname, fpath) in enumerate(all_files, start=1):
-        size_mb = os.path.getsize(fpath) / (1024 * 1024)
-        ruta = folder if folder else "Root"
-        texto += f"{idx}. {fname} — {size_mb:.2f} MB ({ruta})\n"
-
-    await client.send_message(message.from_user.id, texto.strip())
-
+    all_items, total_files = list_files_recursive(VAULT_FOLDER, VAULT_FOLDER)
+    
+    current_chunk = ""
+    chunks = []
+    
+    for item in all_items:
+        if len(current_chunk) + len(item) + 1 < 2000:
+            current_chunk += item + "\n"
+        else:
+            chunks.append(current_chunk)
+            current_chunk = item + "\n"
+    
+    if current_chunk:
+        chunks.append(current_chunk)
+    
+    for i, chunk in enumerate(chunks):
+        if i == 0:
+            header = f"📄 Archivos disponibles ({total_files} archivos):\n\n"
+        else:
+            header = f"📄 Continuación ({i+1}/{len(chunks)}):\n\n"
+        
+        await client.send_message(message.from_user.id, header + chunk)
+        
 async def safe_call(func, *args, **kwargs):
     while True:
         try:
@@ -136,6 +409,8 @@ async def send_vault_file_by_index(client, message):
             mode = "named_compress"
         elif flag == "-d":
             delete_after = True
+        elif flag == "-m":
+            mode = "with_thumb"
 
     non_flags = [arg for arg in args if not arg.startswith("-")]
     index_str = non_flags[1] if len(non_flags) > 1 else non_flags[0]
@@ -253,6 +528,7 @@ async def send_vault_file_by_index(client, message):
 
                 mime_type, _ = mimetypes.guess_type(path)
                 mime_main = mime_type.split("/")[0] if mime_type else ""
+                filename = os.path.basename(path)
 
                 if size_mb > MAX_SIZE_MB and path.endswith('.7z'):
                     base_name = os.path.splitext(os.path.basename(path))[0]
@@ -273,7 +549,7 @@ async def send_vault_file_by_index(client, message):
                         current_mb_sent = 0
 
                         await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
-                        await safe_call(client.send_document, message.chat.id, document=part_path, caption=f"📦 {part}", progress=progress)
+                        await safe_call(client.send_document, message.chat.id, document=part_path, caption=f"📦 {part}", progress=progress, thumb=thumb)
                         await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.CANCEL)
 
                         sent_mb += part_size
@@ -282,12 +558,13 @@ async def send_vault_file_by_index(client, message):
                 else:
                     await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.UPLOAD_DOCUMENT)
 
-                    if mime_main == "image":
+                    if mime_main == "image" and not filename.lower().endswith(".webp"):
                         await safe_call(client.send_photo, message.chat.id, photo=path, caption=f"🖼️ {os.path.basename(path)}", progress=progress)
-                    #elif mime_main == "video":
-                        #await safe_call(client.send_video, message.chat.id, video=path, caption=f"🎬 {os.path.basename(path)}", progress=progress)
                     else:
-                        await safe_call(client.send_document, message.chat.id, document=path, caption=f"📤 {os.path.basename(path)}", progress=progress)
+                        if mode == "with_thumb" and os.path.exists(thumb):
+                            await safe_call(client.send_document, message.chat.id, document=path, caption=f"📤 {os.path.basename(path)}", progress=progress, thumb=thumb)
+                        else:
+                            await safe_call(client.send_document, message.chat.id, document=path, caption=f"📤 {os.path.basename(path)}", progress=progress)
 
                     await safe_call(client.send_chat_action, message.chat.id, enums.ChatAction.CANCEL)
                     sent_mb += size_mb

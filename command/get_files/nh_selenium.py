@@ -72,6 +72,19 @@ def scrape_nhentai(gallery_number):
         else:
             full_title = "Título no encontrado"
         
+        tags_dict = {}
+        tags_section = soup.find('section', id='tags')
+        if tags_section:
+            for tag_container in tags_section.find_all('div', class_='tag-container'):
+                field_name = tag_container.get_text(strip=True).split(':')[0].strip()
+                tags = []
+                for tag_link in tag_container.find_all('a', class_='tag'):
+                    tag_name = tag_link.find('span', class_='name')
+                    if tag_name:
+                        tags.append(tag_name.get_text(strip=True))
+                if tags:
+                    tags_dict[field_name] = tags
+        
         gallery_id = None
         image_links = []
         pattern = re.compile(r'//t[1249]\.nhentai\.net/galleries/(\d+)/(\d+)t\.(webp|jpg|png)')
@@ -86,6 +99,15 @@ def scrape_nhentai(gallery_number):
         
         if gallery_id:
             print(f"🔍 ID real de la galería encontrado: {gallery_id}")
+            
+            total_pages_from_tags = 0
+            if 'Pages' in tags_dict and tags_dict['Pages']:
+                try:
+                    total_pages_from_tags = int(tags_dict['Pages'][0])
+                except (ValueError, IndexError):
+                    pass
+            
+            found_thumbnails = []
             for img in soup.find_all('img'):
                 src = img.get('src') or img.get('data-src', '')
                 if src:
@@ -93,24 +115,51 @@ def scrape_nhentai(gallery_number):
                     if match:
                         page_num = match.group(2)
                         ext = match.group(3)
-                        new_link = f"https://i2.nhentai.net/galleries/{gallery_id}/{page_num}.{ext}"
-                        image_links.append(new_link)
+                        found_thumbnails.append({
+                            'page_num': int(page_num),
+                            'ext': ext
+                        })
+            
+            found_thumbnails.sort(key=lambda x: x['page_num'])
+            
+            if total_pages_from_tags == 0 and found_thumbnails:
+                total_pages_from_tags = found_thumbnails[-1]['page_num']
+            
+            print(f"📊 Páginas en tags: {total_pages_from_tags}, Miniaturas encontradas: {len(found_thumbnails)}")
+            
+            if total_pages_from_tags > 0:
+                extensions_count = {}
+                for thumb in found_thumbnails:
+                    ext = thumb['ext']
+                    extensions_count[ext] = extensions_count.get(ext, 0) + 1
+                
+                default_ext = 'jpg'
+                if extensions_count:
+                    default_ext = max(extensions_count.items(), key=lambda x: x[1])[0]
+                
+                page_ext_map = {thumb['page_num']: thumb['ext'] for thumb in found_thumbnails}
+                
+                for page_num in range(1, total_pages_from_tags + 1):
+                    ext = page_ext_map.get(page_num, default_ext)
+                    image_link = f"https://i2.nhentai.net/galleries/{gallery_id}/{page_num}.{ext}"
+                    image_links.append(image_link)
+                
+                print(f"✅ Lista de imágenes autocompletada: {len(image_links)} páginas")
+            else:
+                for thumb in found_thumbnails:
+                    image_link = f"https://i2.nhentai.net/galleries/{gallery_id}/{thumb['page_num']}.{thumb['ext']}"
+                    image_links.append(image_link)
+                print(f"⚠️  Usando solo miniaturas encontradas: {len(image_links)} páginas")
+            
         else:
             print("❌ No se pudo encontrar el ID real de la galería")
-            return None, []
+            return {"title": full_title, "links": [], "tags": tags_dict}
         
-        unique_links = []
-        for link in image_links:
-            if link not in unique_links:
-                unique_links.append(link)
-        
-        unique_links.sort(key=lambda x: int(x.split('/')[-1].split('.')[0]))
-        
-        return full_title, unique_links
+        return {"title": full_title, "links": image_links, "tags": tags_dict}
         
     except Exception as e:
         print(f"❌ Error durante el scraping: {str(e)}")
-        return None, []
+        return {"title": None, "links": [], "tags": {}}
         
     finally:
         try:
@@ -129,20 +178,25 @@ def main():
     print(f"🎯 Iniciando scraping para galería: {args.code}")
     print("⏳ Esto puede tomar unos segundos...")
     
-    title, links = scrape_nhentai(args.code)
+    result = scrape_nhentai(args.code)
     
-    if title and links:
+    if result["title"] and result["links"]:
         print("\n" + "="*60)
         print("📖 TÍTULO:")
-        print(title)
-        print("\n🔗 LINKS DE IMÁGENES HD:")
-        for i, link in enumerate(links, 1):
+        print(result["title"])
+        
+        print("\n🏷️  TAGS:")
+        for category, tag_list in result["tags"].items():
+            print(f"{category}: {', '.join(tag_list)}")
+        
+        print(f"\n🔗 LINKS DE IMÁGENES HD ({len(result['links'])} páginas):")
+        for i, link in enumerate(result["links"][:5], 1):
             print(f"{i}. {link}")
-        print(f"\n📊 Total de imágenes encontradas: {len(links)}")
+        if len(result["links"]) > 5:
+            print(f"... y {len(result['links']) - 5} más")
         print("="*60)
     else:
         print("❌ No se pudo obtener la información de la galería")
 
 if __name__ == "__main__":
     main()
-  

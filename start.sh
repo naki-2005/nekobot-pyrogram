@@ -1,7 +1,7 @@
 #!/bin/sh
 
 mkdir -p server
-python3 -m http.server -d server &
+#python3 -m http.server -d server &
 
 if [ -n "$TOKEN" ] && [ -n "$SESSION_STRING" ]; then
   echo "❌ No puedes usar TOKEN y SESSION_STRING al mismo tiempo."
